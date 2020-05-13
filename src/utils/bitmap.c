@@ -111,9 +111,9 @@ bitmap_get_first_clear_bit(struct bitmap *map){
     uint32_t r = map->length%8;
     uint32_t i =0,j=0;
     for(;i<a;i++){
-        if( ((uint64_t*)(map->data))[i]!=-1 ){
+        if( ((uint64_t*)(map->data))[i]!=UINT64_MAX ){
             for(;j<8;j++){
-                if( (map->data)[i*8+j]!=-1 ){
+                if( (map->data)[i*8+j]!=UINT8_MAX ){
                     uint8_t tmp = (map->data)[i*8+j];
                     uint32_t k = ((tmp&0x0f) != 0x0f) ? firstbit[tmp&0x0f] : firstbit[ (tmp&0xf0)>>4 ] + 4;
                     return (i*64 + j*8 + k);
@@ -122,7 +122,7 @@ bitmap_get_first_clear_bit(struct bitmap *map){
         }
     }
     for(j=0;j<b;j++){
-        if( (map->data)[a*8+j]!=-1 ){
+        if( (map->data)[a*8+j]!=UINT8_MAX ){
             uint8_t tmp = (map->data)[a*8+j];
             uint32_t k = ((tmp&0x0f) != 0x0f) ? firstbit[tmp&0x0f] : firstbit[ (tmp&0xf0)>>4 ] + 4;
             return (a*64 + j*8 + k);
@@ -134,5 +134,5 @@ bitmap_get_first_clear_bit(struct bitmap *map){
             return (a*64 + b*8 + j);
         }
     }
-    return -1;
+    return UINT32_MAX;
 }
