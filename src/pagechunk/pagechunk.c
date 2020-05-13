@@ -33,7 +33,7 @@ _get_position(struct chunk_desc *desc, uint64_t slot_idx,
         *last_page = ((offset+1) * slab_size - 1) / KVS_PAGE_SIZE;
 
         int start_offset = (offset * slab_size % KVS_PAGE_SIZE);
-        *start_addr = desc->chunk_mem->data + (*first_page)*KVS_PAGE_SIZE + start_offset;
+        *start_addr = desc->chunk_mem->data + offset * slab_size;
     }
     else{
         //The item is not allowed to store across pages.

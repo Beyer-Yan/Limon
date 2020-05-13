@@ -2,6 +2,7 @@
 #define __POOL_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 struct object_node{
      void* object;

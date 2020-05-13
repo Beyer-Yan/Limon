@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
 #include "pool.h"
 #include "kvutil.h"
 
@@ -26,7 +27,7 @@ void pool_header_init(struct object_cache_pool *pool, uint32_t count,uint32_t ob
 
     pool->cache_data = object_data;
 
-    int i = 0;
+    uint32_t i = 0;
     for(;i<count;i++){
          pool->free_node_array[i].next = i+1;
          pool->free_node_array[i].object = (void*)(pool->cache_data[i*pool->object_size]);

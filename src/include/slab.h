@@ -82,14 +82,43 @@ inline void slab_get_hints(struct slab*slab, uint64_t slot_idx,
 }
 
 /**
- * @brief Get the slot offset of the slot_idx from base.
+ * @brief Get the slot offset of the slot_idx from 0.
  * 
  * @param slab       The slab.
  * @param slot_idx   The slot index.
- * @param base       The base address.
  * @return uint32_t  The offset of the slot_idx.
  */
-inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx, uint64_t base);
+inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
+    uint32_t slab_size = slab->slab_size;
+    if(slab_size<MULTI_PAGE_SLAB_SIZE){
+        uint32_t slots_per_page = KVS_PAGE_SIZE/slab_size;
+        uint32_t first_page = slot_idx/slots_per_page;
+        uint32_t offset_in_page = slot_idx%slots_per_page;
+        return first_page*KVS_PAGE_SIZE + offset_in_page*slab_size;
+    }
+    else{
+        return slab_size*slot_idx;
+    }
+}
+
+/**
+ * @brief  Calculate how many slots for the given number of pages and slab size.
+ * 
+ * @param chunk_pages    Number of chunk pages
+ * @param slot_size      Slot size
+ * @return uint32_t      Return number of slots.
+ */
+inline uint32_t slab_get_chunk_slots(uint32_t chunk_pages, uint32_t slab_size){
+    uint32_t nb_slots;
+    if(slab_size<MULTI_PAGE_SLAB_SIZE){
+        //Slab with such size will be store in one page.
+        nb_slots = (KVS_PAGE_SIZE/slab_size)*chunk_pages;
+    }
+    else{
+        nb_slots = chunk_pages/slab_size;
+    }
+    return nb_slots;
+}
 
 /**
  * @brief Find the best slab for given item size.
@@ -99,9 +128,14 @@ inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx, uint64_t b
  */
 uint32_t slab_find_slab(uint32_t item_size);
 
+/**
+ * @brief Get the slab configuration fixed in the code.
+ * 
+ * @param slab_size_array     The returned slab array
+ * @param nb_slabs            The returned number of slabs
+ * @param chunk_pages         The returned chunk size.
+ */
 void slab_get_slab_conf(uint32_t **slab_size_array, uint32_t *nb_slabs, uint32_t *chunk_pages);
-
-uint32_t slab_clac_nb_slots(uint32_t nb_pages, uint32_t slot_size);
 
 /**
  * @brief Check whether the slab is changed for an item of which size is changed.

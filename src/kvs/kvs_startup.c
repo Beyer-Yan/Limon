@@ -155,7 +155,7 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
         slab_base[i].slab_size = layout_base[i].slab_size;
         slab_base[i].reclaim.nb_chunks_per_node = kctx->sl->nb_chunks_per_reclaim_node;
         slab_base[i].reclaim.nb_pages_per_chunk = kctx->sl->nb_pages_per_chunk;
-        slab_base[i].reclaim.nb_slots_per_chunk = slab_clac_nb_slots(kctx->sl->nb_pages_per_chunk, 
+        slab_base[i].reclaim.nb_slots_per_chunk = slab_get_chunk_slots(kctx->sl->nb_pages_per_chunk, 
                                                                       slab_base[i].slab_size);
         
         uint32_t slab_chunks = spdk_blob_get_num_clusters(slab_base[i].blob);

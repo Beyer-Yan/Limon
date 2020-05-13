@@ -53,7 +53,7 @@ _node_read_complete(void* ctx, int bserrno){
     uint32_t idx = 0;
     uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
     for(;idx<nb_slots_per_node;idx++){
-        uint8_t *raw_data = (uint8_t*)slab_slot_offset(slab,idx,(uint64_t)rctx->recovery_node_buffer);
+        uint8_t *raw_data = rctx->recovery_node_buffer + slab_slot_offset(slab,idx);
         uint64_t tsc0 = *(uint64_t*)raw_data;
         struct kv_item *item = raw_data + 8;
         uint64_t tsc1 = *(uint64_t*)(raw_data + item_get_size(item) + 8);

@@ -3,7 +3,7 @@
 #include "kverrno.h"
 
 //All slab sizes are 4-bytes-aligment.
-static const slab_chunk_pages = 252;
+static const _g_slab_chunk_pages = 252;
 static uint32_t slab_sizes[]={
     32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, 144, 196, 224, 256, 272, 292, 316, 344, 372, 408, 456,
     512, 584, 684,
@@ -11,7 +11,7 @@ static uint32_t slab_sizes[]={
     5760,6144,6912,7680,8640,9216,10240
 };
 
-static const slab_chunk_pages_old = 252;
+static const _g_slab_chunk_pages_old = 252;
 static uint32_t slab_sizes_old[] = { 32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, 144, 196, 224, 
                      256, 272, 292, 316, 344, 372, 408, 456,512, 584, 684, 
                      768,864,960, 1024, 1364, 2048,4096,
@@ -53,7 +53,7 @@ void slab_get_slab_conf(uint32_t **slab_size_array, uint32_t *nb_slabs, uint32_t
     uint32_t _nb_slabs = sizeof(slab_sizes)/sizeof(slab_sizes[0]);
     *slab_size_array = slab_sizes;
     *nb_slabs = _nb_slabs;
-    *chunk_pages = slab_chunk_pages;
+    *chunk_pages = _g_slab_chunk_pages;
 }
 
 bool 
