@@ -1,5 +1,5 @@
-#ifndef __WORKER_H
-#define __WORKER_H
+#ifndef KVS_WORKER_H
+#define KVS_WORKER_H
 #include "item.h"
 #include "kvs.h"
 #include "slab.h"
@@ -18,7 +18,7 @@ struct worker_init_opts{
     struct slab_shard *shard;
     struct spdk_blob_store *target;
 
-    struct chunkmkgr_worker_context *chunkmgr_worker;
+    struct chunkmgr_worker_context *chunkmgr_worker;
 
     uint32_t core_id;
     
@@ -40,12 +40,14 @@ void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,const struc
 void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, kv_cb cb_fn, void* ctx);
 void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, kv_cb cb_fn, void* ctx);
 
-void worker_get_slab_statistcs(struct worker_context* wctx,struct slab_statistics **statistics_out);
-void worker_get_miss_rate(struct worker_context* wctx, float *miss_rate_out);
-
-void  worker_get_nb_pending_reqs(struct worker_context* wctx, int *nb_pendings_out);
-void worker_get_chunks_statistics(struct worker_context* wctx, int *nb_chunks_out,int *nb_used_chunks_out);
-
+struct worker_statistics{
+    uint64_t chunk_hit_times;
+    uint64_t chunk_miss_times;
+    uint32_t nb_pending_reqs;
+    uint32_t nb_pending_ios;
+    uint64_t nb_used_chunks;
+};
+void worker_get_statistics(struct worker_context* wctx, struct worker_statistics* ws_out);
 
 struct chunkmgr_worker_init_opts{
     uint64_t nb_max_cache_chunks;
@@ -58,7 +60,7 @@ struct chunkmgr_worker_init_opts{
 };
 
 struct chunkmgr_worker_context* chunkmgr_worker_init(struct chunkmgr_worker_init_opts *opts);
-void chunkmgr_worker_start();
+void chunkmgr_worker_start(void);
 
 void chunkmgr_request_one_aysnc(struct chunk_miss_callback *cb_obj);
 

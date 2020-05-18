@@ -1,5 +1,5 @@
-#ifndef __IOMGR_H
-#define __IOMGR_H
+#ifndef KVS_IOMGR_H
+#define KVS_IOMGR_H
 
 #include <stdint.h>
 #include "queue.h"
@@ -12,7 +12,7 @@
 
 #define BASE_DIVISOR 315
 
-typedef void (*pending_cb)(struct cache_io *cache_io);
+//typedef void (*pending_cb)(struct cache_io *cache_io);
 
 struct page_io{
     uint64_t key;
@@ -58,7 +58,7 @@ struct cache_io{
     uint8_t *buf;
 
     TAILQ_HEAD(, cache_io) cio_head;
-    TAILQ_ENTRY(page_io) link;
+    TAILQ_ENTRY(cache_io) link;
     UT_hash_handle hh;
 };
 

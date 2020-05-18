@@ -1,5 +1,6 @@
 #include "index.h"
 #include "art.h"
+#include "kvutil.h"
 
 struct mem_index{
     art_tree t;
@@ -20,53 +21,49 @@ void mem_index_destroy(struct mem_index* mem_index){
      art_tree_destroy(t);
 }
 
-void* mem_index_add(struct mem_index *mem_index, struct kv_item *item,struct index_entry* entry){
+void* mem_index_add(struct mem_index *mem_index, const struct kv_item *item,const struct index_entry* entry){
     art_tree *t = (art_tree*)mem_index;
     return art_insert(t,item->data,item->meta.ksize,entry);
 }
 
-void mem_index_delete(struct mem_index *mem_index,struct kv_item *item){
+void mem_index_delete(struct mem_index *mem_index,const struct kv_item *item){
     art_tree *t = (art_tree*)mem_index;
     art_delete(t,item->data,item->meta.ksize);
 }
 
-struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item *item){
+struct index_entry* mem_index_lookup(struct mem_index *mem_index, const struct kv_item *item){
     art_tree *t = (art_tree*)mem_index;
     return art_search(t,item->data,item->meta.ksize);
 }
 
-void mem_index_first(struct mem_index *mem_index,struct kv_item **item_out){
+uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);{
     art_tree *t = (art_tree*)mem_index;
     unsigned char *key;
     uint32_t len;
     struct index_entry *entry;
-    static struct kv_item item;
 
     art_first(t,&key,&len,&entry);
     if(key==NULL){
-        *item_out=NULL;
+        return NULL;
     }
     else{
-        item.meta.ksize = len;
-        item.data = key;
-        *item_out = &item;
+        *key_len_out = len;
+        return key;
     }
 }
 
-void mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,struct kv_item **item_out){
+uint8_t* mem_index_next(struct mem_index *mem_index,const struct kv_item *base_item,uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
     unsigned char *key;
     uint32_t len;
     struct index_entry *entry;
-    static struct kv_item item;
 
     art_find_next(t,base_item->data,base_item->meta.ksize,&key,&len,&entry);
     if(key==NULL){
-        *item_out=NULL;
+        return NULL;
     }
     else{
-        item.meta.ksize = len;
-        item.data = key;
-        *item_out = &item;
+        *key_len_out = len;
+        return key;
     }
 }

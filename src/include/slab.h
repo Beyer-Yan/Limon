@@ -1,8 +1,9 @@
-#ifndef __SLAB_H
-#define _SLAB_H
+#ifndef KVS_SLAB_H
+#define KVS_SLAB_H
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 #include "reclaim.h"
 #include "pagechunk.h"
 #include "rbtree_uint.h"
@@ -20,6 +21,7 @@
 #define MULTI_PAGE_SLAB_SIZE 768
 
 #define KVS_PAGE_SIZE 4096
+#define MAX_SLAB_SIZE 4*1024*1024
 
 //In disk layout
 
@@ -27,9 +29,9 @@ struct slab_layout{
     uint32_t slab_size;
     uint64_t blob_id;
     uint64_t resv;
-};
+}; 
 
-#define DEFAULT_KVS_PIN 0x1022199405121993
+#define DEFAULT_KVS_PIN 0x1022199405121993u
 
 struct super_layout{
     //If the kvs_pin is not equal to DEFAULT_KVS_PIN, it will be a invalid.
@@ -39,7 +41,11 @@ struct super_layout{
     uint32_t nb_chunks_per_reclaim_node;
     uint32_t nb_pages_per_chunk;
     uint32_t max_key_length;
+    struct slab_layout slab[0];
 };
+
+static_assert(sizeof(struct slab_layout)==24,"size incorrect");
+static_assert(sizeof(struct super_layout)==32,"size incorrect");
 
 // runtime data structure for slab
 struct slab {
@@ -105,7 +111,7 @@ inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
  * @brief  Calculate how many slots for the given number of pages and slab size.
  * 
  * @param chunk_pages    Number of chunk pages
- * @param slot_size      Slot size
+ * @param slab_size      Slot size
  * @return uint32_t      Return number of slots.
  */
 inline uint32_t slab_get_chunk_slots(uint32_t chunk_pages, uint32_t slab_size){

@@ -26,7 +26,6 @@ Retrieved from: http://en.literateprograms.org/Red-black_tree_(C)?oldid=16016
 
 #include "rbtree_uint.h"
 #include <assert.h>
-
 #include <stdlib.h>
 
 
@@ -149,7 +148,7 @@ void verify_property_5_helper(node n, int black_count, int* path_black_count) {
 }
 #endif
 
-rbtree rbtree_create() {
+rbtree rbtree_create(void) {
    rbtree t = malloc(sizeof(struct rbtree_t));
    t->root = NULL;
    t->last_visited_node = NULL;
@@ -458,7 +457,7 @@ void delete_case6(rbtree t, node n) {
       rotate_right(t, n->parent);
    }
 }
-
+/*
 void rbtree_print_nodes(node n, compare_func show) {
    if(!n)
       return;
@@ -470,3 +469,4 @@ void rbtree_print(rbtree t, compare_func show) {
    node n = t->root;
    rbtree_print_nodes(n, show);
 }
+*/

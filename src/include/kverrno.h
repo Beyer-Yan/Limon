@@ -1,5 +1,5 @@
-#ifndef __KVERRNO_H
-#define __KVERRNO_H
+#ifndef KVS_KVERRNO_H
+#define KVS_KVERRNO_H
 
 enum kverrno{
     KV_ESUCCESS = 0,

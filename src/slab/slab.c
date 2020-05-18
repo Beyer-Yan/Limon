@@ -3,7 +3,7 @@
 #include "kverrno.h"
 
 //All slab sizes are 4-bytes-aligment.
-static const _g_slab_chunk_pages = 252;
+static const uint32_t _g_slab_chunk_pages = 252;
 static uint32_t slab_sizes[]={
     32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, 144, 196, 224, 256, 272, 292, 316, 344, 372, 408, 456,
     512, 584, 684,
@@ -11,7 +11,7 @@ static uint32_t slab_sizes[]={
     5760,6144,6912,7680,8640,9216,10240
 };
 
-static const _g_slab_chunk_pages_old = 252;
+static const uint32_t _g_slab_chunk_pages_old = 252;
 static uint32_t slab_sizes_old[] = { 32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, 144, 196, 224, 
                      256, 272, 292, 316, 344, 372, 408, 456,512, 584, 684, 
                      768,864,960, 1024, 1364, 2048,4096,
@@ -165,7 +165,7 @@ void slab_request_slot_async(struct iomgr* imgr,
         for(;i<slab->reclaim.nb_chunks_per_node;i++){
             if(node->desc_array[i]->nb_free_slots){
                 desc = node->desc_array[i];
-                uint64_t offset = bitmap_get_first_clear_bit(desc->bitmap);
+                uint32_t offset = bitmap_get_first_clear_bit(desc->bitmap);
                 bitmap_set_bit(desc->bitmap,offset);
 
                 desc->nb_free_slots--;
@@ -175,7 +175,7 @@ void slab_request_slot_async(struct iomgr* imgr,
                 if(!node->nb_free_slots){
                     //Wow! The reclaim node is full. I should remove it from
                     //free_node treemap.
-                    rbtree_delete(slab->reclaim.nb_chunks_per_node,node->id,NULL);
+                    rbtree_delete(slab->reclaim.free_node_tree,node->id,NULL);
                 }
 
                 uint64_t base = node->id*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk + i*slab->reclaim.nb_slots_per_chunk;

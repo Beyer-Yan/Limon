@@ -10,31 +10,31 @@
 #include "kvutil.h"
 
 struct chunkmgr_worker_context{
-    uint32_t nb_business_workers;
+    
     struct worker_context **wctx_array;
 
-    uint32_t nb_max_chunks;
-    uint32_t nb_used_chunks;
+    uint64_t nb_max_chunks;
+    uint64_t nb_used_chunks;
     uint32_t nb_pages_per_chunk;
 
+    uint32_t nb_business_workers;
     struct spdk_thread *thread;
 };
 
 //Sinleton mode
-struct chunkmgr_worker_context g_chunkmgr_worker;
-
+static struct chunkmgr_worker_context g_chunkmgr_worker;
 static struct object_cache_pool  *_g_mem_pool;
 
 //Allocate chunk memory in one-shot mode.
 static void
 _chunk_mem_init(uint64_t nb_chunks){
 
-    uint32_t chunk_size = g_chunkmgr_worker.nb_pages_per_chunk * PAGE_SIZE;
+    uint32_t chunk_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
     uint32_t bitmap_data_size = g_chunkmgr_worker.nb_pages_per_chunk/8 + 1;
-    uint32_t header_size = KV_ALIGN(sizeof(struct chunk_mem) + sizeof(struct bitmap) + bitmap_data_size,0x1000);
+    uint32_t header_size = KV_ALIGN(sizeof(struct chunk_mem) + sizeof(struct bitmap) + bitmap_data_size,0x1000u);
     uint32_t chunk_mem_size = header_size + chunk_size;
 
-    uint64_t pool_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000);
+    uint64_t pool_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);
 
     uint8_t* data = spdk_malloc(pool_size + chunk_mem_size*nb_chunks,
 						0x1000, NULL, SPDK_ENV_LCORE_ID_ANY,
@@ -48,11 +48,9 @@ _chunk_mem_init(uint64_t nb_chunks){
     int i = 0;
     for(;i<nb_chunks;i++){
         struct chunk_mem* mem = (struct chunk_mem*)(data + chunk_mem_size*i);
-        mem->bitmap = (struct bitmap*)(mem+1);
-        mem->bitmap->length = g_chunkmgr_worker.nb_pages_per_chunk;
-        mem->bitmap->data = (uint8_t*)(mem->bitmap + 1);
         mem->nb_bytes = chunk_mem_size;
         mem->data = (uint8_t*)(mem) + header_size;
+        mem->bitmap[0].length = g_chunkmgr_worker.nb_pages_per_chunk;
     }
 }
 
@@ -93,8 +91,8 @@ _get_worker_context_from_pmgr(struct pagechunk_mgr* pmgr){
 static void 
 _chunkmgr_lease_one_chunk_mem(void *ctx){
     struct chunk_miss_callback *cb_obj = ctx;
-    struct pahechunk_mgr *requestor_pmgr = cb_obj->requestor_pmgr;
-    struct pahechunk_mgr *executor_pmgr = cb_obj->executor_pmgr;
+    struct pagechunk_mgr *requestor_pmgr = cb_obj->requestor_pmgr;
+    struct pagechunk_mgr *executor_pmgr = cb_obj->executor_pmgr;
     struct chunk_mem* mem = pagechunk_evict_one_chunk(executor_pmgr);
     
     if(!mem){
@@ -115,7 +113,7 @@ _chunkmgr_lease_one_chunk_mem(void *ctx){
         //I get one chunk memory, but I am not the original requestor. So I should
         //send the chunk memory to the original requestor. 
         struct worker_context* requestor_wctx = _get_worker_context_from_pmgr(cb_obj->requestor_pmgr);
-        pagechunk_send_message(requestor_wctx->thread,cb_obj->finish_cb,cb_obj);
+        spdk_thread_send_msg(requestor_wctx->thread,cb_obj->finish_cb,cb_obj);
     }
 }
 
@@ -142,7 +140,8 @@ _chunkmgr_worker_get_one_chunk_mem(void *ctx){
          }
          else{
              cb_obj->executor_pmgr = executor_wctx->pmgr;
-             spdk_thread_send_msg(executor_wctx->pmgr,_chunkmgr_lease_one_chunk_mem,cb_obj);
+             spdk_thread_send_msg(executor_wctx->pmgr->chunkmgr_worker->thread,
+                                  _chunkmgr_lease_one_chunk_mem,cb_obj);
          }
     }
 }

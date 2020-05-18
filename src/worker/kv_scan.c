@@ -191,13 +191,26 @@
 //     pool_release(wctx->kv_request_internal_pool,req);
 // }
 
+/**
+ * @brief It is a global item data buffer, the caller shall copy it
+ * to other place when nessacery.
+ * The buffer will be flushed whenever the next scan request is performed.
+ */
+static uint64_t _scan_data[MAX_SLAB_SIZE];
 
 void worker_process_first(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
-    struct kv_item *item;
+    struct kv_item *item = (struct kv_item*)_scan_data;
+    uint8_t* key;
+    uint32_t key_len;
 
-    mem_index_first(wctx->mem_index,&item);
-    req->cb_fn(req->cb_fn,item,item!=NULL?-KV_ESUCCESS:KV_EMPTY);
+    key = mem_index_first(wctx->mem_index,&key_len);
+    if(key){
+        item->meta.ksize = key_len;
+        memcpy(item->data,key,key_len);
+    }
+
+    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
 
     pool_release(wctx->kv_request_internal_pool,req);
 }
@@ -207,7 +220,7 @@ void worker_process_seek(struct kv_request_internal *req){
     struct index_entry *entry;
 
     entry = mem_index_lookup(wctx->mem_index,req->item);
-    req->cb_fn(req->cb_fn,req->item,entry!=NULL?-KV_ESUCCESS:KV_EITEM_NOT_EXIST);
+    req->cb_fn(req->ctx,NULL,entry!=NULL?-KV_ESUCCESS:KV_EITEM_NOT_EXIST);
 
     pool_release(wctx->kv_request_internal_pool,req);
 }
@@ -215,9 +228,16 @@ void worker_process_seek(struct kv_request_internal *req){
 void worker_process_next(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
     struct kv_item *item;
+    uint8_t* key;
+    uint32_t key_len;
 
-    mem_index_next(wctx->mem_index,req->item,&item);
-    req->cb_fn(req->cb_fn,item,item!=NULL?-KV_ESUCCESS:KV_EMPTY);
+    key = mem_index_next(wctx->mem_index,req->item,&key_len);
+    if(key){
+        item->meta.ksize = key_len;
+        memcpy(item->data,key,key_len);
+    }
+
+    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
 
     pool_release(wctx->kv_request_internal_pool,req);
 }

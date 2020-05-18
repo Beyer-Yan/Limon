@@ -7,6 +7,7 @@ _hash_item_to_shard(const struct kv_item *item){
 
 static inline void
 _assert_parameters(const struct kv_item *item, kv_cb cb_fn){
+    assert(g_kvs!=NULL);
     assert(item!=NULL);
     assert(cb_fn!=NULL);
     assert(item->meta.ksize>0);
@@ -60,13 +61,15 @@ struct kv_iterator{
 };
 
 struct kv_iterator* kv_iterator_alloc(void){
+    assert(g_kvs!=NULL);
+
     uint32_t size = sizeof(struct kv_iterator) + 
                     g_kvs->nb_workers * sizeof(struct _scan_worker_ctx) +
                     g_kvs->nb_workers * MAX_ITEM_SIZE;
 
     struct kv_iterator *it = malloc(size);
     it->nb_workers = g_kvs->nb_workers;
-    it->item_idx = -1;
+    it->item_idx = UINT32_MAX;
     it->ctx_array = (struct _scan_worker_ctx *)(it+1);
     it->item_array = (struct kv_item*)(it->ctx_array + g_kvs->nb_workers);
 
@@ -87,7 +90,7 @@ static void
 _seek_cb_fn(void*ctx, struct kv_item* item, int kverrno){
     struct kv_iterator *it = ctx;
     if(kverrno!=-KV_ESUCCESS){
-        it->item_idx = -1;
+        it->item_idx = UINT32_MAX;
     }
     else{
         uint32_t ksize = item->meta.ksize;
@@ -106,7 +109,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
     uint32_t worker_id = shard_id % g_kvs->nb_workers;
     worker_enqueue_seek(g_kvs->workers[worker_id],shard_id,item,_seek_cb_fn,it);
     while(!it->completed);
-    return it->item_idx==-1 ? false : true;
+    return it->item_idx==UINT32_MAX ? false : true;
 }
 
 static void
@@ -137,10 +140,10 @@ _key_cmp(const uint8_t *key1,uint32_t len1,const uint8_t *key2, uint32_t len2){
 static void
 _calc_least_item(struct kv_iterator *it){
     int i = 0;
-    it->item_idx = -1;
+    it->item_idx = UINT32_MAX;
     for(i=0;i>g_kvs->nb_workers;i++){
         if(it->ctx_array[i].kverrno==-KV_ESUCCESS){
-            if(it->item_idx == -1){
+            if(it->item_idx == -UINT32_MAX){
                 it->item_idx = i;
             }
             else{
@@ -163,7 +166,7 @@ bool kv_iterator_first(struct kv_iterator *it){
     for(;i<g_kvs->nb_workers;i++){
         struct _scan_worker_ctx *swctx  = &it->ctx_array[i];
         swctx->completed = false;
-        worker_enqueue_first(g_kvs->workers[i],-1,NULL,_first_cb_fn,swctx);
+        worker_enqueue_first(g_kvs->workers[i],UINT32_MAX,NULL,_first_cb_fn,swctx);
     }
     while(!it->completed){
         bool res = true;
@@ -175,7 +178,7 @@ bool kv_iterator_first(struct kv_iterator *it){
         }
     }
     _calc_least_item(it);
-    return it->item_idx==-1 ? false : true;
+    return it->item_idx==UINT32_MAX ? false : true;
 }
 
 static void
@@ -184,7 +187,7 @@ _next_cb_fn(void*ctx, struct kv_item* item, int kverrno){
 }
 bool kv_iterator_next(struct kv_iterator *it){
     assert(it!=NULL);
-    assert(it->item_idx!=-1);
+    assert(it->item_idx!=UINT32_MAX);
 
     it->completed = false;
     int i = 0;
@@ -192,7 +195,7 @@ bool kv_iterator_next(struct kv_iterator *it){
     for(;i<g_kvs->nb_workers;i++){
         struct _scan_worker_ctx *swctx  = &it->ctx_array[i];
         swctx->completed = false;
-        worker_enqueue_next(g_kvs->workers[i],item,NULL,_first_cb_fn,swctx);
+        worker_enqueue_next(g_kvs->workers[i],UINT32_MAX,item,_next_cb_fn,swctx);
     }
     while(!it->completed){
         bool res = true;
@@ -204,39 +207,84 @@ bool kv_iterator_next(struct kv_iterator *it){
         }
     } 
     _calc_least_item(it);
-    return it->item_idx==-1 ? false : true; 
+    return it->item_idx==UINT32_MAX ? false : true; 
 }
 
 //The function returns only the key field of a item. If you want to get the whole item data,
 //you can issue a kv_get_async command.
 struct kv_item* kv_iterator_item(struct kv_iterator *it){
     assert(it!=NULL);
-    if(it->item_idx==-1){
+    if(it->item_idx==UINT32_MAX){
         return NULL;
     }
     return &it->item_array[it->item_idx];
 }
 
 struct slab_statistics* kvs_get_slab_statistcs(){
+    struct slab_statistics* res;
+    uint32_t nb_total_slabs = g_kvs->nb_shards*g_kvs->shards[0].nb_slabs;
+    uint64_t size  = sizeof(*res) + sizeof(*res->slabs)*nb_total_slabs;
 
+    if(!g_kvs){
+        return NULL;
+    }
+
+    res = malloc(size);
+    if(!res){
+        return NULL;
+    }
+    res->nb_shards = g_kvs->nb_shards;
+    res->nb_slabs_per_shard = g_kvs->shards[0].nb_slabs;
+    uint32_t i = 0;
+    for(;i<nb_total_slabs;i++){
+        uint32_t shard_idx = i/res->nb_slabs_per_shard;
+        uint32_t slab_idx  = i%res->nb_slabs_per_shard;
+        struct slab *slab = &g_kvs->shards[shard_idx].slab_set[slab_idx];
+        
+        res->slabs[i].slab_size = slab->slab_size;
+        res->slabs[i].nb_slots = slab->reclaim.nb_total_slots;
+        res->slabs[i].nb_free_slots = slab->reclaim.nb_free_slots;
+    }
+    return res;
 }
 
-float kvs_get_miss_rate(void){
+struct kvs_runtime_statistics* kvs_get_runtime_statistics(void){ 
+    struct kvs_runtime_statistics* res;
+    uint64_t size = sizeof(*res) + sizeof(*res->ws)*g_kvs->nb_workers;
 
-}
+    if(!g_kvs){
+        return NULL;
+    }
 
-uint32_t  kvs_get_nb_pending_reqs(void){
+    res = malloc(size);
+    if(!res){
+        return NULL;
+    }
 
-}
+    res->nb_worker = g_kvs->nb_workers;
+    int i = 0;
+    for(;i<g_kvs->nb_workers;i++){
+        worker_get_statistics(g_kvs->workers[i],&res->ws[i]);
+    }
 
-uint32_t kvs_get_nb_chunks_statistics(void){
-
+    return res;
 }
 
 uint64_t kvs_get_nb_items(void){
+    if(!g_kvs){
+        return 0;
+    }
 
-}
+    struct slab_statistics* ss = kvs_get_slab_statistcs();
+    if(!ss){
+        return 0;
+    }
 
-uint64_t kvs_get_dbsize_bytes(void){
-    
+    uint64_t nb_items = 0;
+    uint64_t i=0;
+    for(;i<ss->nb_shards*ss->nb_slabs_per_shard;i++){
+        nb_items += ss->slabs[i].nb_slots - ss->slabs[i].nb_free_slots;
+    }
+    free(ss);
+    return nb_items;
 }

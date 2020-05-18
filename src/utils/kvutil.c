@@ -1,5 +1,8 @@
 #include <stdint.h>
+#include <stdlib.h>
 #include "kvutil.h"
+
+#include "spdk/env.h"
 
 static const uint64_t crc64_tab[256] = {
     0x0000000000000000ULL, 0x7ad870c830358979ULL,
@@ -161,5 +164,21 @@ uint32_t
 kv_hash(const uint8_t* key, uint32_t key_len, uint32_t num_buckets){
     uint64_t crc64 = _crc64(key,key_len);
     return _hash(crc64,num_buckets);
+}
+
+uint64_t kv_cycles_to_us(uint64_t cycles) {
+   return cycles*1000000LU/spdk_get_ticks_hz();
+}
+
+void kv_shuffle(uint64_t *array, uint64_t n) {
+   if (n > 1) {
+      uint64_t i;
+      for (i = 0; i < n - 1; i++) {
+         uint64_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+         uint64_t t = array[j];
+         array[j] = array[i];
+         array[i] = t;
+      }
+   }
 }
 

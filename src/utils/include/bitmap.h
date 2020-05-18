@@ -1,12 +1,16 @@
-#ifndef __BITMAP_H
-#define __BITMAP_H
+#ifndef KVS_BITMAP_H
+#define KVS_BITMAP_H
 
 #include <stdint.h>
+#include <assert.h>
 
 struct bitmap {
     uint32_t length;
-    uint8_t *data;
+    uint8_t  data[0];
 };
+
+static_assert(sizeof(struct bitmap)==4,"incorrect size");
+
 uint32_t bitmap_get_bit(struct bitmap *map ,uint32_t id);
 
 void bitmap_set_bit(struct bitmap *map,uint32_t id);

@@ -46,7 +46,7 @@ _process_one_pending_delete_load_data_cb(void* ctx, int kverrno){
 
     //Now I get only the meta data into the page chunk cache.
     struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,del->slot_idx);
-    item->meta.ksize=-1;
+    item->meta.ksize=UINT32_MAX;
     pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,desc,del->slot_idx,
                                _process_one_pending_delete_store_data_cb,del);
 }
@@ -96,8 +96,9 @@ _process_one_pending_delete(struct pending_item_delete *del){
 }
 
 // Each deleting issues a writing io. Just process them as many as possible.
-void 
+int 
 worker_reclaim_process_pending_item_delete(struct worker_context *wctx){
+    int events = 0;
     uint32_t a_ios = (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
 
     struct pending_item_delete *pending_del, *tmp = NULL;
@@ -110,6 +111,8 @@ worker_reclaim_process_pending_item_delete(struct worker_context *wctx){
         _process_one_pending_delete(pending_del);
         a_ios--;
     }
+    events = a_ios;
+    return events;
 }
 
 /*------------------------------------------------------------------------*/
@@ -175,7 +178,7 @@ _process_one_pending_migrate_new_pagechunk_request_cb(void* ctx, int kverrno){
     struct pending_item_migrate *mig = ctx;
     struct worker_context *wctx = mig->rctx.wctx;
 
-    // Now, load the shared pages of the item from disk.
+    // Now, load just the shared pages of the item from disk.
     assert(!kverrno);
 
     pagechunk_load_item_share_async(wctx->pmgr,
@@ -299,7 +302,7 @@ _process_one_pending_migrate(struct pending_item_migrate *mig){
             return;
         }
     }
-    struct slab *slab = mig->slab;
+
     uint64_t slot_idx = mig->slot_idx;
     struct chunk_desc *desc = pagechunk_get_desc(slab,slot_idx);
     
@@ -328,8 +331,9 @@ _process_one_pending_migrate(struct pending_item_migrate *mig){
 
 //Migrating should not ultilize many IO resources, so they are processed
 //by one batch for each cycle.
-void 
+int 
 worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
+    int events = 0;
     uint32_t a_ios = (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
     uint32_t migrate_batch = wctx->rmgr->migrating_batch;
     uint32_t nb = migrate_batch < a_ios ? migrate_batch : a_ios;
@@ -350,6 +354,8 @@ worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
         _process_one_pending_migrate(mig);
         nb--;
     }
+    events = nb;
+    return events;
 }
 
 /*------------------------------------------------------------------------*/
@@ -383,6 +389,7 @@ slab_resize_complete(void*ctx,int kverrno){
             //Free it from global lru list
             pagechunk_release_one(wctx->pmgr,desc->chunk_mem);
             TAILQ_REMOVE(&wctx->pmgr->global_chunks,desc,link);
+            wctx->pmgr->nb_used_chunks--;
         }
     }
      //Update slab statistics
@@ -400,13 +407,14 @@ slab_resize_complete(void*ctx,int kverrno){
     pool_release(wctx->rmgr->migrate_slab_pool,req);
 }
 
-void 
+int 
 worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
+    int events = 0;
     uint32_t a_mig = wctx->rmgr->pending_migrate_pool->nb_frees;
     struct slab_migrate_request *req = TAILQ_FIRST(&wctx->rmgr->slab_migrate_head);
     if(!req){
         //No pending slab migrating shall be processed.
-        return;
+        return events;
     }
 
     if(req->is_fault){
@@ -452,8 +460,10 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
             //This slot is a free slot. I just do nothing.
             req->cur_slot++;
             req->nb_processed++;
+            events++;
         }
     }
+    return events;
 }
 
 void worker_reclaim_post_deleting(struct reclaim_mgr* rmgr,

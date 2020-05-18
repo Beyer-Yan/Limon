@@ -1,7 +1,9 @@
-#ifndef __RECLAIM_H
-#define __RECLAIM_H
+#ifndef KVS_RECLAIM_H
+#define KVS_RECLAIM_H
 
 #include <stdint.h>
+#include <assert.h>
+#include <stdalign.h>
 #include "queue.h"
 #include "uthash.h"
 #include "rbtree_uint.h"
@@ -11,7 +13,7 @@
 struct reclaim_node{
     uint32_t id;
     uint32_t nb_free_slots;
-    struct chunk_desc **desc_array;
+    struct chunk_desc *desc_array[0];
 };
 
 struct slab_reclaim{
@@ -37,6 +39,8 @@ struct slab_reclaim{
     rbtree free_node_tree;
 };
 
+static_assert(sizeof(struct reclaim_node)==8,"incorrect size");
+
 struct reclaim_node* reclaim_alloc_one_node(struct slab* slab,uint32_t node_id);
 
 //Reclaim thread for background item reclaiming and migrating.
@@ -53,13 +57,13 @@ inline uint32_t reclaim_get_start_chunk_id(struct slab_reclaim* r, struct reclai
 }
 
 inline uint64_t reclaim_get_start_slot(struct slab_reclaim* r, struct reclaim_node* node){
-    uint64_t slot_idx=
+    uint64_t slot_idx;
     slot_idx = r->nb_chunks_per_node*r->nb_slots_per_chunk*node->id;
     return slot_idx;
 }
 
 inline void reclaim_free_node(struct slab_reclaim* r, struct reclaim_node* node){
-    assert(node!=NULL)
+    assert(node!=NULL);
     rbtree_delete(r->total_tree,node->id,NULL);
     free(node);
 }

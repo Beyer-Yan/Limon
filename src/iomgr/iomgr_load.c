@@ -14,7 +14,7 @@ _process_cache_io(struct cache_io *cio, int kverrno){
         TAILQ_FOREACH_SAFE(i,&cio->cio_head,link,tmp){
             TAILQ_REMOVE(&cio->cio_head,i,link);
             i->cb(i->ctx,cio->kverrno);
-            pool_release(cio->imgr,i);
+            pool_release(cio->imgr->cache_io_pool,i);
         }
         cio->cb(cio->ctx,cio->kverrno);
         HASH_DEL(cio->imgr->read_hash.cache_hash,cio); 
@@ -27,10 +27,10 @@ _process_io_link(struct page_io *pio, int kverrno){
     TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
         TAILQ_REMOVE(&pio->pio_head,i,link);
         _process_cache_io(i->cache_io,kverrno);
-        pool_release(pio->imgr,i);
+        pool_release(pio->imgr->page_io_pool,i);
     }
     _process_cache_io(pio->cache_io,kverrno);
-    pool_release(pio->imgr,pio);
+    pool_release(pio->imgr->page_io_pool,pio);
     HASH_DEL(pio->imgr->read_hash.page_hash,pio);
 }
 
@@ -45,10 +45,10 @@ _default_page_io_complete_cb(void*ctx, int kverrno){
     TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
         TAILQ_REMOVE(&pio->pio_head,i,link);
         _process_cache_io(i->cache_io,kverrno);
-        pool_release(pio->imgr,i);
+        pool_release(pio->imgr->page_io_pool,i);
     }
     _process_cache_io(pio->cache_io,kverrno);
-    pool_release(pio->imgr,pio);
+    pool_release(pio->imgr->page_io_pool,pio);
     HASH_DEL(pio->imgr->read_hash.page_hash,pio);
 
     if(io_link!=NULL){

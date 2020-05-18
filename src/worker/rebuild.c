@@ -7,6 +7,7 @@
 
 struct list_slab{
     struct slab* slab;
+    uint32_t shard_idx;
     LIST_ENTRY(list_slab) link;
 };
 
@@ -30,8 +31,8 @@ struct rebuild_ctx{
     uint8_t *recovery_node_buffer;
 };
 
-void _rebuild_node_async(struct rebuild_ctx* rctx);
-void _rebuild_one_slab(struct rebuild_ctx* rctx);
+static void _rebuild_one_node_async(struct rebuild_ctx* rctx);
+static void _rebuild_one_slab(struct rebuild_ctx* rctx);
 
 static void
 _node_read_complete(void* ctx, int bserrno){
@@ -54,11 +55,14 @@ _node_read_complete(void* ctx, int bserrno){
     uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
     for(;idx<nb_slots_per_node;idx++){
         uint8_t *raw_data = rctx->recovery_node_buffer + slab_slot_offset(slab,idx);
-        uint64_t tsc0 = *(uint64_t*)raw_data;
-        struct kv_item *item = raw_data + 8;
-        uint64_t tsc1 = *(uint64_t*)(raw_data + item_get_size(item) + 8);
+        uint64_t tsc0;
+        struct kv_item *item = (struct kv_item*)(raw_data + 8);
+        uint8_t tsc1;
 
-        if(item->meta.ksize!=-1){
+        memcpy(&tsc0,raw_data,sizeof(tsc0));
+        memcpy(&tsc1,raw_data + item_get_size(item) + 8,sizeof(tsc1));
+
+        if(item->meta.ksize!=UINT32_MAX){
             //It may be a valid item.
             if(tsc0!=tsc1){
             //The item is crashed, which may be caused by a system crash when the item is been storing.
@@ -67,7 +71,7 @@ _node_read_complete(void* ctx, int bserrno){
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
             struct index_entry* entry_slab   = mem_index_lookup(rctx->index_for_one_slab,item);
             struct index_entry* entry_worker = mem_index_lookup(wctx->mem_index,item);
-            if(!entry_slab){
+            if(entry_slab){
                 assert(entry_worker!=NULL);
                 //The item has been built, but I find another one because of a system crash when
                 //the item is updated not-in-place and it's original slot is being reclaimed.
@@ -76,7 +80,7 @@ _node_read_complete(void* ctx, int bserrno){
                 uint64_t tsmp = (uint64_t)entry_slab->chunk_desc;
                 if(tsmp<tsc0){
                     //This item is newer.
-                    bitmap_clear_bit(entry_worker->chunk_desc,
+                    bitmap_clear_bit(entry_worker->chunk_desc->bitmap,
                                      entry_worker->slot_idx%entry_worker->chunk_desc->nb_slots);
                     bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
 
@@ -160,7 +164,13 @@ _slab_rebuild_complete(struct rebuild_ctx* rctx,int kverrno){
         return;
     }
     //I should continue the next slab;
-    mem_index_destroy(rctx->index_for_one_slab);
+    if(s->shard_idx!=rctx->cur->shard_idx){
+        //I am going to rebuld the next shard.
+        //And now, I should destroy the mem index for reducing memory usage.
+        //As the item will never be stored across shard.
+        mem_index_destroy(rctx->index_for_one_slab);
+        rctx->index_for_one_slab = mem_index_init();
+    }
     rctx->cur = s;
     _rebuild_one_slab(rctx);
 }
@@ -191,8 +201,8 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     rctx->slab_rebuild_complete = _slab_rebuild_complete;
     LIST_INIT(&rctx->slab_head);
 
-    int i = wctx->reclaim_shards_start_id;
-    int j = 0;
+    uint32_t i = wctx->reclaim_shards_start_id;
+    uint32_t j = 0;
     uint32_t nb_rebuild_shards = rctx->wctx->reclaim_shards_start_id+wctx->nb_reclaim_shards;
     for(;i<nb_rebuild_shards;i++){
         struct slab_shard *shard = &wctx->shards[i];
@@ -203,6 +213,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
                 struct list_slab *s = malloc(sizeof(struct list_slab));
                 assert(s!=NULL);
                 s->slab = &shard->slab_set[j];
+                s->shard_idx = i;
                 LIST_INSERT_HEAD(&rctx->slab_head,s,link);
             }
         }

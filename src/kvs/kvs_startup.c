@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 #include "kvs_internal.h"
 
 #include "spdk/stdinc.h"
@@ -10,7 +11,8 @@
 #include "spdk/log.h"
 #include "spdk/string.h"
 
-volatile struct kvs *g_kvs = NULL;
+atomic_int g_started  = 0;
+struct kvs *g_kvs = NULL;
 
 struct kvs_start_ctx{
     struct spdk_blob_store *bs;
@@ -34,8 +36,7 @@ struct _blob_iter{
     struct kvs_start_ctx *kctx;
     uint32_t slab_idx;
     uint32_t total_slabs;
-    uint32_t nb_shards;
-    uint8_t *base_addr;
+    struct super_layout *sl;
 };
 
 static void
@@ -98,7 +99,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     worker_opts.shard = kvs->shards;
     worker_opts.target = kctx->bs;
 
-    int i = 0;
+    uint32_t i = 0;
     for(;i<kctx->opts->nb_works;i++){
         worker_opts.reclaim_shard_start_id = i*kvs->nb_workers;
         worker_opts.core_id = i;
@@ -120,7 +121,6 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
     uint32_t nb_workers = kctx->opts->nb_works;
     uint32_t nb_shards  = kctx->sl->nb_shards;
     uint32_t nb_slabs_per_shard = kctx->sl->nb_slabs_per_shard;
-    uint32_t nb_shards_per_worker = nb_shards/nb_workers;
 
     uint32_t size = sizeof(struct kvs) + nb_workers*sizeof(struct worker_context*) +
                     nb_shards*sizeof(struct slab_shard) +
@@ -140,25 +140,24 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
     kvs->workers = (struct worker_context**)(kvs+1);
     kvs->shards = (struct slab_shard*)(kvs->workers + nb_workers);
 
-    int i = 0;
+    uint32_t i = 0;
     struct slab* slab_base = (struct slab*)(kvs->shards + nb_shards);
     for(;i<nb_shards;i++){
         kvs->shards[i].nb_slabs = nb_slabs_per_shard;
         kvs->shards[i].slab_set = slab_base + i*nb_slabs_per_shard;
     }
     uint32_t total_slabs = nb_shards * nb_slabs_per_shard;
-    struct slab_layout* layout_base   = (struct slab_layout*)(kctx->sl + 1);
 
     for(i=0;i<total_slabs;i++){
-        slab_base[i].blob = (struct spdk_blob*)layout_base[i].resv;
+        slab_base[i].blob = (struct spdk_blob*)kctx->sl->slab[i].resv;
         slab_base[i].flag = 0;
-        slab_base[i].slab_size = layout_base[i].slab_size;
+        slab_base[i].slab_size = kctx->sl->slab[i].slab_size;
         slab_base[i].reclaim.nb_chunks_per_node = kctx->sl->nb_chunks_per_reclaim_node;
         slab_base[i].reclaim.nb_pages_per_chunk = kctx->sl->nb_pages_per_chunk;
         slab_base[i].reclaim.nb_slots_per_chunk = slab_get_chunk_slots(kctx->sl->nb_pages_per_chunk, 
                                                                       slab_base[i].slab_size);
         
-        uint32_t slab_chunks = spdk_blob_get_num_clusters(slab_base[i].blob);
+        uint64_t slab_chunks = spdk_blob_get_num_clusters(slab_base[i].blob);
         assert(slab_chunks%slab_base[i].reclaim.nb_chunks_per_node==0);
         slab_base[i].reclaim.nb_reclaim_nodes = slab_chunks/slab_base[i].reclaim.nb_chunks_per_node;
         slab_base[i].reclaim.nb_total_slots = slab_base[i].reclaim.nb_slots_per_chunk * slab_chunks;
@@ -174,20 +173,20 @@ _kvs_start_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
     struct kvs_start_ctx *kctx = iter->kctx;
 
     if (bserrno) {
-        _unload_bs(kctx, "Error in blob open callback", bserrno);
+        _unload_bs(kctx, "Error in opening blob", bserrno);
         return;
     }
 
-    struct slab_layout *slab_base = (struct slab_layout*)iter->base_addr + iter->slab_idx;
+    struct slab_layout *slab_base = &iter->sl->slab[iter->slab_idx];
     slab_base->resv = (uint64_t)blob;
 
-    if(iter->slab_idx == iter->nb_shards - 1){
+    if(iter->slab_idx == iter->total_slabs - 1){
         //All slab have been opened;
         free(iter);
         _kvs_start_create_kvs_runtime(kctx);
     }
     else{
-        slab_base++;
+        iter->slab_idx++;
         spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_start_open_blob_next,iter);
     }    
 }
@@ -197,12 +196,12 @@ _kvs_start_open_all_blobs(struct kvs_start_ctx *kctx){
     struct _blob_iter *iter = malloc(sizeof( struct _blob_iter));
     assert(iter!=NULL);
 
-    iter->base_addr = (uint8_t*)(kctx->sl + 1);
     iter->kctx = kctx;
-    iter->nb_shards = kctx->sl->nb_shards;
-    iter->total_slabs = iter->nb_shards * kctx->sl->nb_slabs_per_shard;
+    iter->total_slabs = kctx->sl->nb_shards * kctx->sl->nb_slabs_per_shard;
+    iter->slab_idx = 0;
+    iter->sl = kctx->sl;
 
-    struct slab_layout *slab_base =  iter->base_addr;
+    struct slab_layout *slab_base =  &iter->sl->slab[0];
     spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_start_open_blob_next,kctx);
 }
 
@@ -241,19 +240,24 @@ _blob_read_super_page_complete(void* ctx, int bserrno){
     uint32_t super_size = sizeof(struct super_layout) + 
                     kctx->sl->nb_shards * kctx->sl->nb_slabs_per_shard * sizeof(struct slab_layout);
     spdk_free(kctx->sl);
-    kctx->sl = spdk_malloc(KV_ALIGN(super_size,0x1000),0x1000,NULL,SPDK_ENV_LCORE_ID_ANY,SPDK_MALLOC_DMA);
+    kctx->sl = spdk_malloc(KV_ALIGN(super_size,0x1000u),0x1000,NULL,SPDK_ENV_LCORE_ID_ANY,SPDK_MALLOC_DMA);
     assert(kctx->sl!=NULL);
 
-    uint32_t nb_pages = KV_ALIGN(super_size,0x1000);
+    uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
 
     spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_read_all_super_pages_complete,NULL);
 }
 
 static void
-_kvs_start_super_open_complete(void*ctx, struct sodk_blob *blob, int bserrno){
+_kvs_start_super_open_complete(void*ctx, struct spdk_blob *blob, int bserrno){
     struct kvs_start_ctx *kctx = ctx;
     if (bserrno) {
         _unload_bs(kctx, "Error in open super completion",bserrno);
+        return;
+    }
+    if(spdk_blob_get_num_clusters(blob)==0){
+        //Bad super blob
+        _unload_bs(kctx, "Empty super blob",bserrno);
         return;
     }
     kctx->super_blob = blob;
@@ -287,7 +291,7 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(bs);
     if(io_unit_size!=KVS_PAGE_SIZE){
         SPDK_ERRLOG("Not a valid-formated kvs!!\n");
-        SPDK_ERRLOG("Supported unit size: %d. Yours:%d\n",KVS_PAGE_SIZE,io_unit_size);
+        SPDK_ERRLOG("Supported unit size: %d. Yours:%" PRIu64 "\n",KVS_PAGE_SIZE,io_unit_size);
         spdk_app_stop(-1);
 		return;
     }
@@ -376,6 +380,9 @@ kvs_start_loop(struct kvs_start_opts *opts){
 	int rc = 0;
     opts->spdk_opts->reactor_mask = _get_cpu_mask(opts->nb_works);
     assert(opts->spdk_opts->reactor_mask!=NULL);
+    
+    assert(!atomic_load(&g_started));
+    atomic_store(&g_started,1);
 
     rc = spdk_app_start(opts->spdk_opts, _kvs_start, opts);
     if (rc) {
@@ -385,9 +392,9 @@ kvs_start_loop(struct kvs_start_opts *opts){
     }
 
 	spdk_app_fini();
-	return rc;
+	//return rc;
 }
 
 bool kvs_is_started(void){
-    return !g_kvs ? false : true;
+    return atomic_load(&g_started) ? true : false;
 }

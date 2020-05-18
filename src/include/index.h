@@ -1,7 +1,8 @@
-#ifndef __NDEX_H
-#define __INDEX_H
+#ifndef KVS_INDEX_H
+#define KVS_INDEX_H
 
 #include <stdint.h>
+#include <assert.h>
 #include "item.h"
 #include "pagechunk.h"
 
@@ -34,6 +35,8 @@ struct index_entry {
     struct chunk_desc * chunk_desc;
 };
 
+static_assert(sizeof(struct index_entry)==16,"size incorrect");
+
 struct mem_index;
 
 /**
@@ -55,7 +58,7 @@ void mem_index_destroy(struct mem_index* mem_index);
  * @return void*     NULL:Add failed beacause of either OOM ,or already-existence of the entry
  * not NULL:the added entry pointer of in memory index.
  */
-void* mem_index_add(struct mem_index *mem_index, struct kv_item *item,struct index_entry* entry);
+void* mem_index_add(struct mem_index *mem_index, const struct kv_item *item,const struct index_entry* entry);
 
 /**
  * @brief Deletes a item index from the memory index
@@ -64,7 +67,7 @@ void* mem_index_add(struct mem_index *mem_index, struct kv_item *item,struct ind
  * @param item       The key of item to be deleted.
  * 
  */
-void mem_index_delete(struct mem_index *mem_index,struct kv_item *item);
+void mem_index_delete(struct mem_index *mem_index,const struct kv_item *item);
 
 /**
  * @brief Look up the entry for the given item.
@@ -73,28 +76,30 @@ void mem_index_delete(struct mem_index *mem_index,struct kv_item *item);
  * @param item                  The given item
  * @return struct index_entry*  The entry if finding, else NULL.
  */
-struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item *item);
+struct index_entry* mem_index_lookup(struct mem_index *mem_index, const struct kv_item *item);
 
 /**
- * @brief Get the first item.
+ * @brief  Get the first item.
  * 
- * @param mem_index     The in-mem data
- * @param item_out      The returned item. The item_out needn't releasing, since it is allocated
+ * @param mem_index       The in-mem data
+ * @param key_len_out     The return length of key
+ * @return uint8_t*       The returned item. The item_out needn't releasing, since it is allocated
  * statically. Uers have to copy its value out, as it will be flushed every time when users call
  * this function.
  */
-void mem_index_first(struct mem_index *mem_index,struct kv_item **item_out);
+uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);
 
 /**
- * @brief Get the first item, which is greater than the base item.
+ * @brief  Get the first item, which is greater than the base item.
  * 
- * @param mem_index     The in-mem data
- * @param base_item     The base item.
- * @param item_out      Return the first item that is greater than the base item. 
+ * @param mem_index         The in-mem data.
+ * @param base_item         The base item.
+ * @param key_len_out       The return length of key.
+ * @return struct kv_item*  Return the first item that is greater than the base item. 
  * The item_out needn't releasing, since it is allocated statically. Uers have to
  * copy its value out, as it will be flushed every time when users call this function.
  */
-void mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,struct kv_item **item_out);
+uint8_t* mem_index_next(struct mem_index *mem_index,const struct kv_item *base_item,uint32_t *key_len_out);
 
 #endif
 

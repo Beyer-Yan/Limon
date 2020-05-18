@@ -51,6 +51,11 @@ int uint_cmp(uint32_t left, uint32_t right){
     return left<right ? -1 : ((left==right)?0:1);
 }
 
+rbtree rbtree_create(void);
+void* rbtree_lookup_impl(rbtree t, uint32_t key, compare_func compare);
+void rbtree_insert_impl(rbtree t, uint32_t key, void* value, compare_func compare);
+void rbtree_delete_impl(rbtree t, uint32_t key, compare_func compare);
+
 inline void* rbtree_lookup(rbtree t, uint32_t key){
     return rbtree_lookup_impl(t, key, uint_cmp);
 }
@@ -91,10 +96,4 @@ inline void* rbtree_last(rbtree t){
 		node = node->right;
 	return node->value;
 }
-
-rbtree rbtree_create();
-void* rbtree_lookup_impl(rbtree t, uint32_t key, compare_func compare);
-void rbtree_insert_impl(rbtree t, uint32_t key, void* value, compare_func compare);
-void rbtree_delete_impl(rbtree t, uint32_t key, compare_func compare);
-
 #endif

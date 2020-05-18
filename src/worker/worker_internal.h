@@ -1,7 +1,8 @@
-#ifndef __WORKER_INTERNAL_H
-#define __WORKER_INTERNAL_H
+#ifndef KVS_WORKER_INTERNAL_H
+#define KVS_WORKER_INTERNAL_H
 
 #include <stddef.h>
+#include <stdatomic.h>
 #include "worker.h"
 #include "slab.h"
 #include "uthash.h"
@@ -42,7 +43,7 @@ struct process_ctx{
 struct kv_request{
     uint32_t op_code;
     uint32_t shard;
-    struct kv_item* item;
+    const struct kv_item* item;
     kv_cb cb_fn;
     void* ctx;
 } __attribute__(( aligned(CACHE_LINE_LENGTH) ));
@@ -52,7 +53,7 @@ struct kv_request_internal{
 
     uint32_t op_code;
     uint32_t shard;
-    struct kv_item* item;
+    const struct kv_item* item;
     kv_cb cb_fn;
     void* ctx;
 
@@ -74,11 +75,10 @@ struct worker_context{
     uint32_t reclaim_percentage_threshold;
 
     //simple thread safe mp-sc queue
-    struct kv_request *request_queue;         // lock-free queue, multi-prod-single-cons
-
-    volatile uint32_t buffered_request_idx;   // Number of requests enqueued or in the process of being enqueued         
-    volatile uint32_t sent_requests;          // Number of requests fully enqueued     
-    volatile uint32_t processed_requests;     // Number of requests fully submitted and processed on disk  
+    struct kv_request *request_queue;  // lock-free queue, multi-prod-single-cons
+    atomic_uint buffered_request_idx;  // Number of requests enqueued or in the process of being enqueued         
+    atomic_uint sent_requests;         // Number of requests fully enqueued     
+    atomic_uint processed_requests;    // Number of requests fully submitted and processed on disk  
 
     uint32_t max_pending_kv_request;          // Maximum number of enqueued requests 
 
@@ -186,7 +186,7 @@ struct reclaim_mgr{
      * reclaim node. 
      * 
      */
-    TAILQ_HEAD(,pending_slab_migrate) slab_migrate_head;
+    TAILQ_HEAD(,slab_migrate_request) slab_migrate_head;
 
     struct object_cache_pool *pending_delete_pool;
     struct object_cache_pool *pending_migrate_pool;
@@ -199,9 +199,9 @@ void worker_reclaim_post_deleting(struct reclaim_mgr* rmgr,
                           void (*cb)(void* ctx, int kverrno),
                           void* ctx);
 
-void worker_reclaim_process_pending_item_delete(struct worker_context *wctx);
-void worker_reclaim_process_pending_item_migrate(struct worker_context *wctx);
-void worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx);
+int worker_reclaim_process_pending_item_delete(struct worker_context *wctx);
+int worker_reclaim_process_pending_item_migrate(struct worker_context *wctx);
+int worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx);
 
 /*----------------------------------------------------*/
 //Recovery related

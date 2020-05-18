@@ -1,5 +1,5 @@
-#ifndef __KVS_H
-#define __KVS_H
+#ifndef KVS_H
+#define KVS_H
 #include <stdbool.h>
 #include "index.h"
 #include "item.h"
@@ -50,23 +50,23 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item);
 bool kv_iterator_next(struct kv_iterator *it);
 struct kv_item* kv_iterator_item(struct kv_iterator *it);
 
-
 struct slab_statistics{
-    uint32_t nb_slabs;
+    uint64_t nb_shards;
+    uint64_t nb_slabs_per_shard;
     struct {
-        uint32_t slab_size;
-        uint32_t nb_slots;
-        uint32_t nb_used_slots;
-    } *slabs;
+        uint64_t slab_size;
+        uint64_t nb_slots;
+        uint64_t nb_free_slots;
+    }slabs[0];
 };
 
-struct slab_statistics* kvs_get_slab_statistcs();
-float kvs_get_miss_rate(void);
+struct kvs_runtime_statistics{
+    uint64_t nb_worker;
+    struct worker_statistics ws[0];
+};
 
-uint32_t  kvs_get_nb_pending_reqs(void);
-uint32_t kvs_get_nb_chunks_statistics(void);
-
+struct slab_statistics* kvs_get_slab_statistcs(void);
+struct kvs_runtime_statistics* kvs_get_runtime_statistics(void);
 uint64_t kvs_get_nb_items(void);
-uint64_t kvs_get_dbsize_bytes(void);
 
 #endif
