@@ -5,6 +5,8 @@
 #include "slab.h"
 #include "spdk/blob.h"
 
+#include "chunkpage.h"
+
 struct worker_context;
 struct chunkmgr_worker_context;
 

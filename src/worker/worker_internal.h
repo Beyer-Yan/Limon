@@ -193,7 +193,7 @@ struct reclaim_mgr{
     struct object_cache_pool *migrate_slab_pool;
 };
 
-void worker_reclaim_post_deleting(struct reclaim_mgr* rmgr,
+extern void worker_reclaim_post_deleting(struct reclaim_mgr* rmgr,
                           struct slab* slab, 
                           uint64_t slot_idx,
                           void (*cb)(void* ctx, int kverrno),

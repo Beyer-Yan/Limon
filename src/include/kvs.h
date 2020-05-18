@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "index.h"
 #include "item.h"
+#include "worker.h"
 
 #include "spdk/event.h"
 

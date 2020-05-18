@@ -69,7 +69,7 @@ _release_one_chunk_mem(struct chunk_mem *mem){
     pool_release(_g_mem_pool,mem);
 }
 
-struct worker_context* _chunkmgr_evaluate_worklaod(void){
+static struct worker_context* _chunkmgr_evaluate_worklaod(void){
     //@todo
     return NULL;
 }
@@ -86,6 +86,7 @@ _get_worker_context_from_pmgr(struct pagechunk_mgr* pmgr){
     //I will get one except the program bug.
     //return (struct worker_context*)((uint64_t)pmgr-sizeof(struct worker_context));
     assert(0);
+    return NULL;
 }
 
 static void 
@@ -186,7 +187,7 @@ _do_start(void*ctx){
     SPDK_NOTICELOG("chunkmgr thread is working\n");
 }
 
-void chunkmgr_worker_start(){
+void chunkmgr_worker_start(void){
     assert(g_chunkmgr_worker.thread!=NULL);
     spdk_thread_send_msg(g_chunkmgr_worker.thread,_do_start,NULL);
 }
