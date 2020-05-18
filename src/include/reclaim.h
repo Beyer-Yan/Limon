@@ -7,9 +7,6 @@
 #include "queue.h"
 #include "uthash.h"
 #include "rbtree_uint.h"
-#include "iomgr.h"
-
-struct slab;
 
 struct reclaim_node{
     uint32_t id;
@@ -46,6 +43,8 @@ struct reclaim_node* reclaim_alloc_one_node(struct slab* slab,uint32_t node_id);
 
 //Reclaim thread for background item reclaiming and migrating.
 struct reclaim_mgr;
+struct slab;
+struct iomgr;
 
 extern void worker_reclaim_post_deleting(struct reclaim_mgr* rmgr,
                           struct slab* slab, 
