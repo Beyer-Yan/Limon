@@ -19,7 +19,7 @@ C_SRCS += $(shell ls src/reclaim/*.c)
 C_SRCS += $(shell ls src/pagechunk/*.c)
 C_SRCS += $(shell ls src/kvs/*.c)
 C_SRCS += $(shell ls src/iomgr/*.c)
-C_SRCS += src/indexes/index.c src/indexes/impl/art.c
+C_SRCS += src/indexes/index.c src/indexes/impl/art.c src/indexes/impl/rbtree_uint.c
 
 LIBNAME = pemon
 

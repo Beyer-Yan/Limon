@@ -8,7 +8,8 @@
 #include "uthash.h"
 #include "rbtree_uint.h"
 #include "iomgr.h"
-#include "slab.h"
+
+struct slab;
 
 struct reclaim_node{
     uint32_t id;

@@ -47,6 +47,9 @@ typedef struct rbtree_t {
 } *rbtree;
 
 typedef int (*compare_func)(uint32_t left, uint32_t right);
+
+int uint_cmp(uint32_t left, uint32_t right);
+
 int uint_cmp(uint32_t left, uint32_t right){
     return left<right ? -1 : ((left==right)?0:1);
 }
