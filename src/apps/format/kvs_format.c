@@ -118,7 +118,7 @@ _kvs_blob_close_next(void* ctx,int bserrno){
         _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
     }
-    
+
     struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
     
     if(iter->slab_idx==iter->total_slabs-1){
@@ -164,7 +164,7 @@ _kvs_dump_one_slab(struct slab_layout* slab){
     struct spdk_blob *blob = (struct spdk_blob*)(slab->resv);
     printf("\t-------------------\n");
     printf("\tblob id:%" PRIu64 "\n",slab->blob_id);
-    printf("\tblob addr:%0x\n",slab->resv);
+    printf("\tblob addr:%" PRIx64 "\n",slab->resv);
     printf("\tslab size:%u\n",slab->slab_size);
 
     uint64_t total_chunks = spdk_blob_get_num_clusters(blob);
@@ -175,11 +175,13 @@ static void
 _kvs_dump_real_data(struct kvs_format_ctx *kctx){
 
     printf("kvs global configuration:\n");
+    printf("\tkvs pin code:%" PRIx64 "\n",kctx->sl->kvs_pin);
 	printf("\tshards count: %u\n", kctx->sl->nb_shards);
     printf("\tslabs per shard:%u\n",kctx->sl->nb_slabs_per_shard);
     printf("\tchunks per reclaim node:%u\n",kctx->sl->nb_chunks_per_reclaim_node);
     printf("\tpages per chunk:%u\n",kctx->sl->nb_pages_per_chunk);
     printf("\tpage size:%" PRIu64 "\n",kctx->io_unit_size);
+    printf("\tmax key length:%u\n",kctx->sl->max_key_length);
 
     uint64_t total_chunks = spdk_bs_total_data_cluster_count(kctx->bs);
     uint64_t free_chunks = spdk_bs_free_cluster_count(kctx->bs);
