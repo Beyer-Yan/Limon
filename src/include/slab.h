@@ -16,10 +16,10 @@
  * it is allowed to storage in multi pages. Items less than 
  * MULTI_PAGE_SLAB_SIZE will alway be put into only one page.
  */
-#define MULTI_PAGE_SLAB_SIZE 768
-
-#define KVS_PAGE_SIZE 4096
-#define MAX_SLAB_SIZE 4*1024*1024
+#define MULTI_PAGE_SLAB_SIZE   768u
+#define CHUNK_SIZE             252u
+#define KVS_PAGE_SIZE          4096u
+#define MAX_SLAB_SIZE          4*1024*1024u
 
 //In disk layout
 

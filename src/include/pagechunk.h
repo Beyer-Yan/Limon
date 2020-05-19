@@ -12,7 +12,6 @@
 
 #include "spdk/queue.h"
 
-#define CHUNK_SIZE 252u
 #define CHUNK_PIN  1u
 
 struct chunk_mem {
