@@ -201,7 +201,7 @@ static uint64_t _scan_data[MAX_SLAB_SIZE];
 void worker_process_first(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
     struct kv_item *item = (struct kv_item*)_scan_data;
-    uint8_t* key;
+    const uint8_t* key;
     uint32_t key_len;
 
     key = mem_index_first(wctx->mem_index,&key_len);
@@ -228,7 +228,7 @@ void worker_process_seek(struct kv_request_internal *req){
 void worker_process_next(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
     struct kv_item *item = (struct kv_item*)_scan_data;
-    uint8_t* key;
+    const uint8_t* key;
     uint32_t key_len;
 
     key = mem_index_next(wctx->mem_index,req->item,&key_len);

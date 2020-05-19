@@ -37,9 +37,9 @@ struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item
     return art_search(t,item->data,item->meta.ksize);
 }
 
-uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out){
+const uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
-    unsigned char *key;
+    const unsigned char *key;
     uint32_t len;
     struct index_entry *entry;
 
@@ -53,9 +53,9 @@ uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out){
     }
 }
 
-uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out){
+const uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
-    unsigned char *key;
+    const unsigned char *key;
     uint32_t len;
     struct index_entry *entry;
 

@@ -981,7 +981,7 @@ _key_equal(const unsigned char *key1,uint32_t key1_len,const unsigned char *key2
     return false;
 }
 
-art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned char *key, uint32_t len) {
+static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned char *key, uint32_t len) {
     // Handle base cases
     if (!n) {
         return NULL;
@@ -1084,5 +1084,25 @@ void art_find_next(art_tree *t, const unsigned char *key, int key_len,
         *key_out = leaf->key;
         *len_out = leaf->key_len;
         *entry_out = &leaf->value;
+    }
+}
+
+void art_first(art_tree *t,const unsigned char** key_out, int *len_out, struct index_entry **entry_out){
+    if(t->size==0){
+        *key_out = NULL;
+        *len_out = 0;
+        *entry_out = NULL;
+        return;
+    }
+
+    static const unsigned char key = 0;
+    struct index_entry *entry = art_search(t,&key,1);
+    if(entry){
+        *key_out = &key;
+        *len_out = 1;
+        *entry_out = entry;
+    }
+    else{
+        art_find_next(t,&key,1, key_out,len_out,entry_out);
     }
 }

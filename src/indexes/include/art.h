@@ -220,25 +220,15 @@ int art_iter_prefix(art_tree *t, const unsigned char *prefix, int prefix_len, ar
 void art_find_next(art_tree *t, const unsigned char *key, int key_len,
                    const unsigned char** key_out, int *len_out, struct index_entry **entry_out);
 
-inline void art_first(art_tree *t,const unsigned char** key_out, int *len_out, struct index_entry **entry_out){
-    if(t->size==0){
-        *key_out = NULL;
-        *len_out = 0;
-        *entry_out = NULL;
-        return;
-    }
-
-    static const unsigned char key = 0;
-    struct index_entry *entry = art_search(t,&key,1);
-    if(entry){
-        *key_out = &key;
-        *len_out = 1;
-        *entry_out = entry;
-    }
-    else{
-        art_find_next(t,&key,1, key_out,len_out,entry_out);
-    }
-}
+/**
+ * @brief Get the first element from the art tree.
+ * 
+ * @param t            The art tree.
+ * @param char         The returned key pointer.
+ * @param len_out      The returned key length.
+ * @param entry_out    The returned index entry.
+ */
+void art_first(art_tree *t,const unsigned char** key_out, int *len_out, struct index_entry **entry_out);
 
 #ifdef __cplusplus
 }
