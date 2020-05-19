@@ -66,6 +66,10 @@ static void delete_case4(rbtree t, node n);
 static void delete_case5(rbtree t, node n);
 static void delete_case6(rbtree t, node n);
 
+int uint_cmp(uint32_t left, uint32_t right){
+    return left<right ? -1 : ((left==right)?0:1);
+}
+
 node grandparent(node n) {
    assert (n != NULL);
    assert (n->parent != NULL); /* Not the root node */

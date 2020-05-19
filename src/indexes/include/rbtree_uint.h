@@ -50,10 +50,6 @@ typedef int (*compare_func)(uint32_t left, uint32_t right);
 
 int uint_cmp(uint32_t left, uint32_t right);
 
-int uint_cmp(uint32_t left, uint32_t right){
-    return left<right ? -1 : ((left==right)?0:1);
-}
-
 rbtree rbtree_create(void);
 void* rbtree_lookup_impl(rbtree t, uint32_t key, compare_func compare);
 void rbtree_insert_impl(rbtree t, uint32_t key, void* value, compare_func compare);

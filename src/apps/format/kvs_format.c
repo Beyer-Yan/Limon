@@ -17,7 +17,7 @@ static char *_g_kvs_name = "kvs_v1.0";
 
 static const char *_g_kvs_getopt_string = "K:S:C:fD:E"; 
 
-static const struct option _g_app_long_cmdline_options[] = {
+static struct option _g_app_long_cmdline_options[] = {
 #define MAX_KEY_LENGH_OPT_IDX   'K'
     {"max-key-length",optional_argument,NULL,MAX_KEY_LENGH_OPT_IDX},
 #define SHARDS_OPT_IDX          'S'
@@ -576,7 +576,7 @@ _kvs_parse_arg(int ch, char *arg){
 }
 
 static void
-_kvs_usage(){
+_kvs_usage(void){
 	printf(" -K, --max-key-length <num>   the max key length of the current kvs(default:%u)\n",
                                           _g_default_opts.max_key_length);
 	printf(" -S, --shards <num>           the number of shards(default:%u)\n",
