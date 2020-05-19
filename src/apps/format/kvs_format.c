@@ -326,12 +326,12 @@ _create_slab_blobs_next(void* ctx, spdk_blob_id blobid,int bserrno){
     }
 
     struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
-    uint32_t nb_shards = iter->sl->nb_shards;
+    uint32_t nb_slabs_per_shard = iter->sl->nb_slabs_per_shard;
 
-    slab_base->slab_size = iter->kctx->slab_size_array[iter->slab_idx%nb_shards];
+    slab_base->slab_size = iter->kctx->slab_size_array[iter->slab_idx%nb_slabs_per_shard];
     slab_base->blob_id = blobid;
     SPDK_NOTICELOG("new blob id %" PRIu64 " for shard:%u,slab:%u,\n", 
-                           blobid,iter->slab_idx/nb_shards,iter->slab_idx%nb_shards);
+                           blobid,iter->slab_idx/nb_slabs_per_shard,iter->slab_idx%nb_slabs_per_shard);
     
     if(iter->slab_idx==iter->total_slabs-1){
         //All slab have been created;
