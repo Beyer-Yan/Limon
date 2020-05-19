@@ -58,7 +58,6 @@ _unload_bs(struct kvs_start_ctx *kctx, char *msg, int bserrno)
     }
 	if (bserrno) {
 		SPDK_ERRLOG("%s (err %d)\n", msg, bserrno);
-		kctx->rc = bserrno;
 	}
 	if (kctx->bs) {
 		if (kctx->channel) {
@@ -212,7 +211,6 @@ _blob_read_all_super_pages_complete(void* ctx, int bserrno){
     struct kvs_start_ctx *kctx = ctx;
     if (bserrno) {
 		_unload_bs(kctx, "Error in read completion", bserrno);
-		kctx->rc = bserrno;
         return;
 	}
     _kvs_start_open_all_blobs(kctx); 
@@ -223,19 +221,16 @@ _blob_read_super_page_complete(void* ctx, int bserrno){
     struct kvs_start_ctx *kctx = ctx;
     if (bserrno) {
 		_unload_bs(kctx, "Error in read completion", bserrno);
-		kctx->rc = bserrno;
         return;
 	}
 
     if(kctx->sl->kvs_pin != DEFAULT_KVS_PIN){
-        _unload_bs(kctx, "Not a valid kvs pin", bserrno);
-        kctx->rc = -EINVAL;
+        _unload_bs(kctx, "Not a valid kvs pin", -EINVAL);
         return;
     }
 
     if(kctx->sl->nb_shards%kctx->opts->nb_works!=0){
-        _unload_bs(kctx, "Works mismatch", bserrno);
-        kctx->rc = EINVAL;
+        _unload_bs(kctx, "Works mismatch", -EINVAL);
         return;
     }
 

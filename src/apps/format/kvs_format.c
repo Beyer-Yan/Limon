@@ -93,7 +93,6 @@ _unload_bs(struct kvs_format_ctx *kctx, char *msg, int bserrno)
     }
 	if (bserrno) {
 		SPDK_ERRLOG("%s (err %d)\n", msg, bserrno);
-		kctx->rc = bserrno;
 	}
 	if (kctx->bs) {
 		if (kctx->channel) {
@@ -138,8 +137,7 @@ static void
 _kvs_close_super_complete(void*ctx, int bserrno){
     struct kvs_format_ctx *kctx = ctx;
     if (bserrno) {
-        _unload_bs(kctx, "Error in blob create callback", bserrno);
-        kctx->rc = bserrno;
+        _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
     }
     
@@ -148,7 +146,7 @@ _kvs_close_super_complete(void*ctx, int bserrno){
 
     iter->kctx = kctx;
     iter->slab_idx = 0;
-    iter->total_slabs = kctx->nb_slabs * kctx->sl->nb_shards;
+    iter->total_slabs = kctx->sl->nb_slabs_per_shard * kctx->sl->nb_shards;
     iter->slab_idx = 0;
     iter->sl = kctx->sl;
 
@@ -163,7 +161,7 @@ _kvs_close_all_blob(struct kvs_format_ctx *kctx){
 static void
 _kvs_dump_one_slab(struct slab_layout* slab){
     struct spdk_blob *blob = (struct spdk_blob*)(slab->resv);
-    
+    printf("----------------------------\n");
     printf("\tblob id:%" PRIu64 "\n",slab->blob_id);
     printf("\tslab size:%u\n",slab->slab_size);
 
@@ -184,13 +182,14 @@ _kvs_dump_real_data(struct kvs_format_ctx *kctx){
     uint64_t total_chunks = spdk_bs_total_data_cluster_count(kctx->bs);
     uint64_t free_chunks = spdk_bs_free_cluster_count(kctx->bs);
     printf("\ttotal chunks:%" PRIu64 "\n",total_chunks);
-    printf("\tfree chunks%" PRIu64 "\n\n",free_chunks);
+    printf("\tfree chunks:%" PRIu64 "\n\n",free_chunks);
 
     printf("slab info:\n");
     uint32_t i=0,j=0;
     uint32_t shards = kctx->sl->nb_slabs_per_shard;
     for(;i<kctx->sl->nb_shards;i++){
         struct slab_layout* shard_base = (struct slab_layout*)(kctx->sl + 1) + shards * i;
+        printf("shard:%u ------\n",i);
         for(;j<kctx->sl->nb_slabs_per_shard;j++){
             struct slab_layout *slab = shard_base + j;
             _kvs_dump_one_slab(slab);
@@ -244,7 +243,6 @@ _blob_dump_super_complete(void* ctx, int bserrno){
     struct kvs_format_ctx *kctx = ctx;
     if (bserrno) {
 		_unload_bs(kctx, "Error in read completion", bserrno);
-		kctx->rc = bserrno;
         return;
 	}
     _kvs_dump_open_all_blobs(kctx); 
@@ -255,13 +253,11 @@ _blob_dump_read_super_page_complete(void* ctx, int bserrno){
     struct kvs_format_ctx *kctx = ctx;
     if (bserrno) {
 		_unload_bs(kctx, "Error in read completion", bserrno);
-		kctx->rc = bserrno;
         return;
 	}
 
     if(kctx->sl->kvs_pin != DEFAULT_KVS_PIN){
         _unload_bs(kctx, "Not a valid kvs pin", bserrno);
-        kctx->rc = bserrno;
         return;
     }
 
