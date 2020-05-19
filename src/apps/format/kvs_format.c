@@ -118,9 +118,7 @@ _kvs_blob_close_next(void* ctx,int bserrno){
         _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
     }
-
-    SPDK_NOTICELOG("slab %u closed\n",iter->slab_idx);
-
+    
     struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
     
     if(iter->slab_idx==iter->total_slabs-1){
