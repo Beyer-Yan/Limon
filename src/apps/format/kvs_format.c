@@ -352,6 +352,7 @@ _create_slab_blobs(struct kvs_format_ctx *kctx){
     struct _blob_iter *iter = malloc(sizeof(struct _blob_iter));
     assert(iter!=NULL);
 
+    iter->kctx = kctx;
     iter->slab_idx = 0;
     iter->total_slabs = kctx->nb_slabs * kctx->sl->nb_shards;
     iter->slab_idx = 0;
