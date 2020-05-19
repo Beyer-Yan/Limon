@@ -76,16 +76,12 @@ struct _blob_iter{
 };
 
 static void
-_unload_complete(void *ctx, int bserrno)
-{
-	struct kvs_format_ctx *kctx = ctx;
-
+_unload_complete(void *ctx, int bserrno){
 	if (bserrno) {
 		SPDK_ERRLOG("Error %d unloading the bobstore\n", bserrno);
-		kctx->rc = bserrno;
 	}
 
-	spdk_app_stop(kctx->rc);
+	spdk_app_stop(bserrno);
 }
 
 static void
@@ -103,10 +99,65 @@ _unload_bs(struct kvs_format_ctx *kctx, char *msg, int bserrno)
 		if (kctx->channel) {
 			spdk_bs_free_io_channel(kctx->channel);
 		}
-		spdk_bs_unload(kctx->bs, _unload_complete, kctx);
+		spdk_bs_unload(kctx->bs, _unload_complete, NULL);
 	} else {
 		spdk_app_stop(bserrno);
 	}
+    if(kctx->sl){
+        spdk_free(kctx->sl);
+        free(kctx);
+    }
+}
+
+static void
+_kvs_blob_close_next(void* ctx,int bserrno){
+    struct _blob_iter *iter = ctx;
+    struct kvs_format_ctx *kctx = iter->kctx;
+
+    if (bserrno) {
+        free(iter);
+        _unload_bs(kctx, "Error in blob create callback", bserrno);
+        return;
+    }
+
+    struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
+    
+    if(iter->slab_idx==iter->total_slabs-1){
+        //All slab have been created;
+        //Write the layout data into super blob.
+        free(iter);
+        _unload_bs(kctx,"",0);
+    }
+    else{
+        iter->slab_idx++;
+        spdk_blob_close(slab_base->resv,_kvs_blob_close_next,iter);
+    }
+}
+
+static void
+_kvs_close_super_complete(void*ctx, int bserrno){
+    struct kvs_format_ctx *kctx = ctx;
+    if (bserrno) {
+        _unload_bs(kctx, "Error in blob create callback", bserrno);
+        kctx->rc = bserrno;
+        return;
+    }
+    
+    struct _blob_iter *iter = malloc(sizeof(struct _blob_iter));
+    assert(iter!=NULL);
+
+    iter->kctx = kctx;
+    iter->slab_idx = 0;
+    iter->total_slabs = kctx->nb_slabs * kctx->sl->nb_shards;
+    iter->slab_idx = 0;
+    iter->sl = kctx->sl;
+
+    spdk_blob_close(kctx->sl->slab[0].resv,_kvs_blob_close_next,iter);
+}
+
+static void 
+_kvs_close_all_blob(struct kvs_format_ctx *kctx){
+    spdk_blob_close(kctx->super_blob,_kvs_close_super_complete,kctx);
 }
 
 static void
@@ -145,7 +196,7 @@ _kvs_dump_real_data(struct kvs_format_ctx *kctx){
             _kvs_dump_one_slab(slab);
         }
     }
-    _unload_bs(kctx,"",0);
+    _kvs_close_all_blob(kctx);
 }
 
 static void
@@ -263,6 +314,7 @@ _kvs_dump_load_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     struct kvs_format_ctx* kctx = malloc(sizeof(struct kvs_format_ctx));
     kctx->bs = bs;
     kctx->devname = ctx;
+    kctx->sl = NULL;
     kctx->io_unit_size = spdk_bs_get_io_unit_size(bs);
     
     spdk_bs_get_super(bs,_kvs_dump_get_super_complete,kctx);
@@ -292,6 +344,16 @@ _kvs_dump(void*ctx){
 }
 
 static void
+_super_blob_close_complete(void*ctx, int bserrno){
+    struct kvs_format_ctx *kctx = ctx;
+    if (bserrno) {
+		_unload_bs(kctx, "Error in closing super blob",bserrno);
+		return;
+	}
+    _unload_bs(kctx, "",0);
+}
+
+static void
 _super_sync_complete(void*ctx, int bserrno){
     struct kvs_format_ctx *kctx = ctx;
     
@@ -299,6 +361,7 @@ _super_sync_complete(void*ctx, int bserrno){
 		_unload_bs(kctx, "Error in sync callback",bserrno);
 		return;
 	}
+    spdk_blob_close(kctx->super_blob,_super_blob_close_complete,kctx);
     _unload_bs(kctx, "",0);
 }
 
@@ -616,8 +679,6 @@ main(int argc, char **argv){
         } else {
             SPDK_NOTICELOG("KVS FORMAT SUCCESS!\n");
         }
-        spdk_free(kctx->sl);
-        free(kctx);
     }
     else{
         rc = spdk_app_start(&opts, _kvs_dump, _g_default_opts.devname);
