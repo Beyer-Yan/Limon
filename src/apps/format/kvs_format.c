@@ -119,7 +119,7 @@ _kvs_blob_close_next(void* ctx,int bserrno){
         return;
     }
 
-    SPDK_NOTICELOG("slab %u close\n",iter->slab_idx);
+    SPDK_NOTICELOG("slab %u closed\n",iter->slab_idx);
 
     struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
     
@@ -192,7 +192,7 @@ _kvs_dump_real_data(struct kvs_format_ctx *kctx){
     for(;i<kctx->sl->nb_shards;i++){
         struct slab_layout* shard_base = (struct slab_layout*)(kctx->sl + 1) + shards * i;
         printf("shard:%u ------\n",i);
-        for(;j<kctx->sl->nb_slabs_per_shard;j++){
+        for(j=0;j<kctx->sl->nb_slabs_per_shard;j++){
             struct slab_layout *slab = shard_base + j;
             _kvs_dump_one_slab(slab);
         }
