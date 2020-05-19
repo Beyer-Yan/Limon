@@ -227,7 +227,7 @@ void worker_process_seek(struct kv_request_internal *req){
 
 void worker_process_next(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
-    struct kv_item *item;
+    struct kv_item *item = (struct kv_item*)_scan_data;
     uint8_t* key;
     uint32_t key_len;
 

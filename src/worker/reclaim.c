@@ -1,9 +1,8 @@
 #include "worker_internal.h"
-#include "reclaim.h"
 #include "assert.h"
 #include "kverrno.h"
 
-void default_reclaim_io_cb_fn(void*ctx, int kverrno){
+static void _default_reclaim_io_cb_fn(void*ctx, int kverrno){
     struct slab_migrate_request *req = ctx;
     if(!kverrno){
         req->is_fault = true;
@@ -401,7 +400,7 @@ slab_resize_complete(void*ctx,int kverrno){
     slab->reclaim.nb_total_slots -= nb_slots_per_node;
 
     slab->flag &=~ SLAB_FLAG_RECLAIMING;
-    reclaim_free_node(&slab->reclaim,node);
+    slab_reclaim_free_node(&slab->reclaim,node);
 
     //Now I finish the request, just release it.
     pool_release(wctx->rmgr->migrate_slab_pool,req);
@@ -449,7 +448,7 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
 
                 mig->slab = req->slab;
                 mig->slot_idx = req->cur_slot;
-                mig->io_cb_fn = default_reclaim_io_cb_fn;
+                mig->io_cb_fn = _default_reclaim_io_cb_fn;
                 mig->ctx = req;
                 mig->entry = NULL;
                 mig->rctx.wctx = wctx;
@@ -466,7 +465,7 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     return events;
 }
 
-void worker_reclaim_post_deleting(struct reclaim_mgr* rmgr,
+void slab_reclaim_post_delete(struct reclaim_mgr* rmgr,
                           struct slab* slab, 
                           uint64_t slot_idx,
                           void (*cb)(void* ctx, int kverrno),

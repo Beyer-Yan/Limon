@@ -2,7 +2,6 @@
 #include "slab.h"
 #include "kverrno.h"
 #include "spdk/env.h"
-#include "reclaim.h"
 #include "queue.h"
 
 struct list_slab{
@@ -46,7 +45,7 @@ _node_read_complete(void* ctx, int bserrno){
 
     struct slab *slab = rctx->cur->slab;
 
-    struct reclaim_node* node = reclaim_alloc_one_node(slab,rctx->reclaim_node_idx);
+    struct reclaim_node* node = slab_reclaim_alloc_one_node(slab,rctx->reclaim_node_idx);
     assert(node!=NULL);
 
     uint64_t slot_base = rctx->reclaim_node_idx*slab->reclaim.nb_chunks_per_node*

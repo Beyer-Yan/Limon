@@ -1,12 +1,10 @@
-#ifndef KVS_IOMGR_H
-#define KVS_IOMGR_H
+#ifndef KVS_IO_H
+#define KVS_IO_H
 
 #include <stdint.h>
 #include "queue.h"
 #include "uthash.h"
 #include "pool.h"
-#include "pagechunk.h"
-#include "slab.h"
 
 #include "spdk/blob.h"
 
@@ -53,7 +51,7 @@ struct cache_io{
     //For two-phase writing only.
     uint64_t start_page;
     uint64_t nb_pages;
-    struct slab* slab;
+    struct spdk_blob* blob;
     uint64_t key_prefix;
     uint8_t *buf;
 
@@ -90,19 +88,19 @@ _make_page_key64(uint64_t base_key,uint64_t off){
 }
 
 /**
- * @brief Issue an io command to load data pages from slab file.
+ * @brief Issue an io command to load data pages from blob file.
  * 
  * @param imgr       The io manager.
- * @param slab       The slab.
+ * @param blob       The blob file.
  * @param key_prefix The key prefix of the io. IOs with the same key will be mergered.
  * @param buf        The data buffer, must be 4KB aligned.
- * @param start_page The start page of the data in slab file.
+ * @param start_page The start page of the data in blob file.
  * @param nb_pages   The number of pages.
  * @param cb         User callback
  * @param ctx        Parameter of user callback.
  */
 void iomgr_load_pages_async(struct iomgr* imgr,
-                            struct slab*slab,
+                            struct spdk_blob* blob,
                             uint64_t key_prefix, 
                             uint8_t* buf,
                             uint64_t start_page, 
@@ -111,19 +109,19 @@ void iomgr_load_pages_async(struct iomgr* imgr,
                             void* ctx);
 
 /**
- * @brief Issue an io command to store data pages to slab file.
+ * @brief Issue an io command to store data pages to blob file.
  * 
  * @param imgr       The io manager.
- * @param slab       The slab.
+ * @param blob       The blob file.
  * @param key_prefix The key prefix of the io. IOs with the same keys will be mergered.
  * @param buf        The data buffer, must be 4KB aligned.
- * @param start_page The start page of the data in slab file.
+ * @param start_page The start page of the data in blob file.
  * @param nb_pages   The number of pages.
  * @param cb         User callback
  * @param ctx        Parameter of user callback.
  */
 void iomgr_store_pages_async(struct iomgr* imgr,
-                            struct slab*slab, 
+                            struct spdk_blob* blob, 
                             uint64_t key_prefix, 
                             uint8_t* buf,
                             uint64_t start_page, 

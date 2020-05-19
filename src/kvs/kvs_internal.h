@@ -1,6 +1,6 @@
 #ifndef KVS_INTERNAL_H
 #define KVS_INTERNAL_H
-
+#include "kvs.h"
 #include "slab.h"
 #include "worker.h"
 #include "kvutil.h"

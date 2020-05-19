@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "index.h"
 #include "art.h"
 #include "kvutil.h"
@@ -36,7 +37,7 @@ struct index_entry* mem_index_lookup(struct mem_index *mem_index, const struct k
     return art_search(t,item->data,item->meta.ksize);
 }
 
-uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);{
+uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
     unsigned char *key;
     uint32_t len;

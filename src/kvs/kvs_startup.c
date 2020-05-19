@@ -11,7 +11,7 @@
 #include "spdk/log.h"
 #include "spdk/string.h"
 
-atomic_int g_started  = 0;
+static atomic_int g_started  = 0;
 struct kvs *g_kvs = NULL;
 
 struct kvs_start_ctx{

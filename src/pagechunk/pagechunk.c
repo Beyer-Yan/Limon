@@ -49,19 +49,6 @@ _get_position(struct chunk_desc *desc, uint64_t slot_idx,
     }
 }
 
-struct chunk_desc* 
-pagechunk_get_desc(struct slab* slab, uint64_t slot_idx){
-
-    struct reclaim_node* node;
-    struct chunk_desc* desc;
-    uint64_t slot_offset;
-
-    slab_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
-    assert(node!=NULL);
-
-    return desc;
-}
-
 bool 
 pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx){
     
@@ -200,7 +187,7 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
 
-    iomgr_load_pages_async(imgr,slab,key_prefix,
+    iomgr_load_pages_async(imgr,slab->blob,key_prefix,
                            buf,start_page_in_slab,nb_pages,
                            _item_load_complete_cb_fn,cls_ctx);
 }
@@ -277,7 +264,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
         buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + first_page;
         cls_ctx->nb_segs++;
-        iomgr_load_pages_async(imgr,slab,key_prefix,buf,
+        iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
                             start_page_in_slab,nb_pages,
                             _item_share_load_complete_cb_fn,cls_ctx);
     }
@@ -287,7 +274,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
         buf = &desc->chunk_mem->data[last_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + last_page;
         cls_ctx->nb_segs++;
-        iomgr_load_pages_async(imgr,slab,key_prefix,buf,
+        iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
                     start_page_in_slab,nb_pages,
                     _item_share_load_complete_cb_fn,cls_ctx);
     }
@@ -338,7 +325,7 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
-    iomgr_load_pages_async(imgr,slab,key_prefix,buf,start_page_in_slab,1,_item_meta_load_complete_cb_fn,cls_ctx);
+    iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,1,_item_meta_load_complete_cb_fn,cls_ctx);
 }
 
 static void
@@ -387,7 +374,7 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     uint64_t nb_pages = last_page - first_page + 1;
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
-    iomgr_store_pages_async(imgr,slab,key_prefix,buf,start_page_in_slab,nb_pages,_item_store_complete_cb_fn,cls_ctx);
+    iomgr_store_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,nb_pages,_item_store_complete_cb_fn,cls_ctx);
 }
 
 static void
@@ -426,7 +413,7 @@ void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
     uint64_t key_prefix = (uint64_t)desc + first_page;
     
-    iomgr_store_pages_async(imgr,slab,key_prefix,
+    iomgr_store_pages_async(imgr,slab->blob,key_prefix,
                             buf,start_page_in_slab,1,
                             _item_meta_store_complete_cb_fn,cls_ctx);
 }

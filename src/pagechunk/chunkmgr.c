@@ -3,23 +3,12 @@
 #include "spdk/thread.h"
 #include "spdk/log.h"
 #include "pagechunk.h"
-#include "worker_internal.h"
 #include "kverrno.h"
 #include "slab.h"
 #include "pool.h"
 #include "kvutil.h"
 
-struct chunkmgr_worker_context{
-    
-    struct worker_context **wctx_array;
-
-    uint64_t nb_max_chunks;
-    uint64_t nb_used_chunks;
-    uint32_t nb_pages_per_chunk;
-
-    uint32_t nb_business_workers;
-    struct spdk_thread *thread;
-};
+#include "../worker/worker_internal.h"
 
 //Sinleton mode
 static struct chunkmgr_worker_context g_chunkmgr_worker;

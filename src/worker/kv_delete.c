@@ -35,7 +35,7 @@ void worker_process_delete(struct kv_request_internal *req){
         //It should be resubmited.
         //For the entry in deleting state, it has to be re-lookuped, since its
         //entry may be deleted.
-        (entry->writing) ? req->pctx.no_lookup = true : NULL;
+        (entry->writing) ? req->pctx.no_lookup = true : 0;
         
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
         return;

@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "iomgr.h"
+#include "io.h"
 #include "slab.h"
 #include "kverrno.h"
 
@@ -64,8 +64,9 @@ _default_cache_io_complete_cb(void*ctx, int kverrno){
 }
 
 static void
-_load_pages_multipages(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,uint8_t* buf,uint64_t start_page,
-                       uint64_t nb_pages, struct cache_io *cio){
+_load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
+                       uint64_t key_prefix,uint8_t* buf,uint64_t start_page,uint64_t nb_pages,
+                       struct cache_io *cio){
 
     struct page_io *pio_1,*pio_n;
     struct page_io *tmp_1, *tmp_n;
@@ -99,7 +100,7 @@ _load_pages_multipages(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,u
             //I need load page 2 to n-1
             cio->nb_segments++;
             imgr->nb_pending_io++;
-            spdk_blob_io_read(slab->blob,imgr->channel,
+            spdk_blob_io_read(blob,imgr->channel,
                               buf+KVS_PAGE_SIZE,start_page+1,nb_pages-2,
                               _default_cache_io_complete_cb,cio);
         }
@@ -114,9 +115,9 @@ _load_pages_multipages(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,u
         HASH_ADD_64(imgr->read_hash.page_hash,key,pio_n);
 
         imgr->nb_pending_io++;
-        spdk_blob_io_read(slab->blob,imgr->channel,
-                              buf,start_page,nb_pages,
-                              _default_page_io_complete_cb,cio);
+        spdk_blob_io_read(blob,imgr->channel,
+                          buf,start_page,nb_pages,
+                          _default_page_io_complete_cb,cio);
     }
     else{
         if(tmp_1!=NULL){
@@ -132,14 +133,15 @@ _load_pages_multipages(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,u
             HASH_ADD_64(imgr->read_hash.page_hash,key,pio_1);   
         }
         imgr->nb_pending_io++;
-        spdk_blob_io_read(slab->blob,imgr->channel,
-                              buf,start_page,nb_pages-1,
-                              _default_page_io_complete_cb,cio);
+        spdk_blob_io_read(blob,imgr->channel,
+                          buf,start_page,nb_pages-1,
+                          _default_page_io_complete_cb,cio);
     }
 }
 
 static void 
-_load_pages_one_page(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,uint8_t* buf,uint64_t start_page, 
+_load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
+                     uint64_t key_prefix,uint8_t* buf,uint64_t start_page, 
                      struct cache_io *cio){
     struct page_io* pio = NULL;
     struct page_io* tmp = NULL;
@@ -159,16 +161,16 @@ _load_pages_one_page(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,uin
     else{
         TAILQ_INIT(&pio->pio_head);
         HASH_ADD_64(imgr->read_hash.page_hash,key,pio);
-        //Now issue a slab IO command for pio_1_pages;
+        //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        spdk_blob_io_read(slab->blob,imgr->channel,
-                              buf,start_page,1,
-                              _default_page_io_complete_cb,pio);
+        spdk_blob_io_read(blob,imgr->channel,
+                          buf,start_page,1,
+                          _default_page_io_complete_cb,pio);
     }
 }
 
 void 
-iomgr_load_pages_async(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,  
+iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_prefix,  
                        uint8_t* buf,uint64_t start_page, uint64_t nb_pages, 
                        void(*cb)(void*ctx, int kverrno), 
                        void* ctx){
@@ -195,11 +197,11 @@ iomgr_load_pages_async(struct iomgr* imgr,struct slab*slab,uint64_t key_prefix,
 
     if(nb_pages==1){
         cio->nb_segments = 1;
-        _load_pages_one_page(imgr,slab,key_prefix,buf,start_page,cio);
+        _load_pages_one_page(imgr,blob,key_prefix,buf,start_page,cio);
     }
     else{
         //Two-phase loading.
         cio->nb_segments = 2;
-        _load_pages_multipages(imgr,slab,key_prefix,buf,start_page,nb_pages,cio);
+        _load_pages_multipages(imgr,blob,key_prefix,buf,start_page,nb_pages,cio);
     }
 }

@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <assert.h>
 #include "item.h"
-#include "pagechunk.h"
 
 /**
  * @brief When the item is put, the writing flag shall be set.

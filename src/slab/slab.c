@@ -1,4 +1,5 @@
 #include "slab.h"
+#include "pagechunk.h"
 #include "kvutil.h"
 #include "kverrno.h"
 
@@ -71,12 +72,13 @@ slab_is_slot_occupied(struct slab* slab,uint64_t slot_idx){
     struct chunk_desc *desc;
     uint64_t slot_offset;
 
-    slab_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
+    pagechunk_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
     assert(node!=NULL);
 
     return bitmap_get_bit(desc->bitmap,slot_offset) ? true : false;
 }
 
+/*
 void 
 slab_create_async(struct iomgr* imgr,
                        uint32_t slab_size, 
@@ -85,6 +87,7 @@ slab_create_async(struct iomgr* imgr,
                        void* ctx){
     //to do
 }
+*/
 
 void 
 slab_resize_async(struct iomgr* imgr,
@@ -113,7 +116,7 @@ _slab_md_sync_complete(void*ctx, int kverrno){
         return;
     }  
 
-    struct reclaim_node *node = reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
+    struct reclaim_node *node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
     if(!node){
         rctx->user_cb(-1,rctx->ctx,-KV_EMEM);
         free(rctx);
@@ -213,7 +216,7 @@ void slab_free_slot_async(struct reclaim_mgr* rmgr,
 
     uint64_t slot_offset;
 
-    slab_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
+    pagechunk_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
     uint32_t node_id = slot_idx/slab->reclaim.nb_slots_per_chunk/slab->reclaim.nb_chunks_per_node;
     bitmap_clear_bit(desc->bitmap,slot_offset);
     
@@ -228,6 +231,6 @@ void slab_free_slot_async(struct reclaim_mgr* rmgr,
     slab->reclaim.nb_free_slots++;
 
     //Ok. Just post the deleting to background reclaiming thread.
-    worker_reclaim_post_deleting(rmgr,slab,slot_idx,cb,ctx);
+    slab_reclaim_post_delete(rmgr,slab,slot_idx,cb,ctx);
 }
 

@@ -6,56 +6,13 @@
 #include <assert.h>
 #include "queue.h"
 #include "bitmap.h"
-#include "iomgr.h"
+#include "io.h"
 #include "pool.h"
 #include "slab.h"
-#include "worker.h"
 #include "kvutil.h"
 
 #define CHUNK_SIZE 252u
 #define CHUNK_PIN  1u
-
-
-struct chunk_miss_callback{
-    // The requestor shaell fill the field.
-    struct pagechunk_mgr *requestor_pmgr;
-
-    // The page chunk manager shall fill the field and
-    // send the callback to the executor.
-    struct pagechunk_mgr *executor_pmgr;
-    struct chunk_desc* desc;
-
-    // The executor shall fill the field by performing LRU. Or the 
-    // page chunk manager worker mallocs new chunk memory directly.
-    struct chunk_mem *mem;
-    int kverrno;
-
-    // The executor shall call this calback function when it finishes the
-    // chunk memory allocating.
-    void(*finish_cb)(void*ctx);
-
-    // When chunk manager get a new chunk memory or error hits, the 
-    // callback will be called.
-    void(*cb_fn)(void*ctx,int kverrno);
-    void* ctx;
-    TAILQ_ENTRY(chunk_miss_callback) link;
-};
-
-struct chunk_load_store_ctx{
-    struct pagechunk_mgr *pmgr;
-    struct chunk_desc *desc;
-    uint64_t slot_idx;
-    uint32_t first_page;
-    uint32_t last_page;
-
-    //For shared page loading only
-    uint32_t cnt;
-    uint32_t nb_segs;
-    int kverrno;
-
-    void(*user_cb)(void*ctx, int kverrno);
-    void* user_ctx;
-};
 
 struct chunk_mem {
     uint32_t nb_bytes;
@@ -84,29 +41,46 @@ struct chunk_desc {
     struct bitmap bitmap[0];
 };
 
-/**
- * @brief The page chunk manager thead is a special thread to manager all chunk memory。
- * There is only one page chunk manager thead in the system. It is recommended to spawn
- * the thread on a special cpu core in case that the chunk request is not process in
- * time under heavily io.
- * 
- */
-TAILQ_HEAD(chunk_list_head,chunk_desc);
-
-struct pagechunk_mgr{
-    struct chunk_list_head global_chunks; 
-    uint64_t nb_used_chunks;
-    uint64_t hit_times;
-    uint64_t miss_times;
-    struct chunkmgr_worker_context *chunkmgr_worker;
-    struct object_cache_pool *kv_chunk_request_pool;
-    struct object_cache_pool *load_store_ctx_pool;
-};
+struct pagechunk_mgr;
 
 static_assert(sizeof(struct chunk_mem)==16, "incorrect size");
 static_assert(sizeof(struct chunk_desc)==80,"incorrect size");
 
-struct chunk_desc* pagechunk_get_desc(struct slab* slab, uint64_t slot_idx);
+/**
+ * @brief Get the hints of the given slot.
+ * 
+ * @param slab       The slab runtime object.
+ * @param slot_idx   The slot index.
+ * @param node_out   The returned reclaim node.
+ * @param desc_out   The returned page chunk pointer.
+ * @param slot_offset The returned slot offset in the page chunk.
+ */
+inline void pagechunk_get_hints(struct slab*slab, uint64_t slot_idx, 
+                struct reclaim_node** node_out,
+                struct chunk_desc **desc_out,
+                uint64_t *slot_offset ){
+    
+    struct slab_reclaim *r = &slab->reclaim;
+
+    uint32_t node_id      = slot_idx/r->nb_slots_per_chunk/r->nb_chunks_per_node;
+    uint32_t chunk_offset = slot_idx/r->nb_slots_per_chunk%r->nb_chunks_per_node;
+    uint64_t offset       = slot_idx%r->nb_slots_per_chunk;
+
+    *node_out    = rbtree_lookup(r->total_tree,node_id);
+    *desc_out    = (*node_out)->desc_array[chunk_offset];
+    *slot_offset = offset;
+}
+
+inline struct chunk_desc* pagechunk_get_desc(struct slab* slab, uint64_t slot_idx){
+    struct reclaim_node* node;
+    struct chunk_desc* desc;
+    uint64_t slot_offset;
+
+    pagechunk_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
+    assert(node!=NULL);
+
+    return desc;
+}
 
 /**
  * @brief Judge whether the given slot is cached in the page chunk cache
@@ -148,8 +122,6 @@ struct kv_item* pagechunk_get_item(struct pagechunk_mgr *pmgr,struct chunk_desc 
  * @param item      The item to be written into cache
  */
 void pagechunk_put_item(struct pagechunk_mgr *pmgr,struct chunk_desc *desc, uint64_t slot_idx,struct kv_item* item);
-
-struct chunk_mem* pagechunk_evict_one_chunk(struct pagechunk_mgr *pmgr);
 
 /**
  * @brief Load data from slab at slot_idx into the corresponding position of 
@@ -275,5 +247,12 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
 void pagechunk_release_one(struct pagechunk_mgr *pmgr,
                             struct chunk_mem* mem);
 
+/**
+ * @brief Evict one page chunk belong to the pmgr.
+ * 
+ * @param pmgr                 The page chunk manager.
+ * @return struct chunk_mem*   The evicted chunk memory.
+ */
+struct chunk_mem* pagechunk_evict_one_chunk(struct pagechunk_mgr *pmgr);
 
 #endif

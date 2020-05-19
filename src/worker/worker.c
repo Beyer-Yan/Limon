@@ -1,10 +1,10 @@
-
 #include "worker_internal.h"
 #include "kverrno.h"
-#include "reclaim.h"
 #include "slab.h"
 #include "rbtree_uint.h"
 #include "kvutil.h"
+
+#include "spdk/log.h"
 
 #define DEFAULT_RECLAIM_POLLING_PERIOD_MS 10000
 
@@ -130,7 +130,7 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
     req->node = rbtree_last(slab->reclaim.total_tree);
 
     req->nb_processed = 0;
-    req->start_slot = reclaim_get_start_slot(&slab->reclaim,req->node);
+    req->start_slot = slab_reclaim_get_start_slot(&slab->reclaim,req->node);
     req->cur_slot = req->start_slot;
     req->last_slot = slab->reclaim.nb_total_slots-1;
 
@@ -152,7 +152,7 @@ _worker_slab_evaluation_poll(void* ctx){
         for(;j < shard->nb_slabs;j++){
             if( !(shard->slab_set[j].flag | SLAB_FLAG_RECLAIMING) ){
                 struct slab* slab = &(shard->slab_set[j]);
-                if( reclaim_evaluate_slab(slab) ){
+                if( slab_reclaim_evaluate_slab(&slab->reclaim) ){
                     struct slab_migrate_request *slab_migrate_req = pool_get(wctx->rmgr->migrate_slab_pool);
                     assert(slab_migrate_req!=NULL);
 
@@ -200,7 +200,7 @@ submit_request_buffer(struct worker_context *wctx, uint32_t buffer_idx) {
 
 static inline void
 _worker_enqueue_common(struct kv_request* req, uint32_t shard,const struct kv_item *item, 
-                       kv_cb cb_fn,void* ctx,
+                       worker_cb cb_fn,void* ctx,
                        enum op_code op){
     req->cb_fn = cb_fn;
     req->ctx = ctx;
@@ -210,7 +210,7 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,const struct kv_it
 }
 
 void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, 
-                        kv_cb cb_fn, void* ctx){
+                        worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,GET);
@@ -218,7 +218,7 @@ void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,const struct 
 }
 
 void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,const struct kv_item *item,
-                        kv_cb cb_fn, void* ctx){
+                        worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,PUT);
@@ -226,7 +226,7 @@ void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,const struct 
 }
 
 void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, 
-                           kv_cb cb_fn, void* ctx){
+                           worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,DELETE);
@@ -234,7 +234,7 @@ void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,const stru
 }
 
 void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,const struct kv_item *item,
-                         kv_cb cb_fn, void* ctx){
+                         worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,FIRST);
@@ -242,7 +242,7 @@ void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,const struc
 }
 
 void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,const struct kv_item *item,
-                         kv_cb cb_fn, void* ctx){
+                         worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,SEEK);
@@ -250,7 +250,7 @@ void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,const struct
 }
 
 void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, 
-                         kv_cb cb_fn, void* ctx){
+                         worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,NEXT);

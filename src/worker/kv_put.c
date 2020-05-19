@@ -363,7 +363,7 @@ _process_put_single_page_load_data_cb(void* ctx, int kverrno){
         return;
     } 
 
-    _process_put_update_single_page_cached(pctx);
+    _process_put_update_single_page_cached(req);
 }
 
 static void 
@@ -395,7 +395,7 @@ void worker_process_put(struct kv_request_internal *req){
         //It should wait.
         //For the entry in deleting state, it has to be re-lookuped, since its
         //entry may be deleted.
-        entry->writing ? req->pctx.no_lookup = true : NULL;
+        entry->writing ? req->pctx.no_lookup = true : 0;
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
         return;
     }

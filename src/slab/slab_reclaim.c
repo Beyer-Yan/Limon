@@ -1,8 +1,8 @@
-#include "reclaim.h"
 #include "slab.h"
+#include "pagechunk.h"
 #include "kvutil.h"
 
-struct reclaim_node* reclaim_alloc_one_node(struct slab* slab,uint32_t node_id){
+struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node_id){
    
     uint32_t nb_chunks = slab->reclaim.nb_chunks_per_node;
     uint32_t bitmap_size = sizeof(struct bitmap) + KV_ALIGN(slab->reclaim.nb_slots_per_chunk/8 + 1, 8);
@@ -39,9 +39,11 @@ struct reclaim_node* reclaim_alloc_one_node(struct slab* slab,uint32_t node_id){
         
         node->desc_array[i]  = desc;
     }
+    return node;
 }
 
-bool reclaim_evaluate_slab(struct slab* slab){
+bool slab_reclaim_evaluate_slab(struct slab* slab){
     //todo 
+    assert(slab!=NULL);
     return false;
 }
