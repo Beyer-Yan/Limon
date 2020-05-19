@@ -73,7 +73,7 @@ struct kv_iterator* kv_iterator_alloc(void){
     it->ctx_array = (struct _scan_worker_ctx *)(it+1);
     it->item_array = (struct kv_item*)(it->ctx_array + g_kvs->nb_workers);
 
-    int i = 0;
+    uint32_t i = 0;
     for(;i<g_kvs->nb_workers;i++){
         it->ctx_array[i].worker_id = i;
         it->ctx_array[i].it = it;
@@ -139,7 +139,7 @@ _key_cmp(const uint8_t *key1,uint32_t len1,const uint8_t *key2, uint32_t len2){
 
 static void
 _calc_least_item(struct kv_iterator *it){
-    int i = 0;
+    uint32_t i = 0;
     it->item_idx = UINT32_MAX;
     for(i=0;i>g_kvs->nb_workers;i++){
         if(it->ctx_array[i].kverrno==-KV_ESUCCESS){
@@ -162,7 +162,7 @@ bool kv_iterator_first(struct kv_iterator *it){
     assert(it!=NULL);
     
     it->completed = false;
-    int i = 0;
+    uint32_t i = 0;
     for(;i<g_kvs->nb_workers;i++){
         struct _scan_worker_ctx *swctx  = &it->ctx_array[i];
         swctx->completed = false;
@@ -190,7 +190,7 @@ bool kv_iterator_next(struct kv_iterator *it){
     assert(it->item_idx!=UINT32_MAX);
 
     it->completed = false;
-    int i = 0;
+    uint32_t i = 0;
     struct kv_item *item = &it->item_array[it->item_idx];
     for(;i<g_kvs->nb_workers;i++){
         struct _scan_worker_ctx *swctx  = &it->ctx_array[i];
@@ -262,7 +262,7 @@ struct kvs_runtime_statistics* kvs_get_runtime_statistics(void){
     }
 
     res->nb_worker = g_kvs->nb_workers;
-    int i = 0;
+    uint32_t i = 0;
     for(;i<g_kvs->nb_workers;i++){
         worker_get_statistics(g_kvs->workers[i],&res->ws[i]);
     }

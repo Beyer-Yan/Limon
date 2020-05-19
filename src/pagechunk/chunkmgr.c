@@ -34,7 +34,7 @@ _chunk_mem_init(uint64_t nb_chunks){
     data += pool_size;
     pool_header_init(_g_mem_pool,nb_chunks,chunk_mem_size,header_size,data);
     
-    int i = 0;
+    uint64_t i = 0;
     for(;i<nb_chunks;i++){
         struct chunk_mem* mem = (struct chunk_mem*)(data + chunk_mem_size*i);
         mem->nb_bytes = chunk_mem_size;
@@ -65,7 +65,7 @@ static struct worker_context* _chunkmgr_evaluate_worklaod(void){
 
 static struct worker_context*
 _get_worker_context_from_pmgr(struct pagechunk_mgr* pmgr){
-    int i =0;
+    uint32_t i =0;
 
     for(;i<g_chunkmgr_worker.nb_business_workers;i++){
         if(g_chunkmgr_worker.wctx_array[i]->pmgr == pmgr){

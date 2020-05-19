@@ -1019,7 +1019,7 @@ static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned c
             for (int i=0; i < n->num_children; i++) {
                 size_t index = key_to_index[i].index;
                 if(index != 512 && key_to_index[i].key >= key[depth]) {
-                   leaf = recursive_iter_ordered(p.p1->children[index], depth+1, key, len);
+                   leaf = recursive_iter_next(p.p1->children[index], depth+1, key, len);
                    if (leaf) return leaf;
                 }
             }
@@ -1041,7 +1041,7 @@ static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned c
             for (int i=0; i < n->num_children; i++) {
                 size_t index = key_to_index[i].index;
                 if(index != 512 && key_to_index[i].key >= key[depth]) {
-                   leaf = recursive_iter_ordered(p.p2->children[index], depth+1, key, len);
+                   leaf = recursive_iter_next(p.p2->children[index], depth+1, key, len);
                    if (leaf) return leaf;
                 }
             }
@@ -1052,7 +1052,7 @@ static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned c
                 idx = ((art_node48*)n)->keys[i];
                 if (!idx) continue;
 
-                leaf = recursive_iter_ordered(((art_node48*)n)->children[idx-1], depth+1, key, len);
+                leaf = recursive_iter_next(((art_node48*)n)->children[idx-1], depth+1, key, len);
                 if (leaf) return leaf;
             }
             break;
@@ -1060,7 +1060,7 @@ static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned c
         case NODE256:
             for (int i=key[depth]; i < 256; i++) {
                 if (!((art_node256*)n)->children[i]) continue;
-                leaf = recursive_iter_ordered(((art_node256*)n)->children[i], depth+1, key, len);
+                leaf = recursive_iter_next(((art_node256*)n)->children[i], depth+1, key, len);
                 if (leaf) return leaf;
             }
             break;
