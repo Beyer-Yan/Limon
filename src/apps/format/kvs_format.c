@@ -453,6 +453,38 @@ bs_init_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
 	_create_super_blob(kctx);
 }
 
+static void
+_fill_super_parameters(struct kvs_format_ctx *kctx){
+
+    uint32_t nb_slabs;
+    uint32_t *slab_size_array;
+    uint32_t chunk_pages;
+    struct kvs_create_opts *kc_opts = &_g_default_opts;
+
+    slab_get_slab_conf(&slab_size_array,&nb_slabs, &chunk_pages);
+
+    uint32_t super_size = sizeof(struct super_layout) + 
+                    kc_opts->nb_shards * nb_slabs * sizeof(struct slab_layout);
+
+    struct super_layout *sl = spdk_malloc(KV_ALIGN(super_size,0x1000u),0x1000,NULL,
+                            SPDK_ENV_LCORE_ID_ANY,SPDK_MALLOC_DMA);
+    assert(sl!=NULL);
+
+    sl->kvs_pin = DEFAULT_KVS_PIN;
+    sl->nb_shards = kc_opts->nb_shards;
+    sl->nb_slabs_per_shard =  nb_slabs;
+    sl->nb_chunks_per_reclaim_node = kc_opts->nb_chunks_per_reclaim_node;
+    sl->nb_pages_per_chunk = chunk_pages;
+    sl->max_key_length = kc_opts->max_key_length;  
+    
+    kctx->sl = sl;
+    kctx->super_size = super_size;
+    kctx->devname = kc_opts->devname;
+
+    kctx->slab_size_array = slab_size_array;
+    kctx->nb_slabs = nb_slabs;
+}
+
 static void 
 _kvs_create(void*ctx){
     struct kvs_format_ctx *kctx = ctx;
@@ -460,6 +492,8 @@ _kvs_create(void*ctx){
 	struct spdk_bdev *bdev = NULL;
 	struct spdk_bs_dev *bs_dev = NULL;
     struct spdk_bs_opts bs_opts;
+
+    _fill_super_parameters(kctx);
 
 	bdev = spdk_bdev_get_by_name(kctx->devname);
 	if (bdev == NULL) {
@@ -488,38 +522,6 @@ _kvs_create(void*ctx){
     bs_opts.cluster_sz = kctx->sl->nb_pages_per_chunk;
 
 	spdk_bs_init(bs_dev, &bs_opts, bs_init_complete, kctx);
-}
-
-static void
-_fill_super_parameters(struct kvs_format_ctx *kctx){
-
-    uint32_t nb_slabs;
-    uint32_t *slab_size_array;
-    uint32_t chunk_pages;
-    struct kvs_create_opts *kc_opts = &_g_default_opts;
-
-    slab_get_slab_conf(&slab_size_array,&nb_slabs, &chunk_pages);
-
-    uint32_t super_size = sizeof(struct super_layout) + 
-                    kc_opts->nb_shards * nb_slabs * sizeof(struct slab_layout);
-    
-    struct super_layout *sl = spdk_malloc(KV_ALIGN(super_size,0x1000u),0x1000,NULL,
-                            SPDK_ENV_LCORE_ID_ANY,SPDK_MALLOC_DMA);
-    assert(sl!=NULL);
-
-    sl->kvs_pin = DEFAULT_KVS_PIN;
-    sl->nb_shards = kc_opts->nb_shards;
-    sl->nb_slabs_per_shard =  nb_slabs;
-    sl->nb_chunks_per_reclaim_node = kc_opts->nb_chunks_per_reclaim_node;
-    sl->nb_pages_per_chunk = chunk_pages;
-    sl->max_key_length = kc_opts->max_key_length;  
-    
-    kctx->sl = sl;
-    kctx->super_size = super_size;
-    kctx->devname = kc_opts->devname;
-
-    kctx->slab_size_array = slab_size_array;
-    kctx->nb_slabs = nb_slabs;
 }
 
 static int
@@ -606,8 +608,6 @@ main(int argc, char **argv){
     if(!_g_default_opts.dump_only){
         kctx = calloc(1, sizeof(struct kvs_format_ctx));
         assert(kctx!=NULL);
-
-        _fill_super_parameters(kctx);
 
         rc = spdk_app_start(&opts, _kvs_create, kctx);
         if (rc) {
