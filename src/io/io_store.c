@@ -69,7 +69,7 @@ _store_pages_complete_cb(void*ctx, int kverrno){
     }
 
     _process_cache_io(pio->cache_io,kverrno);
-    HASH_FIND_64(pio->imgr->write_hash.page_hash,pio->key,tmp);
+    HASH_FIND_64(pio->imgr->write_hash.page_hash,&pio->key,tmp);
     if(!tmp){
         if(tmp->len==pio->len){
             //The page io is the longest io covering all other page IOs.
