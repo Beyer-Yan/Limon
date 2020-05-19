@@ -174,7 +174,7 @@ _kvs_start_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
     struct kvs_start_ctx *kctx = iter->kctx;
 
     if (bserrno) {
-        free(iter;)
+        free(iter);
         _unload_bs(kctx, "Error in opening blob", bserrno);
         return;
     }
