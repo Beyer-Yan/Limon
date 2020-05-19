@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <stdio.h>
+#include <stdbool.h>
 #include <assert.h>
 #include "art.h"
 
@@ -642,9 +641,9 @@ RECURSE_SEARCH:;
  */
 struct index_entry* art_insert(art_tree *t, const unsigned char *key, int key_len, struct index_entry *value) {
     int old_val = 0;
-    struct index_entry* value= recursive_insert(t->root, &t->root, key, key_len, value, 0, &old_val);
+    struct index_entry* rt_value= recursive_insert(t->root, &t->root, key, key_len, value, 0, &old_val);
     if (!old_val) t->size++;
-    return value;
+    return rt_value;
 }
 
 static void remove_child256(art_node256 *n, art_node **ref, unsigned char c) {

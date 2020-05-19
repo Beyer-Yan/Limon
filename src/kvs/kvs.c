@@ -1,12 +1,12 @@
 #include "kvs_internal.h"
 
 static inline uint32_t
-_hash_item_to_shard(const struct kv_item *item){
+_hash_item_to_shard(struct kv_item *item){
     return kv_hash(item->data, item->meta.ksize,g_kvs->nb_shards);
 }
 
 static inline void
-_assert_parameters(const struct kv_item *item, kv_cb cb_fn){
+_assert_parameters(struct kv_item *item, kv_cb cb_fn){
     assert(g_kvs!=NULL);
     assert(item!=NULL);
     assert(cb_fn!=NULL);
@@ -16,7 +16,7 @@ _assert_parameters(const struct kv_item *item, kv_cb cb_fn){
 
 // The key field of item  shall be filed
 void 
-kv_get_async(const struct kv_item *item, kv_cb cb_fn, void* ctx){
+kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     _assert_parameters(item,cb_fn);
 
     uint32_t shard_id = _hash_item_to_shard(item);
@@ -26,7 +26,7 @@ kv_get_async(const struct kv_item *item, kv_cb cb_fn, void* ctx){
 
 // The whole item shall be filled
 void 
-kv_put_async(const struct kv_item *item, kv_cb cb_fn, void* ctx){
+kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     _assert_parameters(item,cb_fn);
 
     uint32_t shard_id = _hash_item_to_shard(item);
@@ -36,7 +36,7 @@ kv_put_async(const struct kv_item *item, kv_cb cb_fn, void* ctx){
 
 // The key field of item shall be filed
 void 
-kv_delete_async(const struct kv_item *item, kv_cb cb_fn, void* ctx){
+kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     _assert_parameters(item,cb_fn);
 
     uint32_t shard_id = _hash_item_to_shard(item);
@@ -220,7 +220,7 @@ struct kv_item* kv_iterator_item(struct kv_iterator *it){
     return &it->item_array[it->item_idx];
 }
 
-struct slab_statistics* kvs_get_slab_statistcs(){
+struct slab_statistics* kvs_get_slab_statistcs(void){
     struct slab_statistics* res;
     uint32_t nb_total_slabs = g_kvs->nb_shards*g_kvs->shards[0].nb_slabs;
     uint64_t size  = sizeof(*res) + sizeof(*res->slabs)*nb_total_slabs;

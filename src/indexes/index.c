@@ -22,17 +22,17 @@ void mem_index_destroy(struct mem_index* mem_index){
      art_tree_destroy(t);
 }
 
-void* mem_index_add(struct mem_index *mem_index, const struct kv_item *item,const struct index_entry* entry){
+void* mem_index_add(struct mem_index *mem_index, struct kv_item *item,const struct index_entry* entry){
     art_tree *t = (art_tree*)mem_index;
     return art_insert(t,item->data,item->meta.ksize,entry);
 }
 
-void mem_index_delete(struct mem_index *mem_index,const struct kv_item *item){
+void mem_index_delete(struct mem_index *mem_index,struct kv_item *item){
     art_tree *t = (art_tree*)mem_index;
     art_delete(t,item->data,item->meta.ksize);
 }
 
-struct index_entry* mem_index_lookup(struct mem_index *mem_index, const struct kv_item *item){
+struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item *item){
     art_tree *t = (art_tree*)mem_index;
     return art_search(t,item->data,item->meta.ksize);
 }
@@ -53,7 +53,7 @@ uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out){
     }
 }
 
-uint8_t* mem_index_next(struct mem_index *mem_index,const struct kv_item *base_item,uint32_t *key_len_out){
+uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
     unsigned char *key;
     uint32_t len;

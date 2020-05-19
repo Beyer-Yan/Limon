@@ -44,7 +44,7 @@ struct process_ctx{
 struct kv_request{
     uint32_t op_code;
     uint32_t shard;
-    const struct kv_item* item;
+    struct kv_item* item;
     worker_cb cb_fn;
     void* ctx;
 } __attribute__(( aligned(CACHE_LINE_LENGTH) ));
@@ -54,7 +54,7 @@ struct kv_request_internal{
 
     uint32_t op_code;
     uint32_t shard;
-    const struct kv_item* item;
+    struct kv_item* item;
     worker_cb cb_fn;
     void* ctx;
 

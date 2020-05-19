@@ -33,13 +33,13 @@ void worker_start(struct worker_context* wctx);
 
 typedef void (*worker_cb)(void* ctx, struct kv_item* item, int kverrno);
 
-void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, worker_cb cb_fn, void* ctx);
-void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, worker_cb cb_fn, void* ctx);
-void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
 
-void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, worker_cb cb_fn, void* ctx);
-void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, worker_cb cb_fn, void* ctx);
-void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
 
 struct worker_statistics{
     uint64_t chunk_hit_times;

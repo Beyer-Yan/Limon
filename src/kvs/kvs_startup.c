@@ -305,7 +305,8 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
 }
 
 static void
-_kvs_start(struct kvs_start_opts *opts){
+_kvs_start(void* ctx){
+    struct kvs_start_opts *opts = ctx;
     struct spdk_bdev *bdev = NULL;
 	struct spdk_bs_dev *bs_dev = NULL;
 
@@ -319,7 +320,7 @@ _kvs_start(struct kvs_start_opts *opts){
     uint64_t block_size = spdk_bdev_get_block_size(bdev);
     if(block_size!=KVS_PAGE_SIZE){
         SPDK_ERRLOG("Device is not supported for kvs!!\n");
-        SPDK_ERRLOG("Supported page size of kvs: %d. Yours:%d\n",KVS_PAGE_SIZE,block_size);
+        SPDK_ERRLOG("Supported page size of kvs: %d. Yours:%" PRIu64 "\n",KVS_PAGE_SIZE,block_size);
         spdk_app_stop(-1);
 		return;
     }

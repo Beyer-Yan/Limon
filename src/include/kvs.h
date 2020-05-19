@@ -29,13 +29,13 @@ bool kvs_is_started(void);
 typedef void (*kv_cb)(void* ctx, struct kv_item* item, int kverrno);
 
 // The key filed of item  shall be filed
-void kv_get_async(const struct kv_item *item, kv_cb cb_fn, void* ctx);
+void kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
 // The whole item shall be filled
-void kv_put_async(const struct kv_item *item, kv_cb cb_fn, void* ctx);
+void kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
 // The key field of item shall be filed
-void kv_delete_async(const struct kv_item *item, kv_cb cb_fn, void* ctx);
+void kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
 struct kv_iterator;
 

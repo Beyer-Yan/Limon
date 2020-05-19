@@ -152,7 +152,7 @@ _worker_slab_evaluation_poll(void* ctx){
         for(;j < shard->nb_slabs;j++){
             if( !(shard->slab_set[j].flag | SLAB_FLAG_RECLAIMING) ){
                 struct slab* slab = &(shard->slab_set[j]);
-                if( slab_reclaim_evaluate_slab(&slab->reclaim) ){
+                if( slab_reclaim_evaluate_slab(slab) ){
                     struct slab_migrate_request *slab_migrate_req = pool_get(wctx->rmgr->migrate_slab_pool);
                     assert(slab_migrate_req!=NULL);
 
@@ -199,7 +199,7 @@ submit_request_buffer(struct worker_context *wctx, uint32_t buffer_idx) {
 }
 
 static inline void
-_worker_enqueue_common(struct kv_request* req, uint32_t shard,const struct kv_item *item, 
+_worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *item, 
                        worker_cb cb_fn,void* ctx,
                        enum op_code op){
     req->cb_fn = cb_fn;
@@ -209,7 +209,7 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,const struct kv_it
     req->shard = shard;
 }
 
-void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, 
+void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                         worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
@@ -217,7 +217,7 @@ void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,const struct 
     submit_request_buffer(wctx,buffer_slot);
 }
 
-void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,const struct kv_item *item,
+void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                         worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
@@ -225,7 +225,7 @@ void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,const struct 
     submit_request_buffer(wctx,buffer_slot);
 }
 
-void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, 
+void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                            worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
@@ -233,7 +233,7 @@ void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,const stru
     submit_request_buffer(wctx,buffer_slot);
 }
 
-void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,const struct kv_item *item,
+void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                          worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
@@ -241,7 +241,7 @@ void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,const struc
     submit_request_buffer(wctx,buffer_slot);
 }
 
-void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,const struct kv_item *item,
+void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                          worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
@@ -249,7 +249,7 @@ void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,const struct
     submit_request_buffer(wctx,buffer_slot);
 }
 
-void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,const struct kv_item *item, 
+void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                          worker_cb cb_fn, void* ctx){
     unsigned int buffer_slot  = get_request_buffer(wctx);
     struct kv_request *req = &wctx->request_queue[buffer_slot];
