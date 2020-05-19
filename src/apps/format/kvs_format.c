@@ -114,6 +114,10 @@ _kvs_blob_close_next(void* ctx,int bserrno){
     struct kvs_format_ctx *kctx = iter->kctx;
 
     if (bserrno) {
+        SPDK_ERRLOG("Error in cloing slab blob, slab:%u, size:%u, id:%lu, addr:%0x\n",
+                    iter->slab_idx,iter->sl->slab[iter->slab_idx].slab_size,
+                    iter->sl->slab[iter->slab_idx].blob_id,
+                    iter->sl->slab[iter->slab_idx].resv);
         free(iter);
         _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
