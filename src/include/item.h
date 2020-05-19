@@ -25,12 +25,12 @@ static_assert(sizeof(struct item_meta)==24,"incorrect size");
 static_assert(sizeof(struct kv_item)==sizeof(struct item_meta),"incorrect size");
 
 // meta size + key size + value size
-inline uint32_t item_get_size(struct kv_item *item){
+static inline uint32_t item_get_size(struct kv_item *item){
     return item->meta.ksize + item->meta.vsize + sizeof(struct item_meta);
 }
 
 //8 bytes prefix-rdt + 8 bytes postfix-rdt
-inline uint32_t item_packed_size(struct kv_item *item){
+static inline uint32_t item_packed_size(struct kv_item *item){
     return item_get_size(item) + 16;
 }
 

@@ -99,7 +99,7 @@ static_assert(sizeof(struct reclaim_node)==8,"incorrect size");
  * @param slot_idx   The slot index.
  * @return uint32_t  The offset of the slot_idx.
  */
-inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
+static inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
     uint32_t slab_size = slab->slab_size;
     if(slab_size<MULTI_PAGE_SLAB_SIZE){
         uint32_t slots_per_page = KVS_PAGE_SIZE/slab_size;
@@ -119,7 +119,7 @@ inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
  * @param slab_size      Slot size
  * @return uint32_t      Return number of slots.
  */
-inline uint32_t slab_get_chunk_slots(uint32_t chunk_pages, uint32_t slab_size){
+static inline uint32_t slab_get_chunk_slots(uint32_t chunk_pages, uint32_t slab_size){
     uint32_t nb_slots;
     if(slab_size<MULTI_PAGE_SLAB_SIZE){
         //Slab with such size will be store in one page.
@@ -240,7 +240,7 @@ void slab_free_slot_async(struct reclaim_mgr* rmgr,
  * @param n          The reclaim node.
  * @return uint32_t  The start chunk id.
  */
-inline uint32_t slab_reclaim_get_start_chunk_id(struct slab_reclaim* r, struct reclaim_node *n){
+static inline uint32_t slab_reclaim_get_start_chunk_id(struct slab_reclaim* r, struct reclaim_node *n){
     return r->nb_chunks_per_node * n->id;
 }
 
@@ -251,7 +251,7 @@ inline uint32_t slab_reclaim_get_start_chunk_id(struct slab_reclaim* r, struct r
  * @param node       The reclaim node.
  * @return uint64_t  The start slot index.
  */
-inline uint64_t slab_reclaim_get_start_slot(struct slab_reclaim* r, struct reclaim_node* node){
+static inline uint64_t slab_reclaim_get_start_slot(struct slab_reclaim* r, struct reclaim_node* node){
     uint64_t slot_idx;
     slot_idx = r->nb_chunks_per_node*r->nb_slots_per_chunk*node->id;
     return slot_idx;
@@ -263,7 +263,7 @@ inline uint64_t slab_reclaim_get_start_slot(struct slab_reclaim* r, struct recla
  * @param r     The slab_reclaim.
  * @param node  The slab reclaim node to be freed.
  */
-inline void slab_reclaim_free_node(struct slab_reclaim* r, struct reclaim_node* node){
+static inline void slab_reclaim_free_node(struct slab_reclaim* r, struct reclaim_node* node){
     assert(node!=NULL);
     rbtree_delete(r->total_tree,node->id,NULL);
     free(node);
@@ -281,11 +281,11 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
 /**
  * @brief Evaluate whether the given slab needs performing reclaim.
  * 
- * @param r 
- * @return true 
- * @return false 
+ * @param         The slab      
+ * @return true   The slab needs performing reclaim.
+ * @return false  The slab does not need performing reclaim.
  */
-bool slab_reclaim_evaluate_slab(struct slab* r);
+bool slab_reclaim_evaluate_slab(struct slab* slab);
 
 extern void slab_reclaim_post_delete(struct reclaim_mgr* rmgr,
                           struct slab* slab, 

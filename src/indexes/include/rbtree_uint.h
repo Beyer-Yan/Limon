@@ -55,19 +55,19 @@ void* rbtree_lookup_impl(rbtree t, uint32_t key, compare_func compare);
 void rbtree_insert_impl(rbtree t, uint32_t key, void* value, compare_func compare);
 void rbtree_delete_impl(rbtree t, uint32_t key, compare_func compare);
 
-inline void* rbtree_lookup(rbtree t, uint32_t key){
+static inline void* rbtree_lookup(rbtree t, uint32_t key){
     return rbtree_lookup_impl(t, key, uint_cmp);
 }
 
-inline void rbtree_insert(rbtree t, uint32_t key, void* value, compare_func compare){
+static inline void rbtree_insert(rbtree t, uint32_t key, void* value, compare_func compare){
     rbtree_insert_impl(t, key, value, uint_cmp);
 }
 
-inline void rbtree_delete(rbtree t, uint32_t key, compare_func compare){
+static inline void rbtree_delete(rbtree t, uint32_t key, compare_func compare){
     rbtree_delete_impl(t, key, uint_cmp);
 }
 
-inline void* rbtree_first(rbtree t){
+static inline void* rbtree_first(rbtree t){
     rbtree_node	node;
 	if (!t){
 		return NULL; 
@@ -82,7 +82,7 @@ inline void* rbtree_first(rbtree t){
 	return node->value;
 }
 
-inline void* rbtree_last(rbtree t){
+static inline void* rbtree_last(rbtree t){
     rbtree_node	node;
 	if (!t){
 		return NULL; 

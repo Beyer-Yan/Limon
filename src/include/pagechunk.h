@@ -55,7 +55,7 @@ static_assert(sizeof(struct chunk_desc)==80,"incorrect size");
  * @param desc_out   The returned page chunk pointer.
  * @param slot_offset The returned slot offset in the page chunk.
  */
-inline void pagechunk_get_hints(struct slab*slab, uint64_t slot_idx, 
+static inline void pagechunk_get_hints(struct slab*slab, uint64_t slot_idx, 
                 struct reclaim_node** node_out,
                 struct chunk_desc **desc_out,
                 uint64_t *slot_offset ){
@@ -71,7 +71,7 @@ inline void pagechunk_get_hints(struct slab*slab, uint64_t slot_idx,
     *slot_offset = offset;
 }
 
-inline struct chunk_desc* pagechunk_get_desc(struct slab* slab, uint64_t slot_idx){
+static inline struct chunk_desc* pagechunk_get_desc(struct slab* slab, uint64_t slot_idx){
     struct reclaim_node* node;
     struct chunk_desc* desc;
     uint64_t slot_offset;
