@@ -42,14 +42,11 @@ struct _blob_iter{
 static void
 _unload_complete(void *ctx, int bserrno)
 {
-	struct kvs_start_ctx *kctx = ctx;
-
 	if (bserrno) {
 		SPDK_ERRLOG("Error %d unloading the bobstore\n", bserrno);
-		kctx->rc = bserrno;
 	}
 
-	spdk_app_stop(kctx->rc);
+	spdk_app_stop(bserrno);
 }
 
 static void
@@ -71,6 +68,10 @@ _unload_bs(struct kvs_start_ctx *kctx, char *msg, int bserrno)
 	} else {
 		spdk_app_stop(bserrno);
 	}
+    if(kctx->sl){
+        spdk_free(kctx->sl);
+        free(kctx);
+    }
 }
 
 static void
@@ -245,7 +246,7 @@ _blob_read_super_page_complete(void* ctx, int bserrno){
 
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
 
-    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_read_all_super_pages_complete,NULL);
+    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_read_all_super_pages_complete,kctx);
 }
 
 static void
@@ -266,7 +267,7 @@ _kvs_start_super_open_complete(void*ctx, struct spdk_blob *blob, int bserrno){
 					SPDK_ENV_LCORE_ID_ANY, SPDK_MALLOC_DMA);
     assert(kctx->sl!=NULL);
 
-    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,1,_blob_read_super_page_complete,NULL);
+    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,1,_blob_read_super_page_complete,kctx);
 }
 
 static void
