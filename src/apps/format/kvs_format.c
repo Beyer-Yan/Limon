@@ -273,7 +273,7 @@ _blob_dump_read_super_page_complete(void* ctx, int bserrno){
 
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
 
-    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_dump_super_complete,NULL);
+    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_dump_super_complete,kctx);
 }
 
 static void
@@ -289,7 +289,7 @@ _kvs_dump_super_complete(void*ctx, struct spdk_blob *blob, int bserrno){
 					SPDK_ENV_LCORE_ID_ANY, SPDK_MALLOC_DMA);
     assert(kctx->sl!=NULL);
 
-    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,1,_blob_dump_read_super_page_complete,NULL);
+    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,1,_blob_dump_read_super_page_complete,kctx);
 }
 
 static void
