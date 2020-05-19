@@ -2,7 +2,7 @@
 #define KVS_IO_H
 
 #include <stdint.h>
-#include "queue.h"
+#include "spdk/queue.h"
 #include "uthash.h"
 #include "pool.h"
 

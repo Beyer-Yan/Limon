@@ -2,7 +2,7 @@
 #include "slab.h"
 #include "kverrno.h"
 #include "spdk/env.h"
-#include "queue.h"
+#include "spdk/queue.h"
 
 struct list_slab{
     struct slab* slab;

@@ -7,7 +7,7 @@
 #include "rbtree_uint.h"
 #include "item.h"
 #include "pool.h"
-#include "queue.h"
+#include "spdk/queue.h"
 
 #include "spdk/log.h"
 

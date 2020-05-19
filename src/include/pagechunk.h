@@ -4,12 +4,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
-#include "queue.h"
 #include "bitmap.h"
 #include "io.h"
 #include "pool.h"
 #include "slab.h"
 #include "kvutil.h"
+
+#include "spdk/queue.h"
 
 #define CHUNK_SIZE 252u
 #define CHUNK_PIN  1u
