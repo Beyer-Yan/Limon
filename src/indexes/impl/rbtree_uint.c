@@ -186,7 +186,7 @@ node lookup_node(rbtree t, uint32_t key, compare_func compare) {
    }
    return n;
 }
-
+/*
 node lookup_closest_node(rbtree t, uint32_t key, compare_func compare) {
    node n = t->root;
    node closest = NULL;
@@ -205,6 +205,7 @@ node lookup_closest_node(rbtree t, uint32_t key, compare_func compare) {
    }
    return closest;
 }
+*/
 
 void* rbtree_lookup_impl(rbtree t, uint32_t key, compare_func compare) {
    node n = lookup_node(t, key, compare);

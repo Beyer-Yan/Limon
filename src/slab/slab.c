@@ -164,7 +164,7 @@ void slab_request_slot_async(struct iomgr* imgr,
         struct reclaim_node* node = rbtree_first(slab->reclaim.free_node_tree);
         struct chunk_desc* desc;
 
-        int i = 0;
+        uint32_t i = 0;
         for(;i<slab->reclaim.nb_chunks_per_node;i++){
             if(node->desc_array[i]->nb_free_slots){
                 desc = node->desc_array[i];
