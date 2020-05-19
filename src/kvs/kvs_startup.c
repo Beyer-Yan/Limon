@@ -310,7 +310,7 @@ _kvs_start(void* ctx){
 
 	bdev = spdk_bdev_get_by_name(opts->devname);
 	if (bdev == NULL) {
-		printf("Could not find a bdev\n");
+		SPDK_ERRLOG("Could not find a bdev with name: %s\n",opts->devname);
 		spdk_app_stop(-1);
 		return;
 	}
