@@ -83,7 +83,7 @@ _node_read_complete(void* ctx, int bserrno){
                                      entry_worker->slot_idx%entry_worker->chunk_desc->nb_slots);
                     bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
 
-                    entry_slab->chunk_desc = tsc0;
+                    entry_slab->chunk_desc = (struct chunk_desc *)tsc0;
                     entry_worker->slot_idx = slot_base + idx;
                     entry_worker->chunk_desc = desc;
                 }
@@ -96,7 +96,7 @@ _node_read_complete(void* ctx, int bserrno){
                 entry.slot_idx = slot_base + idx;
                 mem_index_add(wctx->mem_index,item,&entry);
 
-                entry.chunk_desc = tsc0;
+                entry.chunk_desc = (struct chunk_desc *)tsc0;
                 mem_index_add(rctx->index_for_one_slab,item,&entry);
                 
                 bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);

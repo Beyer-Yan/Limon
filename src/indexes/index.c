@@ -22,7 +22,7 @@ void mem_index_destroy(struct mem_index* mem_index){
      art_tree_destroy(t);
 }
 
-void* mem_index_add(struct mem_index *mem_index, struct kv_item *item,const struct index_entry* entry){
+void* mem_index_add(struct mem_index *mem_index, struct kv_item *item, struct index_entry* entry){
     art_tree *t = (art_tree*)mem_index;
     return art_insert(t,item->data,item->meta.ksize,entry);
 }

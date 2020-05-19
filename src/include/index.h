@@ -57,7 +57,7 @@ void mem_index_destroy(struct mem_index* mem_index);
  * @return void*     NULL:Add failed beacause of either OOM ,or already-existence of the entry
  * not NULL:the added entry pointer of in memory index.
  */
-void* mem_index_add(struct mem_index *mem_index, struct kv_item *item,const struct index_entry* entry);
+void* mem_index_add(struct mem_index *mem_index, struct kv_item *item, struct index_entry* entry);
 
 /**
  * @brief Deletes a item index from the memory index
