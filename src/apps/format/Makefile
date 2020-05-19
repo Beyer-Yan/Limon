@@ -2,7 +2,7 @@ SPDK_ROOT_DIR := $(abspath $(CURDIR)/../../../../..)
 include $(SPDK_ROOT_DIR)/mk/spdk.common.mk
 include $(SPDK_ROOT_DIR)/mk/spdk.modules.mk
 
-KVS_ROOT_DIR := $(abspath $(CURDIR)/../../..)
+KVS_ROOT_DIR := $(abspath $(CURDIR)/../..)
 CFLAGS += -I$(KVS_ROOT_DIR)/include
 CFLAGS += -I$(KVS_ROOT_DIR)/utils/include
 
