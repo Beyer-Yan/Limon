@@ -15,7 +15,6 @@ CFLAGS += -fdata-sections
 C_SRCS  = $(shell ls src/worker/*.c)
 C_SRCS += $(shell ls src/utils/*.c)
 C_SRCS += $(shell ls src/slab/*.c)
-C_SRCS += $(shell ls src/reclaim/*.c)
 C_SRCS += $(shell ls src/pagechunk/*.c)
 C_SRCS += $(shell ls src/kvs/*.c)
 C_SRCS += $(shell ls src/io/*.c)
