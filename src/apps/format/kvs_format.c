@@ -114,10 +114,6 @@ _kvs_blob_close_next(void* ctx,int bserrno){
     struct kvs_format_ctx *kctx = iter->kctx;
 
     if (bserrno) {
-        SPDK_ERRLOG("Error in cloing slab blob, slab:%u, size:%u, id:%lu, addr:%0x\n",
-                    iter->slab_idx,iter->sl->slab[iter->slab_idx].slab_size,
-                    iter->sl->slab[iter->slab_idx].blob_id,
-                    iter->sl->slab[iter->slab_idx].resv);
         free(iter);
         _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
@@ -135,6 +131,7 @@ _kvs_blob_close_next(void* ctx,int bserrno){
     }
     else{
         iter->slab_idx++;
+        slab_base = &iter->sl->slab[iter->slab_idx];
         spdk_blob_close(slab_base->resv,_kvs_blob_close_next,iter);
     }
 }
@@ -169,6 +166,7 @@ _kvs_dump_one_slab(struct slab_layout* slab){
     struct spdk_blob *blob = (struct spdk_blob*)(slab->resv);
     printf("\t-------------------\n");
     printf("\tblob id:%" PRIu64 "\n",slab->blob_id);
+    printf("\tblob addr:%0x\n",slab->resv);
     printf("\tslab size:%u\n",slab->slab_size);
 
     uint64_t total_chunks = spdk_blob_get_num_clusters(blob);
