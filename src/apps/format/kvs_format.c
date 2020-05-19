@@ -236,7 +236,7 @@ _kvs_dump_open_all_blobs(struct kvs_format_ctx *kctx){
     iter->sl = kctx->sl;
 
     struct slab_layout *slab_base =  &iter->sl->slab[0];
-    spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_dump_open_blob_next,kctx);
+    spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_dump_open_blob_next,iter);
 }
 
 static void

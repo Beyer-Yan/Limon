@@ -174,6 +174,7 @@ _kvs_start_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
     struct kvs_start_ctx *kctx = iter->kctx;
 
     if (bserrno) {
+        free(iter;)
         _unload_bs(kctx, "Error in opening blob", bserrno);
         return;
     }
@@ -203,7 +204,7 @@ _kvs_start_open_all_blobs(struct kvs_start_ctx *kctx){
     iter->sl = kctx->sl;
 
     struct slab_layout *slab_base =  &iter->sl->slab[0];
-    spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_start_open_blob_next,kctx);
+    spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_start_open_blob_next,iter);
 }
 
 static void
