@@ -4,7 +4,7 @@ include $(SPDK_ROOT_DIR)/mk/spdk.modules.mk
 
 KVS_ROOT_DIR := $(abspath $(CURDIR)/../..)
 CFLAGS += -I$(KVS_ROOT_DIR)/include
-CFLAGS += -I$(CURDIR)/src/indexes/include
+CFLAGS += -I$(KVS_ROOT_DIR)/indexes/include
 CFLAGS += -I$(KVS_ROOT_DIR)/utils/include
 
 APP = kvs_format
