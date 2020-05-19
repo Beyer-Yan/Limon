@@ -519,7 +519,7 @@ _kvs_create(void*ctx){
 
     spdk_bs_opts_init(&bs_opts);
     memcpy(bs_opts.bstype.bstype,_g_kvs_name,strlen(_g_kvs_name));
-    bs_opts.cluster_sz = kctx->sl->nb_pages_per_chunk;
+    bs_opts.cluster_sz = kctx->sl->nb_pages_per_chunk * KVS_PAGE_SIZE;
 
 	spdk_bs_init(bs_dev, &bs_opts, bs_init_complete, kctx);
 }
