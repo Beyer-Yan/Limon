@@ -224,6 +224,7 @@ _kvs_dump_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
     }
     else{
         iter->slab_idx++;
+        slab_base = &iter->sl->slab[iter->slab_idx];
         spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_dump_open_blob_next,iter);
     }    
 }
