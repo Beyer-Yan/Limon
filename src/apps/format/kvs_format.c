@@ -115,9 +115,11 @@ _kvs_blob_close_next(void* ctx,int bserrno){
 
     if (bserrno) {
         free(iter);
-        _unload_bs(kctx, "Error in blob create callback", bserrno);
+        _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
     }
+
+    SPDK_NOTICELOG("slab %u close\n",iter->slab_idx);
 
     struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
     
@@ -161,7 +163,7 @@ _kvs_close_all_blob(struct kvs_format_ctx *kctx){
 static void
 _kvs_dump_one_slab(struct slab_layout* slab){
     struct spdk_blob *blob = (struct spdk_blob*)(slab->resv);
-    printf("----------------------------\n");
+    printf("\t-------------------\n");
     printf("\tblob id:%" PRIu64 "\n",slab->blob_id);
     printf("\tslab size:%u\n",slab->slab_size);
 
