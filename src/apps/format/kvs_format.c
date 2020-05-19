@@ -205,7 +205,7 @@ _kvs_dump_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
     struct kvs_format_ctx *kctx = iter->kctx;
 
     if (bserrno) {
-        free(ctx);
+        free(iter);
         _unload_bs(kctx, "Error in blob open callback", bserrno);
         return;
     }
