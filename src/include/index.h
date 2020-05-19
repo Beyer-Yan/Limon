@@ -86,7 +86,7 @@ struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item
  * statically. Uers have to copy its value out, as it will be flushed every time when users call
  * this function.
  */
-uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);
+const uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);
 
 /**
  * @brief  Get the first item, which is greater than the base item.
@@ -98,7 +98,7 @@ uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);
  * The item_out needn't releasing, since it is allocated statically. Uers have to
  * copy its value out, as it will be flushed every time when users call this function.
  */
-uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out);
+const uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out);
 
 #endif
 
