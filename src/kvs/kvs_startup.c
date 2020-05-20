@@ -335,12 +335,8 @@ _kvs_start(void* ctx){
 
 static const char*
 _get_cpu_mask(uint32_t nb_works){
-    uint32_t nb_cores = spdk_env_get_core_count();
-    if(nb_works>nb_cores){
-        return NULL;
-    }
-
     const char* mask = NULL;
+    
     switch(nb_works){
         case 1:
             mask =  "0x3";
