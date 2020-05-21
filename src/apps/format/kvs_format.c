@@ -455,7 +455,7 @@ _super_blob_open_complete(void *ctx, struct spdk_blob *blob, int bserrno){
     uint32_t super_size = kctx->super_size;
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/KVS_PAGE_SIZE;
     uint32_t chunk_pages = kctx->sl->nb_pages_per_chunk;
-    uint32_t nb_clusters = KV_ALIGN(nb_pages,chunk_pages)/chunk_pages;
+    uint32_t nb_clusters = nb_pages/chunk_pages + (!!(nb_pages%chunk_pages));
 
     spdk_blob_resize(kctx->super_blob, nb_clusters, _super_resize_complete, kctx);
 }
