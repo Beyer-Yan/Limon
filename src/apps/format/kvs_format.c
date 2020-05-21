@@ -104,8 +104,8 @@ _unload_bs(struct kvs_format_ctx *kctx, char *msg, int bserrno)
 	}
     if(kctx->sl){
         spdk_free(kctx->sl);
-        free(kctx);
     }
+    free(kctx);
 }
 
 static void
