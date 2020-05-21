@@ -25,7 +25,7 @@ _kvs_opts_init(struct kvs_start_opts *opts){
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = hello_start;
-    opts->startup_fn = NULL;
+    opts->startup_ctx = NULL;
 }
 
 int
