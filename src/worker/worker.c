@@ -356,7 +356,7 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
                      common_header_size,
                      cahe_pool_data);
 
-    assert(size/8==0);
+    assert(size%8==0);
     imgr->page_io_pool = (struct object_cache_pool*)((uint8_t*)imgr->cache_io_pool + size);
     uint8_t* page_pool_data = (uint8_t*)imgr->page_io_pool + common_header_size;
 
