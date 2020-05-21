@@ -126,7 +126,7 @@ static inline uint32_t slab_get_chunk_slots(uint32_t chunk_pages, uint32_t slab_
         nb_slots = (KVS_PAGE_SIZE/slab_size)*chunk_pages;
     }
     else{
-        nb_slots = chunk_pages/slab_size;
+        nb_slots = chunk_pages*KVS_PAGE_SIZE/slab_size;
     }
     return nb_slots;
 }
