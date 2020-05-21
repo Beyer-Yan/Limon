@@ -137,8 +137,12 @@ _rebuild_one_node_async(struct rebuild_ctx* rctx){
 
 static void
 _rebuild_exit(struct rebuild_ctx* rctx,int kverrno){
-    spdk_free(rctx->recovery_node_buffer);
-    mem_index_destroy(rctx->index_for_one_slab);
+    if(rctx->recovery_node_buffer){
+        spdk_free(rctx->recovery_node_buffer);
+    }
+    if(rctx->index_for_one_slab){
+        mem_index_destroy(rctx->index_for_one_slab);
+    }
 
     struct list_slab* s,*tmp;
     LIST_FOREACH_SAFE(s,&rctx->slab_head,link,tmp){
@@ -197,6 +201,8 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     rctx->ctx = ctx;
     rctx->nb_buffer_pages=0;
     rctx->wctx = wctx;
+    rctx->index_for_one_slab = NULL;
+    rctx->recovery_node_buffer = NULL;
     rctx->slab_rebuild_complete = _slab_rebuild_complete;
     LIST_INIT(&rctx->slab_head);
 
