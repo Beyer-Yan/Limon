@@ -218,6 +218,12 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
         }
     }
 
+    if(LIST_EMPTY(&rctx->slab_head)){
+        //Nothing to be rebuilt
+        _rebuild_exit(rctx,-KV_ESUCCESS);
+        return;
+    }
+
     rctx->cur = LIST_FIRST(&rctx->slab_head);
     rctx->index_for_one_slab = mem_index_init();
     rctx->nb_buffer_pages = rctx->cur->slab->reclaim.nb_chunks_per_node * 
@@ -225,8 +231,9 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
 
     uint32_t socket_id = spdk_env_get_socket_id(spdk_env_get_current_core());
     rctx->recovery_node_buffer = spdk_malloc(rctx->nb_buffer_pages,0x1000,NULL,socket_id,SPDK_MALLOC_DMA);
-    assert(rctx->recovery_node_buffer!=NULL);
     
+    assert(rctx->recovery_node_buffer!=NULL);
     assert(rctx->index_for_one_slab);
+    
     _rebuild_one_slab(rctx);
 }
