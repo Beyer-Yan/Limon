@@ -405,7 +405,7 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     char thread_name[32];
 
     spdk_cpuset_zero(&cpumask);
-    spdk_cpuset_get_cpu(&cpumask,opts->core_id);
+    spdk_cpuset_set_cpu(&cpumask,opts->core_id,true);
     snprintf(thread_name,sizeof(thread_name),"worker_%u",opts->core_id);
     wctx->target = opts->target;
     wctx->thread = spdk_thread_create(thread_name,&cpumask);
