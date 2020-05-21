@@ -207,7 +207,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
         struct slab_shard *shard = &wctx->shards[i];
         for(;j<shard->nb_slabs;j++){
             struct slab* slab = &shard->slab_set[j];
-            if(!spdk_blob_get_num_clusters(slab->blob)){
+            if(spdk_blob_get_num_clusters(slab->blob)){
                 //This slab has valid data to be rebuilt.
                 struct list_slab *s = malloc(sizeof(struct list_slab));
                 assert(s!=NULL);
