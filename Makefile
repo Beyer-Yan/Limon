@@ -9,8 +9,8 @@ CFLAGS += -I$(CURDIR)/src/include
 CFLAGS += -I$(CURDIR)/src/indexes/include
 CFLAGS += -I$(CURDIR)/src/utils/include
 
-CFLAGS += -ffunction-sections
-CFLAGS += -fdata-sections
+#CFLAGS += -ffunction-sections
+#CFLAGS += -fdata-sections
 
 C_SRCS  = $(shell ls src/worker/*.c)
 C_SRCS += $(shell ls src/utils/*.c)

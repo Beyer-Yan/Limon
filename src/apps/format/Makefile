@@ -6,7 +6,7 @@ KVS_ROOT_DIR := $(abspath $(CURDIR)/../..)
 CFLAGS += -I$(KVS_ROOT_DIR)/include
 CFLAGS += -I$(KVS_ROOT_DIR)/indexes/include
 CFLAGS += -I$(KVS_ROOT_DIR)/utils/include
-LDFLAGS += -Wl,--gc-sections
+#LDFLAGS += -Wl,--gc-sections
 
 APP = kvs_format
 
