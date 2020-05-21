@@ -387,9 +387,9 @@ kvs_start_loop(struct kvs_start_opts *opts){
 
     rc = spdk_app_start(opts->spdk_opts, _kvs_start, opts);
     if (rc) {
-        SPDK_NOTICELOG("KVS DUMP ERROR!\n");
+        SPDK_NOTICELOG("KVS starts ERROR!\n");
     } else {
-        SPDK_NOTICELOG("KVS DUMP SUCCESS!\n");
+        SPDK_NOTICELOG("KVS starts SUCCESS!\n");
     }
 
 	spdk_app_fini();

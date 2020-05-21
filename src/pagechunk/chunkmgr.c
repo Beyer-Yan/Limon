@@ -18,27 +18,27 @@ static struct object_cache_pool  *_g_mem_pool;
 static void
 _chunk_mem_init(uint64_t nb_chunks){
 
-    uint32_t chunk_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
+    uint32_t chunk_data_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
     uint32_t bitmap_data_size = g_chunkmgr_worker.nb_pages_per_chunk/8 + 1;
-    uint32_t header_size = KV_ALIGN(sizeof(struct chunk_mem) + sizeof(struct bitmap) + bitmap_data_size,0x1000u);
-    uint32_t chunk_mem_size = header_size + chunk_size;
+    uint32_t mem_hdr_size = KV_ALIGN(sizeof(struct chunk_mem)+sizeof(struct bitmap)+bitmap_data_size,0x1000u);
+    uint32_t chunk_mem_size = mem_hdr_size + chunk_data_size;
 
-    uint64_t pool_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);
+    uint64_t pool_hdr_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);
 
-    uint8_t* data = spdk_malloc(pool_size + chunk_mem_size*nb_chunks,
+    uint8_t* data = spdk_malloc(pool_hdr_size + chunk_mem_size*nb_chunks,
 						0x1000, NULL, SPDK_ENV_LCORE_ID_ANY,
 						SPDK_MALLOC_DMA);
     assert(data!=NULL);
     
     _g_mem_pool = (struct object_cache_pool*)data;
-    data += pool_size;
-    pool_header_init(_g_mem_pool,nb_chunks,chunk_mem_size,header_size,data);
+    data += pool_hdr_size;
+    pool_header_init(_g_mem_pool,nb_chunks,chunk_mem_size,pool_hdr_size,data);
     
     uint64_t i = 0;
     for(;i<nb_chunks;i++){
         struct chunk_mem* mem = (struct chunk_mem*)(data + chunk_mem_size*i);
         mem->nb_bytes = chunk_mem_size;
-        mem->data = (uint8_t*)(mem) + header_size;
+        mem->data = (uint8_t*)(mem) + mem_hdr_size;
         mem->bitmap[0].length = g_chunkmgr_worker.nb_pages_per_chunk;
     }
 }
