@@ -87,13 +87,13 @@ _unload_complete(void *ctx, int bserrno){
 static void
 _unload_bs(struct kvs_format_ctx *kctx, char *msg, int bserrno)
 {
+	if (bserrno) {
+		SPDK_ERRLOG("%s (err %d)\n", msg, bserrno);
+	}
     if(!kctx){
         spdk_app_stop(bserrno);
         return;
     }
-	if (bserrno) {
-		SPDK_ERRLOG("%s (err %d)\n", msg, bserrno);
-	}
 	if (kctx->bs) {
 		if (kctx->channel) {
 			spdk_bs_free_io_channel(kctx->channel);
