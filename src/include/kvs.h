@@ -20,6 +20,8 @@ struct kvs_start_opts{
     char* devname;
 
     struct spdk_app_opts *spdk_opts;
+    void (*startup_fn)(void*ctx, int kverrno);
+    void* startup_ctx;
 };
 
 //The kvs is implemented in sinleton mode. Only one instance is the kvs allowed to startup.

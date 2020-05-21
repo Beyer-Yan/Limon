@@ -10,6 +10,11 @@ struct _hello_context{
 };
 
 static void
+hello_start(void*ctx, int kverrno){
+    printf("Hello pemon~\n");
+}
+
+static void
 _kvs_opts_init(struct kvs_start_opts *opts){
     opts->devname = "Nvme0n1";
     opts->kvs_name = "hello_pemon";
@@ -19,6 +24,8 @@ _kvs_opts_init(struct kvs_start_opts *opts){
     opts->nb_works = 1;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
+    opts->startup_fn = hello_start;
+    opts->startup_fn = NULL;
 }
 
 int

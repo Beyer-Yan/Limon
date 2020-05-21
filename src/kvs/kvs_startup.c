@@ -113,7 +113,12 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     //Now all worker have been started
     g_kvs = kvs;
     spdk_free(kctx->sl);
+
+    void (*startup_fn)(void*ctx, int kverrno) = kctx->opts->startup_fn;
+    void *startup_ctx  = kctx->opts->startup_ctx;
     free(kctx);
+
+    startup_fn(startup_ctx,-KV_ESUCCESS);
 }
 
 static void
@@ -375,7 +380,8 @@ kvs_start_loop(struct kvs_start_opts *opts){
 	int rc = 0;
     opts->spdk_opts->reactor_mask = _get_cpu_mask(opts->nb_works);
     assert(opts->spdk_opts->reactor_mask!=NULL);
-    
+    assert(opts->startup_fn!=NULL);
+
     assert(!atomic_load(&g_started));
     atomic_store(&g_started,1);
 
