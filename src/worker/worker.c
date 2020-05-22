@@ -145,7 +145,7 @@ _worker_slab_evaluation_poll(void* ctx){
     struct worker_context *wctx = ctx;
     uint32_t i=0,j=0;
 
-    int events = 0;;
+    int events = 0;
 
     for(;i < wctx->nb_reclaim_shards;i++){
         struct slab_shard *shard = &wctx->shards[wctx->reclaim_shards_start_id + i];
@@ -485,13 +485,13 @@ _rebuild_complete(void*ctx, int kverrno){
     //All initialization jobs complete.
     //Register pollers to start the service.
     struct spdk_poller *poller;
-    poller = spdk_poller_register(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_MS);
+    poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_MS);
     assert(poller!=NULL);
 
-    poller = spdk_poller_register(_worker_reclaim_poll,wctx,0);
+    poller = SPDK_POLLER_REGISTER(_worker_reclaim_poll,wctx,0);
     assert(poller!=NULL);
 
-    poller = spdk_poller_register(_worker_business_processor_poll,wctx,0);
+    poller = SPDK_POLLER_REGISTER(_worker_business_processor_poll,wctx,0);
     assert(poller!=NULL);
 }
 
