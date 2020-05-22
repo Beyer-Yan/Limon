@@ -6,7 +6,8 @@
 
 #include "spdk/log.h"
 
-#define DEFAULT_RECLAIM_POLLING_PERIOD_MS 10000
+//10s
+#define DEFAULT_RECLAIM_POLLING_PERIOD_US 10000000
 
 static void 
 _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal *req){
@@ -485,7 +486,7 @@ _rebuild_complete(void*ctx, int kverrno){
     //All initialization jobs complete.
     //Register pollers to start the service.
     struct spdk_poller *poller;
-    poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_MS);
+    poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
     assert(poller!=NULL);
 
     poller = SPDK_POLLER_REGISTER(_worker_reclaim_poll,wctx,0);
