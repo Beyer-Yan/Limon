@@ -63,8 +63,9 @@ _node_read_complete(void* ctx, int bserrno){
 
         if(item->meta.ksize!=UINT32_MAX){
             //It may be a valid item.
-            if(tsc0!=tsc1){
-            //The item is crashed, which may be caused by a system crash when the item is been storing.
+            if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) ){
+                //The item is crashed, which may be caused by a system crash when the item is been storing.
+                //User may format a disk by 1. 
                 continue;
             }
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];

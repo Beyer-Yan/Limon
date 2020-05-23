@@ -15,7 +15,7 @@
 
 static char *_g_kvs_name = "kvs_v1.0";
 
-static const char *_g_kvs_getopt_string = "K:S:C:fD:E"; 
+static const char *_g_kvs_getopt_string = "K:S:C:fD:N:E"; 
 
 static struct option _g_app_long_cmdline_options[] = {
 #define MAX_KEY_LENGH_OPT_IDX   'K'
@@ -28,6 +28,8 @@ static struct option _g_app_long_cmdline_options[] = {
     {"force-format",optional_argument,NULL,FORCE_FORMAT_OPT_IDX},
 #define DEVNAME_OPT_IDX         'D'
     {"devname",required_argument,NULL,DEVNAME_OPT_IDX},
+#define INIT_NODES_IDX          'N'
+    {"init-nodes",optional_argument,NULL,INIT_NODES_IDX},
 #define DUMP_OPT_IDX            'E'
     {"dump",optional_argument,NULL,DUMP_OPT_IDX}
 };
@@ -38,6 +40,7 @@ struct kvs_create_opts{
     uint32_t nb_shards;
     uint32_t max_key_length;
     uint32_t nb_chunks_per_reclaim_node;
+    uint32_t nb_init_nodes_per_slab;
     bool force_format;
     bool dump_only;
 };
@@ -46,9 +49,10 @@ static struct kvs_create_opts _g_default_opts = {
     .nb_shards = 64,
     .max_key_length = 256,
     .nb_chunks_per_reclaim_node = 4,
+    .nb_init_nodes_per_slab = 10,
     .force_format = false,
     .dump_only = false,
-    .devname = "nvme0n1"
+    .devname = "Nvme0n1"
 };
 
 struct kvs_format_ctx{
@@ -56,6 +60,7 @@ struct kvs_format_ctx{
     spdk_blob_id super_blob_id;
 	struct spdk_blob *super_blob;
 	uint64_t io_unit_size;
+    uint32_t nb_init_nodes_per_slab;
 	int rc;
 
     struct spdk_io_channel *channel;
@@ -70,10 +75,19 @@ struct kvs_format_ctx{
 
 struct _blob_iter{
     struct kvs_format_ctx *kctx;
+    int op_type;
     uint32_t slab_idx;
     uint32_t total_slabs;
+    void(*finished_cb)(struct kvs_format_ctx* kctx);
+    void* ctx;
     struct super_layout *sl;
 };
+
+#define KVS_OP_CREATE   0
+#define KVS_OP_OPEN     1
+#define KVS_OP_RESIZE   2
+#define KVS_OP_CLOSE    3
+
 
 static void
 _unload_complete(void *ctx, int bserrno){
@@ -108,8 +122,63 @@ _unload_bs(struct kvs_format_ctx *kctx, char *msg, int bserrno)
     free(kctx);
 }
 
+static void _slab_iter_foreach_next(struct _blob_iter *iter);
+
 static void
-_kvs_blob_close_next(void* ctx,int bserrno){
+_slab_iter_foreach_create_cb(void* ctx, spdk_blob_id blobid,int bserrno){
+    struct _blob_iter *iter = ctx;
+    struct kvs_format_ctx *kctx = iter->kctx;
+
+    if (bserrno) {
+        free(ctx);
+        _unload_bs(kctx, "Error in blob create callback", bserrno);
+        return;
+    }
+
+    struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
+    uint32_t nb_slabs_per_shard = iter->sl->nb_slabs_per_shard;
+
+    slab_base->slab_size = iter->kctx->slab_size_array[iter->slab_idx%nb_slabs_per_shard];
+    slab_base->blob_id = blobid;
+    SPDK_NOTICELOG("new blob id %" PRIu64 " for shard:%u,slab:%u,\n", 
+                           blobid,iter->slab_idx/nb_slabs_per_shard,iter->slab_idx%nb_slabs_per_shard);
+    
+    _slab_iter_foreach_next(iter);
+}
+
+static void
+_slab_iter_foreach_open_cb(void*ctx, struct spdk_blob* blob, int bserrno){
+    struct _blob_iter *iter = ctx;
+    struct kvs_format_ctx *kctx = iter->kctx;
+
+    if (bserrno) {
+        free(iter);
+        _unload_bs(kctx, "Error in blob open callback", bserrno);
+        return;
+    }
+
+    struct slab_layout *slab_base = &iter->sl->slab[iter->slab_idx];
+    slab_base->resv = (uint64_t)blob;
+    
+    _slab_iter_foreach_next(iter);
+}
+
+static void
+_slab_iter_foreach_resize_cb(void* ctx,int bserrno){
+    struct _blob_iter *iter = ctx;
+    struct kvs_format_ctx *kctx = iter->kctx;
+
+    if (bserrno) {
+        free(iter);
+        _unload_bs(kctx, "Error in blob resize callback", bserrno);
+        return;
+    }
+
+    _slab_iter_foreach_next(iter);
+}
+
+static void
+_slab_iter_foreach_close_cb(void* ctx,int bserrno){
     struct _blob_iter *iter = ctx;
     struct kvs_format_ctx *kctx = iter->kctx;
 
@@ -119,19 +188,75 @@ _kvs_blob_close_next(void* ctx,int bserrno){
         return;
     }
 
+    _slab_iter_foreach_next(iter);
+}
+
+static void
+_slab_iter_do_op(struct slab_layout* slab,int op_type, struct _blob_iter *iter){
+    switch(op_type){
+        case KVS_OP_CREATE:{
+            spdk_bs_create_blob(iter->kctx->bs,_slab_iter_foreach_create_cb,iter);
+            break;
+        }
+        case KVS_OP_OPEN:{
+            spdk_bs_open_blob(iter->kctx->bs,slab->blob_id,_slab_iter_foreach_open_cb,iter);
+            break;
+        }
+        case KVS_OP_RESIZE:{
+            uint32_t chunks = iter->kctx->nb_init_nodes_per_slab*iter->kctx->sl->nb_chunks_per_reclaim_node;
+            spdk_blob_resize(slab->resv,chunks,_slab_iter_foreach_resize_cb,iter);
+            break;
+        }
+        case KVS_OP_CLOSE:{
+            spdk_blob_close(slab->resv,_slab_iter_foreach_close_cb,iter);
+            break;
+        }
+        default:{
+            SPDK_ERRLOG("Wrong op type\n");
+            assert(0);
+            break;
+        }
+    }
+}
+
+static void
+_slab_iter_foreach_next(struct _blob_iter *iter){
     struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
+    struct kvs_format_ctx *kctx = iter->kctx;
     
     if(iter->slab_idx==iter->total_slabs-1){
-        //All slab have been created;
-        //Write the layout data into super blob.
+        //All slab have been itered;
+        void(*finished_cb)(struct kvs_format_ctx *kctx) = iter->finished_cb;
         free(iter);
-        _unload_bs(kctx,"",0);
+        finished_cb(kctx);
     }
     else{
+        //Iter the next slab.
         iter->slab_idx++;
         slab_base = &iter->sl->slab[iter->slab_idx];
-        spdk_blob_close(slab_base->resv,_kvs_blob_close_next,iter);
+        _slab_iter_do_op(slab_base,iter->op_type,iter);
     }
+}
+
+static void
+_slab_iter_foreach(struct kvs_format_ctx *kctx,int op_type,void(*finished_cb)(struct kvs_format_ctx *kctx)){
+    struct _blob_iter *iter = malloc(sizeof(struct _blob_iter));
+    assert(iter!=NULL);
+
+    iter->kctx = kctx;
+    iter->slab_idx = 0;
+    iter->finished_cb = finished_cb;
+    iter->op_type = op_type;
+    iter->total_slabs = kctx->sl->nb_shards * kctx->sl->nb_slabs_per_shard;
+    iter->sl = kctx->sl;
+
+    struct slab_layout *slab_base =  &iter->sl->slab[0];
+    _slab_iter_do_op(slab_base,op_type,iter);
+}
+
+static void
+_kvs_dump_slab_all_close_complete(struct kvs_format_ctx *kctx){
+    _unload_bs(kctx,"",0);
 }
 
 static void
@@ -141,22 +266,8 @@ _kvs_close_super_complete(void*ctx, int bserrno){
         _unload_bs(kctx, "Error in blob close callback", bserrno);
         return;
     }
-    
-    struct _blob_iter *iter = malloc(sizeof(struct _blob_iter));
-    assert(iter!=NULL);
 
-    iter->kctx = kctx;
-    iter->slab_idx = 0;
-    iter->total_slabs = kctx->sl->nb_slabs_per_shard * kctx->sl->nb_shards;
-    iter->slab_idx = 0;
-    iter->sl = kctx->sl;
-
-    spdk_blob_close(kctx->sl->slab[0].resv,_kvs_blob_close_next,iter);
-}
-
-static void 
-_kvs_close_all_blob(struct kvs_format_ctx *kctx){
-    spdk_blob_close(kctx->super_blob,_kvs_close_super_complete,kctx);
+    _slab_iter_foreach(kctx,KVS_OP_CLOSE,_kvs_dump_slab_all_close_complete);
 }
 
 static void
@@ -199,48 +310,7 @@ _kvs_dump_real_data(struct kvs_format_ctx *kctx){
             _kvs_dump_one_slab(slab);
         }
     }
-    _kvs_close_all_blob(kctx);
-}
-
-static void
-_kvs_dump_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
-    struct _blob_iter *iter = ctx;
-    struct kvs_format_ctx *kctx = iter->kctx;
-
-    if (bserrno) {
-        free(iter);
-        _unload_bs(kctx, "Error in blob open callback", bserrno);
-        return;
-    }
-
-    struct slab_layout *slab_base = &iter->sl->slab[iter->slab_idx];
-    slab_base->resv = (uint64_t)blob;
-
-    if(iter->slab_idx == iter->total_slabs - 1){
-        //All slab have been opened;
-        //Print the layout data.
-        free(iter);
-        _kvs_dump_real_data(kctx);
-    }
-    else{
-        iter->slab_idx++;
-        slab_base = &iter->sl->slab[iter->slab_idx];
-        spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_dump_open_blob_next,iter);
-    }    
-}
-
-static void
-_kvs_dump_open_all_blobs(struct kvs_format_ctx *kctx){
-    struct _blob_iter *iter = malloc(sizeof( struct _blob_iter));
-    assert(iter!=NULL);
-
-    iter->kctx = kctx;
-    iter->slab_idx = 0;
-    iter->total_slabs = kctx->sl->nb_shards * kctx->sl->nb_slabs_per_shard;
-    iter->sl = kctx->sl;
-
-    struct slab_layout *slab_base =  &iter->sl->slab[0];
-    spdk_bs_open_blob(kctx->bs,slab_base->blob_id,_kvs_dump_open_blob_next,iter);
+    spdk_blob_close(kctx->super_blob,_kvs_close_super_complete,kctx);;
 }
 
 static void
@@ -250,7 +320,7 @@ _blob_dump_super_complete(void* ctx, int bserrno){
 		_unload_bs(kctx, "Error in read completion", bserrno);
         return;
 	}
-    _kvs_dump_open_all_blobs(kctx); 
+    _slab_iter_foreach(kctx,KVS_OP_OPEN,_kvs_dump_real_data);
 }
 
 static void
@@ -344,6 +414,13 @@ _kvs_dump(void*ctx){
 	spdk_bs_load(bs_dev, NULL, _kvs_dump_load_complete, devname);
 }
 
+/***********************************************************************/
+
+static void
+_slab_all_close_complete(struct kvs_format_ctx *kctx){
+     _unload_bs(kctx, "",0);
+}
+
 static void
 _super_blob_close_complete(void*ctx, int bserrno){
     struct kvs_format_ctx *kctx = ctx;
@@ -351,7 +428,11 @@ _super_blob_close_complete(void*ctx, int bserrno){
 		_unload_bs(kctx, "Error in closing super blob",bserrno);
 		return;
 	}
-    _unload_bs(kctx, "",0);
+
+    if(kctx->nb_init_nodes_per_slab>0){
+        //I should close all slab blobs.
+        _slab_iter_foreach(kctx,KVS_OP_CLOSE,_slab_all_close_complete);
+    }
 }
 
 static void
@@ -363,7 +444,6 @@ _super_sync_complete(void*ctx, int bserrno){
 		return;
 	}
     spdk_blob_close(kctx->super_blob,_super_blob_close_complete,kctx);
-    _unload_bs(kctx, "",0);
 }
 
 static void
@@ -378,51 +458,27 @@ _super_write_complete(void *ctx, int bserrno){
     spdk_blob_sync_md(kctx->super_blob, _super_sync_complete, kctx);
 }
 
-static void 
-_create_slab_blobs_next(void* ctx, spdk_blob_id blobid,int bserrno){
-    struct _blob_iter *iter = ctx;
-    struct kvs_format_ctx *kctx = iter->kctx;
-
-    if (bserrno) {
-        free(ctx);
-        _unload_bs(kctx, "Error in blob create callback", bserrno);
-        return;
-    }
-
-    struct slab_layout* slab_base = &iter->sl->slab[iter->slab_idx];
-    uint32_t nb_slabs_per_shard = iter->sl->nb_slabs_per_shard;
-
-    slab_base->slab_size = iter->kctx->slab_size_array[iter->slab_idx%nb_slabs_per_shard];
-    slab_base->blob_id = blobid;
-    SPDK_NOTICELOG("new blob id %" PRIu64 " for shard:%u,slab:%u,\n", 
-                           blobid,iter->slab_idx/nb_slabs_per_shard,iter->slab_idx%nb_slabs_per_shard);
-    
-    if(iter->slab_idx==iter->total_slabs-1){
-        //All slab have been created;
-        //Write the layout data into super blob.
-        free(iter);
-        uint32_t nb_pages = KV_ALIGN(kctx->super_size,0x1000u)/0x1000u;
-        spdk_blob_io_write(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_super_write_complete,kctx);
-    }
-    else{
-        iter->slab_idx++;
-        spdk_bs_create_blob(kctx->bs,_create_slab_blobs_next,iter);
-    }
+static void
+_slab_all_resize_complete(struct kvs_format_ctx *kctx){
+    uint32_t nb_pages = KV_ALIGN(kctx->super_size,0x1000u)/0x1000u;
+    spdk_blob_io_write(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_super_write_complete,kctx);
 }
 
-static void 
-_create_slab_blobs(struct kvs_format_ctx *kctx){
+static void
+_slab_all_open_complete(struct kvs_format_ctx *kctx){
+    _slab_iter_foreach(kctx,KVS_OP_RESIZE,_slab_all_resize_complete);
+}
 
-    struct _blob_iter *iter = malloc(sizeof(struct _blob_iter));
-    assert(iter!=NULL);
-
-    iter->kctx = kctx;
-    iter->slab_idx = 0;
-    iter->total_slabs = kctx->nb_slabs * kctx->sl->nb_shards;
-    iter->slab_idx = 0;
-    iter->sl = kctx->sl;
-
-    spdk_bs_create_blob(kctx->bs,_create_slab_blobs_next,iter);
+static void
+_slab_all_create_complete(struct kvs_format_ctx *kctx){
+    if(kctx->nb_init_nodes_per_slab>0){
+        //When perform slab resizing, I shall open them all firstly.
+        _slab_iter_foreach(kctx,KVS_OP_OPEN,_slab_all_open_complete);
+    }
+    else{
+        //I needn't perform init slab resizing.
+        _do_super_write(kctx);
+    }
 }
 
 static void
@@ -432,7 +488,10 @@ _super_resize_complete(void *ctx, int bserrno){
 		_unload_bs(kctx, "Error in super blob resize", bserrno);
 		return;
 	}
-    _create_slab_blobs(kctx);
+    //Create one blob for each slab.
+    //When all slabs have been created, echo slab should be resized equal to 
+    //the init size;
+    _slab_iter_foreach(kctx,KVS_OP_CREATE,_slab_all_create_complete);
 }
 
 static void
@@ -635,6 +694,16 @@ _kvs_parse_arg(int ch, char *arg){
         case 'E':
             _g_default_opts.dump_only = true;
             break;
+        case 'N':{
+            long nodes = spdk_strtol(arg,0);
+            if(nodes>0){
+                _g_default_opts.nb_init_nodes_per_slab=nodes;
+            }
+            else{
+                fprintf(stderr,"The init nodes shall be a positive number\n");
+                return -EINVAL;
+            }
+        }
         default:
             return -EINVAL;
             break;
@@ -651,7 +720,10 @@ _kvs_usage(void){
     printf(" -C, --chunks-per-node <num>  the chunks per reclaim node(default:%u)\n",
                                           _g_default_opts.nb_chunks_per_reclaim_node);
     printf(" -f, --force-format           format the kvs forcely\n");
-    printf(" -D, --devname <namestr>      the devname(default:nvme0n1)\n");
+    printf(" -D, --devname <namestr>      the devname(default:%s)\n",
+                                          _g_default_opts.devname);
+    printf(" -N, --init-nodes  <num>      the init nodes for each slab(default:%u)\n",
+                                          _g_default_opts.nb_init_nodes_per_slab);
     printf(" -E, --dump                   Dump the existing kvs format\n");
 }
 
