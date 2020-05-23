@@ -91,20 +91,75 @@ slab_create_async(struct iomgr* imgr,
 
 struct resize_ctx{
     struct slab* slab;
-    uint32_t old_size; //chunks
-    uint32_t new_size;
+    uint64_t new_size; //chunks
+    uint64_t slot_idx;
     void (*user_cb)(uint64_t slot_idx,void*ctx, int kverrno);
+    void (*truncate_cb)(void* ctx, int kverrno);
     void* ctx;
 };
 
-void 
-slab_resize_async(struct iomgr* imgr,
+static void
+_truncate_sync_md_complete(void*ctx, int bserrno){
+    struct resize_ctx *rctx = ctx;
+    //Unmap failed.
+    if(bserrno){
+        rctx->truncate_cb(rctx->ctx,-KV_EIO);
+        free(rctx);
+        return;
+    }
+    rctx->truncate_cb(rctx->ctx,-KV_ESUCCESS);
+    free(rctx);
+}
+
+static void
+_truncate_resize_complete(void*ctx, int bserrno){
+    struct resize_ctx *rctx = ctx;
+    if(bserrno){
+        //Unmap failed.
+        rctx->truncate_cb(rctx->ctx,-KV_EIO);
+        free(rctx);
+        return;
+    }
+
+    spdk_blob_sync_md(rctx->slab->blob,_truncate_sync_md_complete,rctx);
+}
+
+static void
+_truncate_unmap_complete(void*ctx, int bserrno){
+    struct resize_ctx *rctx = ctx;
+    if(bserrno){
+        //Unmap failed.
+        rctx->truncate_cb(rctx->ctx,KV_EIO);
+        free(rctx);
+        return;
+    }
+    spdk_blob_resize(rctx->slab->blob,rctx->new_size,_truncate_resize_complete,rctx);
+}
+
+void slab_truncate_async(struct iomgr* imgr,
                        struct slab* slab,
-                       uint64_t new_size,
+                       uint64_t nb_nodes,
                        void (*cb)(void* ctx, int kverrno),
                        void* ctx){
     
-    spdk_blob_resize(slab->blob,new_size,cb,ctx);
+    uint64_t old_size = slab->reclaim.nb_reclaim_nodes * slab->reclaim.nb_chunks_per_node;
+    uint64_t new_size = old_size - nb_nodes*slab->reclaim.nb_chunks_per_node;
+
+    struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));
+    if(!rctx){
+        cb(ctx,-KV_EMEM);
+        return;
+    }
+
+    rctx->slab = slab;
+    rctx->new_size = new_size;
+    rctx->truncate_cb = cb;
+    rctx->ctx = ctx;
+
+    //Tell the disk driver that the data can be deserted.
+    uint64_t offset = new_size*slab->reclaim.nb_pages_per_chunk;
+    uint64_t length = nb_nodes*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_pages_per_chunk;
+    spdk_blob_io_unmap(slab->blob,imgr->channel,offset,length,_truncate_unmap_complete,rctx);
 }
 
 static void
@@ -113,14 +168,14 @@ _slab_md_sync_complete(void*ctx, int kverrno){
     struct slab* slab = rctx->slab;
 
     if(kverrno){
-        rctx->user_cb(-1,rctx->ctx,kverrno);
+        rctx->user_cb(UINT64_MAX,rctx->ctx,-KV_EIO);
         free(rctx);
         return;
     }  
 
     struct reclaim_node *node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
     if(!node){
-        rctx->user_cb(-1,rctx->ctx,-KV_EMEM);
+        rctx->user_cb(UINT64_MAX,rctx->ctx,-KV_EMEM);
         free(rctx);
         return;
     }
@@ -150,7 +205,7 @@ _resize_complete_cb(void*ctx, int kverrno){
     struct slab* slab = rctx->slab;
 
     if(kverrno){
-        rctx->user_cb(-1,rctx->ctx,kverrno);
+        rctx->user_cb(UINT64_MAX,rctx->ctx,KV_EIO);
         free(rctx);
         return;
     }
@@ -199,9 +254,13 @@ void slab_request_slot_async(struct iomgr* imgr,
 
     //The slab is fully utilized. It should be resized.
     uint64_t new_size = (slab->reclaim.nb_reclaim_nodes+1) * slab->reclaim.nb_chunks_per_node;
-    
     //Since it seldom happens, I use malloc here, which does not cost much.
     struct resize_ctx *resize_ctx = malloc(sizeof(struct resize_ctx));
+    if(!resize_ctx){
+        cb(UINT64_MAX,ctx,-KV_EMEM);
+        return;
+    }
+
     resize_ctx->slab = slab;
     resize_ctx->user_cb = cb;
     resize_ctx->ctx = ctx;

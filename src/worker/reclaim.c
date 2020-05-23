@@ -430,9 +430,7 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     else if( (req->cur_slot==req->last_slot) && (req->nb_processed == req->cur_slot - req->start_slot + 1) ){
         //I have submited all the item-migrating request. And all submited requests have been
         //processed.
-        uint32_t size = req->slab->reclaim.nb_reclaim_nodes * req->slab->reclaim.nb_chunks_per_node;
-        uint32_t new_size =  size - req->slab->reclaim.nb_chunks_per_node;
-        slab_resize_async(wctx->imgr,req->slab,new_size,slab_resize_complete,req);
+        slab_truncate_async(wctx->imgr,req->slab,1,slab_resize_complete,req);
     }
     else if( req->cur_slot!=req->last_slot ){
         //The slab migrating has not been finished. So, I should process the next batch.

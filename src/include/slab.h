@@ -185,19 +185,22 @@ void slab_create_async(struct iomgr* imgr,
 */
 
 /**
- * @brief Extent or truncate the slab. The unit is mulitple of size of reclaim node. Data
+ * @brief Truncate the slab. The unit is mulitple of size of reclaim node. Data
  * will not be migrated automatically when the slab is truncated, which means that the user
  * shall migrate the data before truncating the slab.
+ * The minimum truncating size if one reclaim node.
+ * Attention that the user shall process the page chunk and slab reclaim data. The slab truncating
+ * only performs disk data truncating.
  * 
  * @param imgr      The io manager. The actual disk IO is managed by the iomgr.
  * @param slab      The slab to be resized
- * @param new_size  The newly setting size
+ * @param nb_nodes  The number of reclaim nodes to be truncated.
  * @param cb        User callback
  * @param ctx       Parameter of user callback
  */
-void slab_resize_async(struct iomgr* imgr,
+void slab_truncate_async(struct iomgr* imgr,
                        struct slab* slab,
-                       uint64_t new_size,
+                       uint64_t nb_nodes,
                        void (*cb)(void* ctx, int kverrno),
                        void* ctx);
 
