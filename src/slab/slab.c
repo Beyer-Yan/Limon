@@ -89,21 +89,23 @@ slab_create_async(struct iomgr* imgr,
 }
 */
 
+struct resize_ctx{
+    struct slab* slab;
+    uint32_t old_size; //chunks
+    uint32_t new_size;
+    void (*user_cb)(uint64_t slot_idx,void*ctx, int kverrno);
+    void* ctx;
+};
+
 void 
 slab_resize_async(struct iomgr* imgr,
                        struct slab* slab,
                        uint64_t new_size,
                        void (*cb)(void* ctx, int kverrno),
                        void* ctx){
-
+    
     spdk_blob_resize(slab->blob,new_size,cb,ctx);
 }
-
-struct resize_ctx{
-    struct slab* slab;
-    void (*user_cb)(uint64_t slot_idx,void*ctx, int kverrno);
-    void* ctx;
-};
 
 static void
 _slab_md_sync_complete(void*ctx, int kverrno){

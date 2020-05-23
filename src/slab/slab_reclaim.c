@@ -5,7 +5,7 @@
 struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node_id){
    
     uint32_t nb_chunks = slab->reclaim.nb_chunks_per_node;
-    uint32_t bitmap_size = sizeof(struct bitmap) + KV_ALIGN(slab->reclaim.nb_slots_per_chunk/8 + 1, 8);
+    uint32_t bitmap_size = bitmap_header_size(slab->reclaim.nb_slots_per_chunk);
     uint32_t chunk_size = sizeof(struct chunk_desc) + bitmap_size;
     uint32_t total_size = sizeof(struct reclaim_node) + (chunk_size + sizeof(void*)) * nb_chunks;
 

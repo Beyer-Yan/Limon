@@ -403,6 +403,7 @@ slab_resize_complete(void*ctx,int kverrno){
     slab_reclaim_free_node(&slab->reclaim,node);
 
     //Now I finish the request, just release it.
+    TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
     pool_release(wctx->rmgr->migrate_slab_pool,req);
 }
 
@@ -432,7 +433,6 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
         uint32_t size = req->slab->reclaim.nb_reclaim_nodes * req->slab->reclaim.nb_chunks_per_node;
         uint32_t new_size =  size - req->slab->reclaim.nb_chunks_per_node;
         slab_resize_async(wctx->imgr,req->slab,new_size,slab_resize_complete,req);
-        TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
     }
     else if( req->cur_slot!=req->last_slot ){
         //The slab migrating has not been finished. So, I should process the next batch.

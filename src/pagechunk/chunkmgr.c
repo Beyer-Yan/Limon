@@ -19,8 +19,8 @@ static void
 _chunk_mem_init(uint64_t nb_chunks){
 
     uint32_t chunk_data_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
-    uint32_t bitmap_data_size = g_chunkmgr_worker.nb_pages_per_chunk/8 + 1;
-    uint32_t mem_hdr_size = KV_ALIGN(sizeof(struct chunk_mem)+sizeof(struct bitmap)+bitmap_data_size,0x1000u);
+    uint32_t bitmap_size = bitmap_header_size(g_chunkmgr_worker.nb_pages_per_chunk);
+    uint32_t mem_hdr_size = KV_ALIGN(sizeof(struct chunk_mem)+bitmap_size,0x1000u);
     uint32_t chunk_mem_size = mem_hdr_size + chunk_data_size;
 
     uint64_t pool_hdr_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);

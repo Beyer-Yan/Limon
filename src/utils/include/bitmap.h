@@ -6,10 +6,12 @@
 
 struct bitmap {
     uint32_t length;
-    uint8_t  data[0];
+    uint64_t  data[0];
 };
 
-static_assert(sizeof(struct bitmap)==4,"incorrect size");
+static_assert(sizeof(struct bitmap)==8,"incorrect size");
+
+uint32_t bitmap_header_size(uint32_t num_bits);
 
 uint32_t bitmap_get_bit(struct bitmap *map ,uint32_t id);
 
