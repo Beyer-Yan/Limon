@@ -361,7 +361,7 @@ worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
 //Process slab reclaim node.
 
 static void
-slab_resize_complete(void*ctx,int kverrno){
+slab_truncate_complete(void*ctx,int kverrno){
     struct slab_migrate_request *req = ctx;
     struct worker_context* wctx = req->wctx;
     if(kverrno){
@@ -430,7 +430,7 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     else if( (req->cur_slot==req->last_slot) && (req->nb_processed == req->cur_slot - req->start_slot + 1) ){
         //I have submited all the item-migrating request. And all submited requests have been
         //processed.
-        slab_truncate_async(wctx->imgr,req->slab,1,slab_resize_complete,req);
+        slab_truncate_async(wctx->imgr,req->slab,1,slab_truncate_complete,req);
     }
     else if( req->cur_slot!=req->last_slot ){
         //The slab migrating has not been finished. So, I should process the next batch.
