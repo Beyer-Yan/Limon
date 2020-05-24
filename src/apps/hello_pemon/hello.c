@@ -10,6 +10,27 @@ struct _hello_context{
 };
 
 static void
+_batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
+    if(kverrno){
+        printf("Put error\n");
+        exit(-1);
+    }
+}
+
+static void
+_batch_test(void){
+    int i = 0;
+    for(;i<1000000;i++){
+        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
+        memcpy(item->data,&i,4);
+        memcpy(item->data+4,"testb",5);
+        item->meta.ksize = 4;
+        item->meta.vsize = 5;
+        kv_put_async(item,_batch_put_complete,item);
+    }
+}
+
+static void
 _get_complete(void*ctx, struct kv_item* item,  int kverrno){
     struct kv_item *origin_item = ctx;
     if(!kverrno){
@@ -18,6 +39,7 @@ _get_complete(void*ctx, struct kv_item* item,  int kverrno){
     if(memcmp(origin_item->data,item->data,10)){
         printf("Error:item mismatch!!\n");
     }
+    _batch_test();
 }
 
 static void
