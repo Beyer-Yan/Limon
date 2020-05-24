@@ -113,7 +113,7 @@ _chunkmgr_worker_get_one_chunk_mem(void *ctx){
     struct worker_context* requestor_wctx = _get_worker_context_from_pmgr(cb_obj->requestor_pmgr);
 
     struct chunk_mem* mem = _get_one_chunk_mem();
-    if(!mem){
+    if(mem){
         cb_obj->mem = mem;
         cb_obj->executor_pmgr = NULL;
         cb_obj->kverrno = -KV_ESUCCESS;
