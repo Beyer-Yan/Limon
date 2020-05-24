@@ -56,16 +56,16 @@ _node_read_complete(void* ctx, int bserrno){
         uint8_t *raw_data = rctx->recovery_node_buffer + slab_slot_offset(slab,idx);
         uint64_t tsc0;
         struct kv_item *item = (struct kv_item*)(raw_data + 8);
-        uint8_t tsc1;
+        uint64_t tsc1;
 
         memcpy(&tsc0,raw_data,sizeof(tsc0));
         memcpy(&tsc1,raw_data + item_get_size(item) + 8,sizeof(tsc1));
 
         if(item->meta.ksize!=UINT32_MAX){
             //It may be a valid item.
-            if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) ){
+            if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) || (tsc0==0) ){
                 //The item is crashed, which may be caused by a system crash when the item is been storing.
-                //User may format a disk by 1. 
+                //User may format a disk by 1 or 0. 
                 continue;
             }
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
