@@ -5,6 +5,8 @@
 #include "spdk/env.h"
 #include "spdk/event.h"
 
+#include <pthread.h>
+
 struct _hello_context{
     int i;
 };
@@ -17,7 +19,7 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
     }
 }
 
-static int
+static void*
 _batch_test(void* ctx){
     int i = 0;
     for(;i<1000000;i++){
@@ -28,12 +30,13 @@ _batch_test(void* ctx){
         item->meta.vsize = 5;
         kv_put_async(item,_batch_put_complete,item);
     }
-    return 0;
+    return NULL;
 }
 
 static void
 _start_batch_test(void){
-    spdk_env_thread_launch_pinned(3,_batch_test,NULL);
+    pthread_t pid;
+    pthread_create(&pid,NULL,_batch_test,NULL);
 }
 
 static void
