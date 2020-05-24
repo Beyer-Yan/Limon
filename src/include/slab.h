@@ -159,6 +159,16 @@ void slab_get_slab_conf(uint32_t **slab_size_array, uint32_t *nb_slabs, uint32_t
 bool slab_is_slab_changed(uint32_t old_item_size, uint32_t new_item_size);
 
 /**
+ * @brief Judge whether the given item size is legal for the given slab size.
+ * 
+ * @param slab_size  The slab size.
+ * @param item_size  The item size.
+ * @return true      Valid
+ * @return false     Invalid.
+ */
+bool slab_is_valid_size(uint32_t slab_size, uint32_t item_size);
+
+/**
  * @brief  Judge whether the given slot has been allocated.
  * 
  * @param slab      The slab

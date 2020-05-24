@@ -3,6 +3,7 @@
 #include "kverrno.h"
 #include "spdk/env.h"
 #include "spdk/queue.h"
+#include "spdk/log.h"
 
 struct list_slab{
     struct slab* slab;
@@ -68,6 +69,14 @@ _node_read_complete(void* ctx, int bserrno){
                 //User may format a disk by 1 or 0. 
                 continue;
             }
+            uint32_t actual_item_size = item_get_size(item) + 16;
+            if( !slab_is_valid_size(slab->slab_size,actual_item_size) ){
+                //The item is invalid
+                SPDK_ERRLOG("Invalid item found in slab rebuilding, shard:%u,slab size:%u, item_size:%u\n",
+                            rctx->cur->shard_idx,slab->slab_size, actual_item_size);
+                continue;
+            }
+            
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
             struct index_entry* entry_slab   = mem_index_lookup(rctx->index_for_one_slab,item);
             struct index_entry* entry_worker = mem_index_lookup(wctx->mem_index,item);

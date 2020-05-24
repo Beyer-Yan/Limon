@@ -66,6 +66,12 @@ slab_is_slab_changed(uint32_t old_item_size, uint32_t new_item_size){
 }
 
 bool 
+slab_is_valid_size(uint32_t slab_size, uint32_t item_size){
+    uint32_t size = slab_find_slab(item_size);
+    return size==slab_size ? true : false;
+}
+
+bool 
 slab_is_slot_occupied(struct slab* slab,uint64_t slot_idx){
     
     struct reclaim_node* node;
