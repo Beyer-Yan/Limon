@@ -2,6 +2,8 @@
 #include "worker_internal.h"
 #include "kverrno.h"
 
+#include "spdk/log.h"
+
 /*----------------------------------------------------------*/
 //Here are common functions
 //Nothind currently
@@ -384,6 +386,8 @@ _process_put_single_page_pagechunk_cb(void* ctx, int kverrno){
 void worker_process_put(struct kv_request_internal *req){
     struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
+
+    SPDK_NOTICELOG("incoming put, item->key:%5s\n",req->item->data);
 
     if(!entry){
         //item does not exist. It a new item!
