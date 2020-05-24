@@ -61,7 +61,7 @@ _node_read_complete(void* ctx, int bserrno){
         memcpy(&tsc0,raw_data,sizeof(tsc0));
         memcpy(&tsc1,raw_data + item_get_size(item) + 8,sizeof(tsc1));
 
-        if(item->meta.ksize!=UINT32_MAX){
+        if(item->meta.ksize!=0){
             //It may be a valid item.
             if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) || (tsc0==0) ){
                 //The item is crashed, which may be caused by a system crash when the item is been storing.

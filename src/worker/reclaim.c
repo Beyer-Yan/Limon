@@ -45,7 +45,7 @@ _process_one_pending_delete_load_data_cb(void* ctx, int kverrno){
 
     //Now I get only the meta data into the page chunk cache.
     struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,del->slot_idx);
-    item->meta.ksize=UINT32_MAX;
+    item->meta.ksize=0;
     pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,desc,del->slot_idx,
                                _process_one_pending_delete_store_data_cb,del);
 }
