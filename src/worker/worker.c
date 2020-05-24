@@ -107,9 +107,9 @@ _worker_business_processor_poll(void*ctx){
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
         TAILQ_REMOVE(&wctx->submit_queue,req_internal,link);
         _process_one_kv_request(wctx, req_internal);
+        events++;
     }
 
-    events = process_size;
     return events;
 }
 

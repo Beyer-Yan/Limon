@@ -109,8 +109,8 @@ worker_reclaim_process_pending_item_delete(struct worker_context *wctx){
         pending_del->rctx.wctx = wctx;
         _process_one_pending_delete(pending_del);
         a_ios--;
+        events++;
     }
-    events = a_ios;
     return events;
 }
 
@@ -352,8 +352,8 @@ worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
         TAILQ_REMOVE(&wctx->rmgr->item_migrate_head,mig,link);
         _process_one_pending_migrate(mig);
         nb--;
+        events++;
     }
-    events = nb;
     return events;
 }
 
