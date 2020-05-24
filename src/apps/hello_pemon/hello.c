@@ -15,7 +15,7 @@ _get_complete(void*ctx, struct kv_item* item,  int kverrno){
     if(!kverrno){
         printf("Get sucess\n");
     }
-    if(memcpy(origin_item->data,item->data,10)){
+    if(memcmp(origin_item->data,item->data,10)){
         printf("Error:item mismatch!!\n");
     }
 }
