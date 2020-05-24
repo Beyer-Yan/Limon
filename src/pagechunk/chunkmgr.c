@@ -163,7 +163,8 @@ chunkmgr_worker_init(struct chunkmgr_worker_init_opts *opts){
     spdk_cpuset_zero(&cpuset);
     spdk_cpuset_set_cpu(&cpuset,opts->core_id,true);
 
-    g_chunkmgr_worker.thread = spdk_thread_create("chunkmgr",&cpuset);
+    //g_chunkmgr_worker.thread = spdk_thread_create("chunkmgr",&cpuset);
+    g_chunkmgr_worker.thread = spdk_thread_create("chunkmgr",NULL);
     assert(g_chunkmgr_worker.thread!=NULL);
 
     _chunk_mem_init(g_chunkmgr_worker.nb_max_chunks);
