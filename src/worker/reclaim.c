@@ -98,7 +98,9 @@ _process_one_pending_delete(struct pending_item_delete *del){
 int 
 worker_reclaim_process_pending_item_delete(struct worker_context *wctx){
     int events = 0;
-    uint32_t a_ios = (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
+    //The avalaible disk io.
+    uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
+                     (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io);
 
     struct pending_item_delete *pending_del, *tmp = NULL;
     TAILQ_FOREACH_SAFE(pending_del,&wctx->rmgr->item_delete_head,link,tmp){
@@ -333,7 +335,10 @@ _process_one_pending_migrate(struct pending_item_migrate *mig){
 int 
 worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
     int events = 0;
-    uint32_t a_ios = (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
+    //The avalaible disk io.
+    uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
+                     (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io);
+                     
     uint32_t migrate_batch = wctx->rmgr->migrating_batch;
     uint32_t nb = migrate_batch < a_ios ? migrate_batch : a_ios;
 

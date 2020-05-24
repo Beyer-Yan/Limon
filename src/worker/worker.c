@@ -56,7 +56,8 @@ _worker_business_processor_poll(void*ctx){
     uint32_t a_reqs = wctx->kv_request_internal_pool->nb_frees;
 
     //The avalaible disk io.
-    uint32_t a_ios = (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
+    uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
+                     (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io);
 
     /**
      * @brief Get the minimum value from the rquests queue, kv request internal pool
@@ -261,8 +262,8 @@ void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,struct kv_it
 
 static void
 _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
-    uint64_t nb_max_ios = opts->max_io_pending_queue_size_per_worker;
-    uint64_t common_header_size = pool_header_size(nb_max_ios);
+    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker*5;
+    uint64_t common_header_size = pool_header_size(nb_max_reqs);
     uint64_t size;
 
     pmgr->hit_times = 0;
@@ -276,7 +277,7 @@ _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
 
     assert((uint64_t)pmgr->kv_chunk_request_pool%8==0);
     assert((uint64_t)req_pool_data%8==0);
-    size = pool_header_init(pmgr->kv_chunk_request_pool,nb_max_ios,sizeof(struct chunk_miss_callback),
+    size = pool_header_init(pmgr->kv_chunk_request_pool,nb_max_reqs,sizeof(struct chunk_miss_callback),
                      common_header_size,
                      req_pool_data);
 
@@ -286,7 +287,7 @@ _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
     
     assert((uint64_t)pmgr->load_store_ctx_pool%8==0);
     assert((uint64_t)ctx_pool_data%8==0);
-    pool_header_init(pmgr->load_store_ctx_pool,nb_max_ios,sizeof(struct chunk_load_store_ctx),
+    pool_header_init(pmgr->load_store_ctx_pool,nb_max_reqs,sizeof(struct chunk_load_store_ctx),
                      common_header_size,
                      ctx_pool_data);
 }
@@ -294,9 +295,10 @@ _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
 static void
 _worker_init_rmgr(struct reclaim_mgr* rmgr,struct worker_init_opts* opts){
 
-    uint64_t nb_max_ios = opts->max_io_pending_queue_size_per_worker;
+    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
     uint32_t nb_max_slab_reclaim = opts->nb_reclaim_shards*opts->shard[0].nb_slabs;
-    uint64_t common_header_size = pool_header_size(nb_max_ios);
+    uint64_t del_header_size = pool_header_size(nb_max_reqs*3);
+    uint64_t mig_header_size = pool_header_size(nb_max_reqs);
     uint64_t size;
 
     rmgr->migrating_batch = opts->reclaim_batch_size;
@@ -307,22 +309,22 @@ _worker_init_rmgr(struct reclaim_mgr* rmgr,struct worker_init_opts* opts){
     TAILQ_INIT(&rmgr->slab_migrate_head);
 
     rmgr->pending_delete_pool = (struct object_cache_pool*)(rmgr+1);
-    uint8_t *del_pool_data = (uint8_t*)rmgr->pending_delete_pool + common_header_size;
+    uint8_t *del_pool_data = (uint8_t*)rmgr->pending_delete_pool + del_header_size;
 
     assert((uint64_t)rmgr->pending_delete_pool%8==0);
     assert((uint64_t)del_pool_data%8==0);
-    size = pool_header_init(rmgr->pending_delete_pool,nb_max_ios,sizeof(struct pending_item_delete),
-                     common_header_size,
+    size = pool_header_init(rmgr->pending_delete_pool,nb_max_reqs*3,sizeof(struct pending_item_delete),
+                     del_header_size,
                      del_pool_data);
 
     assert(size%8==0);
     rmgr->pending_migrate_pool = (struct object_cache_pool*)((uint8_t*)rmgr->pending_delete_pool + size);
-    uint8_t* mig_pool_data = (uint8_t*)rmgr->pending_migrate_pool + common_header_size;
+    uint8_t* mig_pool_data = (uint8_t*)rmgr->pending_migrate_pool + mig_header_size;
 
     assert((uint64_t)rmgr->pending_migrate_pool%8==0);
     assert((uint64_t)mig_pool_data%8==0);
-    size = pool_header_init(rmgr->pending_migrate_pool,nb_max_ios,sizeof(struct pending_item_migrate),
-                            common_header_size,
+    size = pool_header_init(rmgr->pending_migrate_pool,nb_max_reqs,sizeof(struct pending_item_migrate),
+                            mig_header_size,
                             mig_pool_data);
 
     assert(size%8==0);            
@@ -338,33 +340,35 @@ _worker_init_rmgr(struct reclaim_mgr* rmgr,struct worker_init_opts* opts){
 
 static void
 _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
-    uint64_t nb_max_ios = opts->max_io_pending_queue_size_per_worker;
-    uint64_t common_header_size = pool_header_size(nb_max_ios);
+    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
+    uint64_t cio_header_size = pool_header_size(nb_max_reqs*10);
+    uint64_t pio_header_size = pool_header_size(nb_max_reqs*20);
     uint64_t size;
 
-    imgr->max_pending_io = nb_max_ios;
+    imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;;
     imgr->nb_pending_io = 0;
     imgr->read_hash.cache_hash = NULL;
     imgr->read_hash.page_hash = NULL;
     imgr->write_hash.cache_hash = NULL;
     imgr->write_hash.page_hash = NULL;
+
     imgr->cache_io_pool = (struct object_cache_pool*)(imgr+1);
-    uint8_t* cahe_pool_data = (uint8_t*)imgr->cache_io_pool + common_header_size;
+    uint8_t* cahe_pool_data = (uint8_t*)imgr->cache_io_pool + cio_header_size;
 
     assert((uint64_t)imgr->cache_io_pool%8==0);
     assert((uint64_t)cahe_pool_data%8==0);
-    size = pool_header_init(imgr->cache_io_pool,nb_max_ios,sizeof(struct cache_io),
-                     common_header_size,
+    size = pool_header_init(imgr->cache_io_pool,nb_max_reqs*10,sizeof(struct cache_io),
+                     cio_header_size,
                      cahe_pool_data);
 
     assert(size%8==0);
     imgr->page_io_pool = (struct object_cache_pool*)((uint8_t*)imgr->cache_io_pool + size);
-    uint8_t* page_pool_data = (uint8_t*)imgr->page_io_pool + common_header_size;
+    uint8_t* page_pool_data = (uint8_t*)imgr->page_io_pool + pio_header_size;
 
     assert((uint64_t)imgr->page_io_pool%8==0);
     assert((uint64_t)page_pool_data%8==0);
-    pool_header_init(imgr->page_io_pool,nb_max_ios*2,sizeof(struct page_io),
-                     pool_header_size(nb_max_ios*2),
+    pool_header_init(imgr->page_io_pool,nb_max_reqs*20,sizeof(struct page_io),
+                     pio_header_size,
                      page_pool_data);
 }
 
@@ -374,7 +378,7 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
                     uint64_t rmgr_base_off,
                     uint64_t imgr_base_off){
 
-    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
+    uint32_t nb_max_reqs = opts->max_request_queue_size_per_worker;
 
     wctx->mem_index = mem_index_init();
     wctx->shards = opts->shard;
@@ -386,14 +390,12 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     wctx->buffered_request_idx = 0;
     wctx->sent_requests = 0;
     wctx->processed_requests = 0;
-    wctx->max_pending_kv_request = opts->max_request_queue_size_per_worker;
+    wctx->max_pending_kv_request = nb_max_reqs;
     TAILQ_INIT(&wctx->submit_queue);
     TAILQ_INIT(&wctx->resubmit_queue);
 
-    wctx->kv_request_internal_pool = (struct object_cache_pool*)(wctx->request_queue + 
-                                    wctx->max_pending_kv_request);
-    uint8_t* req_pool_data = (uint8_t*)(wctx->kv_request_internal_pool + 
-                             pool_header_size(wctx->max_pending_kv_request));
+    wctx->kv_request_internal_pool = (struct object_cache_pool*)(wctx->request_queue + nb_max_reqs);
+    uint8_t* req_pool_data = (uint8_t*)(wctx->kv_request_internal_pool + pool_header_size(nb_max_reqs));
 
     assert((uint64_t)wctx->kv_request_internal_pool%8==0);
     assert((uint64_t)req_pool_data%8==0);
@@ -431,7 +433,6 @@ worker_init(struct worker_init_opts* opts)
 {
     uint64_t size = 0;
     uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
-    uint64_t nb_max_ios = opts->max_io_pending_queue_size_per_worker;
     uint32_t nb_max_slab_reclaim = opts->nb_reclaim_shards*opts->shard[0].nb_slabs;
 
     uint64_t pmgr_base_off;
@@ -442,33 +443,40 @@ worker_init(struct worker_init_opts* opts)
     size += sizeof(struct worker_context);
     size += sizeof(struct kv_request)*nb_max_reqs;
     size += pool_header_size(nb_max_reqs);
-    size += nb_max_reqs*sizeof(struct kv_request_internal);
+    size += nb_max_reqs*sizeof(struct kv_request_internal); //one req produces one req_internal.
 
     //page chunk manager
+    //One kv request may produce one chunk request and ctx request
+    //One mig request may produce one chunk request and ctx request
+    //One post del may produce one chunk request and ctx request
     pmgr_base_off = size;
     size += sizeof(struct pagechunk_mgr);
-    size += pool_header_size(nb_max_ios); //pmgr_req_pool
-    size += pool_header_size(nb_max_ios); //pmgr_ctx_pool
-    size += nb_max_ios*sizeof(struct chunk_miss_callback);
-    size += nb_max_ios*sizeof(struct chunk_load_store_ctx);
+    size += pool_header_size(nb_max_reqs*5); //pmgr_req_pool.
+    size += pool_header_size(nb_max_reqs*5); //pmgr_ctx_pool.
+    size += nb_max_reqs*5*sizeof(struct chunk_miss_callback);
+    size += nb_max_reqs*5*sizeof(struct chunk_load_store_ctx);
 
     //recliam manager
+    //One kv put/delete req may produce one post del request
+    //One mig req may produce one post del request.
     rmgr_base_off = size;
     size += sizeof(struct reclaim_mgr);
-    size += pool_header_size(nb_max_ios);          //del_pool;
-    size += pool_header_size(nb_max_ios);          //mig_pool;
-    size += pool_header_size(nb_max_slab_reclaim); //slab_reclaim_request_pool;
-    size += nb_max_ios*sizeof(struct pending_item_delete);
-    size += nb_max_ios*sizeof(struct pending_item_migrate);
+    size += pool_header_size(nb_max_reqs*3);        //del_pool;
+    size += pool_header_size(nb_max_reqs);          //mig_pool;
+    size += pool_header_size(nb_max_slab_reclaim);  //slab_reclaim_request_pool;
+    size += nb_max_reqs*3*sizeof(struct pending_item_delete);
+    size += nb_max_reqs*sizeof(struct pending_item_migrate);
     size += nb_max_slab_reclaim*sizeof(struct slab_migrate_request);
 
     //io manager
+    //One pmgr ctx req may produce two cache io
+    //One cache io may produce two page io.
     imgr_base_off = size;
     size += sizeof(struct iomgr);
-    size += pool_header_size(nb_max_ios);    //cache_pool;
-    size += pool_header_size(nb_max_ios*2);  //page_pool;
-    size += nb_max_ios*sizeof(struct cache_io);
-    size += nb_max_ios*2*sizeof(struct page_io);
+    size += pool_header_size(nb_max_reqs*10);   //cache_pool; one req may produce 2 cache io.
+    size += pool_header_size(nb_max_reqs*20);   //page_pool; one cio may produce 2 page io.
+    size += nb_max_reqs*10*sizeof(struct cache_io);
+    size += nb_max_reqs*20*sizeof(struct page_io);
 
     struct worker_context *wctx = malloc(size);
     assert(wctx!=NULL);
