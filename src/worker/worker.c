@@ -57,7 +57,7 @@ _worker_business_processor_poll(void*ctx){
 
     //The avalaible disk io.
     uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
-                     (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io);
+                     (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
 
     /**
      * @brief Get the minimum value from the rquests queue, kv request internal pool
