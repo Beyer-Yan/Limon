@@ -10,11 +10,23 @@ struct _hello_context{
 };
 
 static void
+_get_complete(void*ctx, struct kv_item* item,  int kverrno){
+    struct kv_item *origin_item = ctx;
+    if(!kverrno){
+        printf("Get sucess\n");
+    }
+    if(memcpy(origin_item->data,item->data,10)){
+        printf("Error:item mismatch!!\n");
+    }
+}
+
+static void
 _put_complete(void*ctx, struct kv_item* item, int kverrno){
     struct kv_item *origin_item = ctx;
     if(!kverrno){
         printf("Put sucess\n");
     }
+    kv_get_async(origin_item,_get_complete,origin_item);
 }
 
 static void
