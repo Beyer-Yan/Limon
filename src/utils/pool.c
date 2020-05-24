@@ -30,11 +30,13 @@ uint64_t pool_header_init(struct object_cache_pool *pool, uint64_t count,uint64_
     pool->cache_data = object_data;
 
     uint32_t i = 0;
-    for(;i<count;i++){
+    for(;i<count-1;i++){
          pool->free_node_array[i].next = i+1;
          pool->free_node_array[i].object = (void*)(&pool->cache_data[i*pool->object_size]);
     }
-    pool->free_node_array[count].next = UINT64_MAX;
+    //The header always point the first free node.
+    pool->free_node_array[count-1].next = UINT64_MAX;
+    pool->free_node_array[count].next   = 0;
     pool->nb_frees = count;
 
     return header_size + count*object_size;
@@ -50,7 +52,7 @@ void* pool_get(struct object_cache_pool *pool){
         pool->free_node_array[head].next = pool->free_node_array[free_idx].next;
         pool->free_node_array[free_idx].next = UINT64_MAX;
         pool->nb_frees--;
-        object = pool->free_node_array[free_idx].object;;
+        object = pool->free_node_array[free_idx].object;
     }
     return object;
 }
