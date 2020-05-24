@@ -17,7 +17,7 @@
  * MULTI_PAGE_SLAB_SIZE will alway be put into only one page.
  */
 #define MULTI_PAGE_SLAB_SIZE   768u
-#define CHUNK_SIZE             252u
+#define CHUNK_SIZE             135u
 #define KVS_PAGE_SIZE          4096u
 #define MAX_SLAB_SIZE          4*1024*1024u
 
