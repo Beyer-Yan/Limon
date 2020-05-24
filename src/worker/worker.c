@@ -91,6 +91,7 @@ _worker_business_processor_poll(void*ctx){
             uint32_t pr = atomic_load(&wctx->processed_requests);
             req = &wctx->request_queue[pr%wctx->max_pending_kv_request];
             req_internal = pool_get(wctx->kv_request_internal_pool);
+            printf("%u\n",i);
             assert(req_internal!=NULL);
 
             req_internal->ctx = req->ctx;
