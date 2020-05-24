@@ -459,14 +459,16 @@ _super_write_complete(void *ctx, int bserrno){
 }
 
 static void
-_slab_all_resize_complete(struct kvs_format_ctx *kctx){
+_do_super_write(struct kvs_format_ctx *kctx){
     uint32_t nb_pages = KV_ALIGN(kctx->super_size,0x1000u)/0x1000u;
     spdk_blob_io_write(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_super_write_complete,kctx);
 }
 
 static void
 _slab_all_open_complete(struct kvs_format_ctx *kctx){
-    _slab_iter_foreach(kctx,KVS_OP_RESIZE,_slab_all_resize_complete);
+    //Resize all slabs with init nodes.
+    //When all slabs have been resized, just write the super blob.
+    _slab_iter_foreach(kctx,KVS_OP_RESIZE,_do_super_write);
 }
 
 static void
