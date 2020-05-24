@@ -17,8 +17,8 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
     }
 }
 
-static void
-_batch_test(void){
+static int
+_batch_test(void* ctx){
     int i = 0;
     for(;i<1000000;i++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
@@ -28,6 +28,12 @@ _batch_test(void){
         item->meta.vsize = 5;
         kv_put_async(item,_batch_put_complete,item);
     }
+    return 0;
+}
+
+static void
+_start_batch_test(void){
+    spdk_env_thread_launch_pinned(3,_batch_test,NULL);
 }
 
 static void
@@ -39,7 +45,7 @@ _get_complete(void*ctx, struct kv_item* item,  int kverrno){
     if(memcmp(origin_item->data,item->data,10)){
         printf("Error:item mismatch!!\n");
     }
-    _batch_test();
+    _start_batch_test();
 }
 
 static void
