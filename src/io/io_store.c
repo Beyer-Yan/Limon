@@ -190,6 +190,7 @@ iomgr_store_pages_async(struct iomgr* imgr,
         return;
     }
     cio->cnt = 0;
+    TAILQ_INIT(&cio->cio_head);
     HASH_ADD(hh,imgr->write_hash.cache_hash,key,sizeof(cio->key),cio);
 
     if(nb_pages==1){
