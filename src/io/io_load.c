@@ -194,6 +194,7 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
         return;
     }
     cio->cnt = 0;
+    TAILQ_INIT(&cio->cio_head);
     HASH_ADD(hh,imgr->read_hash.cache_hash,key,sizeof(cio->key),cio);
 
     if(nb_pages==1){
