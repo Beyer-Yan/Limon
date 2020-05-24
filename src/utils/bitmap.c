@@ -108,7 +108,7 @@ uint32_t
 bitmap_get_first_clear_bit(struct bitmap *map){
     assert(map);
 
-    uint32_t num_ll =  KV_ALIGN(map->length,64u)/8;
+    uint32_t num_ll =  KV_ALIGN(map->length,64u)/64;
     uint64_t word = UINT64_MAX;
 
     uint32_t i = 0;
@@ -124,5 +124,5 @@ bitmap_get_first_clear_bit(struct bitmap *map){
     }
 
     uint32_t in_word_idx = (uint32_t)__builtin_ffsll(~word);
-    return word ? in_word_idx-1 + i*64 : UINT32_MAX;
+    return in_word_idx ? in_word_idx-1 + i*64 : UINT32_MAX;
 }
