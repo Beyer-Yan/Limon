@@ -237,7 +237,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
                             rctx->cur->slab->reclaim.nb_pages_per_chunk;
 
     uint32_t socket_id = spdk_env_get_socket_id(spdk_env_get_current_core());
-    rctx->recovery_node_buffer = spdk_malloc(rctx->nb_buffer_pages,0x1000,NULL,socket_id,SPDK_MALLOC_DMA);
+    rctx->recovery_node_buffer = spdk_malloc(rctx->nb_buffer_pages*KVS_PAGE_SIZE,0x1000,NULL,socket_id,SPDK_MALLOC_DMA);
     
     assert(rctx->recovery_node_buffer!=NULL);
     assert(rctx->index_for_one_slab);
