@@ -37,7 +37,7 @@ _chunk_mem_init(uint64_t nb_chunks){
     uint64_t i = 0;
     for(;i<nb_chunks;i++){
         struct chunk_mem* mem = (struct chunk_mem*)(data + chunk_mem_size*i);
-        mem->nb_bytes = chunk_mem_size;
+        mem->nb_bytes = chunk_data_size;
         mem->data = (uint8_t*)(mem) + mem_hdr_size;
         mem->bitmap[0].length = g_chunkmgr_worker.nb_pages_per_chunk;
     }
@@ -126,6 +126,7 @@ _chunkmgr_worker_get_one_chunk_mem(void *ctx){
          if(!executor_wctx){
              //All workers are busy. Just tell the requestor to perform LRU eviction;
              cb_obj->mem = NULL;
+             cb_obj->executor_pmgr = cb_obj->requestor_pmgr;
              spdk_thread_send_msg(requestor_wctx->thread,_chunkmgr_lease_one_chunk_mem,cb_obj);
          }
          else{
