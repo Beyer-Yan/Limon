@@ -22,8 +22,8 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
 static void*
 _batch_test(void* ctx){
     int i = 0;
+    struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
     for(;i<1000000;i++){
-        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&i,4);
         memcpy(item->data+4,"testb",5);
         item->meta.ksize = 4;

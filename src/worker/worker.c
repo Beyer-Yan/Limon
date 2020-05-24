@@ -69,6 +69,8 @@ _worker_business_processor_poll(void*ctx){
     struct kv_request_internal *req_internal,*tmp=NULL;
     struct kv_request *req;
 
+    SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, a_ios:%u\n",p_reqs,a_reqs,a_reqs);
+
     /**
      * @brief Process the resubmit queue. I needn't get new cached requests
      * from requests pool, since requests from resubmit queue already have 
