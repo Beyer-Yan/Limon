@@ -606,6 +606,7 @@ _fill_super_parameters(struct kvs_format_ctx *kctx){
     kctx->sl = sl;
     kctx->super_size = super_size;
     kctx->devname = kc_opts->devname;
+    kctx->nb_init_nodes_per_slab = kc_opts->nb_init_nodes_per_slab;
 
     kctx->slab_size_array = slab_size_array;
     kctx->nb_slabs = nb_slabs;
