@@ -706,6 +706,7 @@ _kvs_parse_arg(int ch, char *arg){
                 fprintf(stderr,"The init nodes shall be a positive number\n");
                 return -EINVAL;
             }
+            break;
         }
         default:
             return -EINVAL;
