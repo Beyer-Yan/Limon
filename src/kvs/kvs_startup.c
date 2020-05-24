@@ -139,7 +139,7 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
     kvs->nb_workers = nb_workers;
     kvs->nb_shards = nb_shards;
     kvs->reclaim_batch_size = kctx->opts->reclaim_batch_size;
-    kvs->max_request_queue_size_per_worker = kctx->opts->reclaim_percentage_threshold;
+    kvs->reclaim_percentage_threshold = kctx->opts->reclaim_percentage_threshold;
     kvs->max_request_queue_size_per_worker = kctx->opts->max_request_queue_size_per_worker;
     kvs->max_io_pending_queue_size_per_worker = kctx->opts->max_io_pending_queue_size_per_worker;
 
