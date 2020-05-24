@@ -76,7 +76,7 @@ _node_read_complete(void* ctx, int bserrno){
                             rctx->cur->shard_idx,slab->slab_size, actual_item_size);
                 continue;
             }
-            
+
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
             struct index_entry* entry_slab   = mem_index_lookup(rctx->index_for_one_slab,item);
             struct index_entry* entry_worker = mem_index_lookup(wctx->mem_index,item);
@@ -118,7 +118,7 @@ _node_read_complete(void* ctx, int bserrno){
     }
 
     rbtree_insert(slab->reclaim.total_tree,node->id,node,NULL);
-    if(!node->nb_free_slots){
+    if(node->nb_free_slots){
         rbtree_insert(slab->reclaim.free_node_tree,node->id,node,NULL);
     }
 
