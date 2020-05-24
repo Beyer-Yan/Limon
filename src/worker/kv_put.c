@@ -223,7 +223,7 @@ _process_put_add_pagechunk_cb(void* ctx, int kverrno){
                                pctx->entry->chunk_desc,
                                pctx->entry->slot_idx,
                                _process_put_add_load_data_cb,
-                               pctx);
+                               req);
 }
 
 static void
@@ -341,7 +341,7 @@ _process_put_update_single_page_cached(struct kv_request_internal *req){
                                pctx->entry->chunk_desc,
                                pctx->entry->slot_idx,
                                _process_put_single_page_store_data_cb,
-                               pctx);
+                               req);
 }
 
 static void
@@ -378,7 +378,7 @@ _process_put_single_page_pagechunk_cb(void* ctx, int kverrno){
                               pctx->entry->chunk_desc,
                               pctx->entry->slot_idx,
                               _process_put_single_page_load_data_cb,
-                              pctx);
+                              req);
 }
 
 void worker_process_put(struct kv_request_internal *req){
