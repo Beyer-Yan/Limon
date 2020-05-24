@@ -179,6 +179,8 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
+    assert(cls_ctx!=NULL);
+    
     cls_ctx->pmgr = pmgr;
     cls_ctx->desc = desc;
     cls_ctx->slot_idx = slot_idx;
@@ -244,6 +246,8 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
 
     //Now I have to load the shared pages from disk;
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
+    assert(cls_ctx!=NULL);
+    
     cls_ctx->pmgr = pmgr;
     cls_ctx->desc = desc;
     cls_ctx->first_page = first_page;
@@ -314,6 +318,8 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
         return;
     }
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
+    assert(cls_ctx!=NULL);
+
     cls_ctx->pmgr = pmgr;
     cls_ctx->desc = desc;
     cls_ctx->first_page = first_page;
@@ -362,6 +368,8 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     _get_position(desc,slot_idx,&first_page,&last_page);
 
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
+    assert(cls_ctx!=NULL);
+
     cls_ctx->pmgr = pmgr;
     cls_ctx->desc = desc;
     cls_ctx->first_page = first_page;
@@ -402,6 +410,8 @@ void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
     _get_position(desc,slot_idx,&first_page,&last_page);
     
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
+    assert(cls_ctx!=NULL);
+    
     cls_ctx->pmgr = pmgr;
     cls_ctx->desc = desc;
     cls_ctx->first_page = first_page;

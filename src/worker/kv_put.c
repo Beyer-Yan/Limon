@@ -387,7 +387,7 @@ void worker_process_put(struct kv_request_internal *req){
     struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
 
-    SPDK_NOTICELOG("incoming put, item->key:%5s\n",req->item->data);
+    SPDK_NOTICELOG("incoming put, item->key:%5s\n",*(int*)req->item->data);
 
     if(!entry){
         //item does not exist. It a new item!
