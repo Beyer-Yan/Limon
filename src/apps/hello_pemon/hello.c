@@ -10,8 +10,22 @@ struct _hello_context{
 };
 
 static void
+_put_complete(void*ctx, struct kv_item* item, int kverrno){
+    struct kv_item *origin_item = ctx;
+    if(!kverrno){
+        printf("Put sucess\n");
+    }
+}
+
+static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
+    struct kv_item *item = malloc(sizeof(struct item_meta) + 5 + 5);
+    item->meta.ksize = 5;
+    item->meta.vsize = 5;
+    memcpy(item->data,"12345",5);
+    memcpy(item->data + 5,"54321",5);
+    kv_put_async(item,_put_complete,item);
 }
 
 static void
