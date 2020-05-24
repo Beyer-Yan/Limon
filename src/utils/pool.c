@@ -30,7 +30,7 @@ uint64_t pool_header_init(struct object_cache_pool *pool, uint64_t count,uint64_
     pool->cache_data = object_data;
 
     uint32_t i = 0;
-    for(;i<count-1;i++){
+    for(;i<count;i++){
          pool->free_node_array[i].next = i+1;
          pool->free_node_array[i].object = (void*)(&pool->cache_data[i*pool->object_size]);
     }
