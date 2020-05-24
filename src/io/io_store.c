@@ -20,7 +20,7 @@ _process_cache_io(struct cache_io *cio,int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
         }
         cio->cb(cio->ctx,cio->kverrno);
-        HASH_DEL(cio->imgr->read_hash.cache_hash,cio); 
+        HASH_DEL(cio->imgr->write_hash.cache_hash,cio); 
     }
 }
 
