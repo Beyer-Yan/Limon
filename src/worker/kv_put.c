@@ -388,7 +388,7 @@ void worker_process_put(struct kv_request_internal *req){
 
     if(!entry){
         //item does not exist. It a new item!
-        SPDK_NOTICELOG("put new item, item->key:%d\n",*(int*)req->item->data);
+        //SPDK_NOTICELOG("put new item, item->key:%d\n",*(int*)req->item->data);
         _process_put_add(req);
         return;
     }
