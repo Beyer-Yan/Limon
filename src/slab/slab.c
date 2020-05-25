@@ -134,6 +134,10 @@ static void
 _slab_blob_md_sync_complete(void*ctx, int bserrno){
     struct resize_ctx *rctx = ctx;
 
+    if(bserrno){
+        SPDK_NOTICELOG("blob md sync error:%d\n",bserrno);
+    }
+
     rctx->kverrno =  bserrno ? -KV_EIO : -KV_ESUCCESS;
     spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common,rctx);
 }
@@ -144,6 +148,7 @@ _slab_blob_resize_complete(void*ctx, int bserrno){
     struct spdk_blob *blob = rctx->slab->blob;
     if(bserrno){
         //Resize error;
+        SPDK_NOTICELOG("blob resize error:%d\n",bserrno);
         rctx->kverrno = -KV_EIO;
         spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
         return;
