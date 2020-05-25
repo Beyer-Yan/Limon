@@ -243,6 +243,7 @@ _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     if(kverrno){
         //Slot request failed. This may be caused by out-of-disk-space.
         //Adding item failed.
+        SPDK_ERRLOG("failed in slot allocating, slot:%u, err:%d\n",pctx->slab->slab_size, kverrno);
         pool_release(wctx->kv_request_internal_pool,req);
         mem_index_delete(wctx->mem_index,req->item);
         req->cb_fn(req->ctx,NULL,-KV_EFULL);
