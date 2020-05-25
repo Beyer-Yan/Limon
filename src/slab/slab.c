@@ -233,7 +233,7 @@ _slab_request_resize_complete_cb(void*ctx){
 
     //Just retrieve a slot from the first chunk of the newly allocated reclaim node;
     //The first slot of the first page chunk of the reclaim node is the one I want.
-    struct chunk_desc*desc = (struct chunk_desc*)(node+1);
+    struct chunk_desc*desc = node->desc_array[0];
     uint64_t slot_idx = node->id*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
     bitmap_set_bit(desc->bitmap,0);
     desc->nb_free_slots--;
