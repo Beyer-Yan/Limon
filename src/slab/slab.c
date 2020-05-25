@@ -62,7 +62,7 @@ slab_is_slab_changed(uint32_t old_item_size, uint32_t new_item_size){
     uint32_t idx = slab_find_slab(new_item_size);
     uint32_t size = slab_sizes[idx];
     
-    return old_item_size == size ? true : false;
+    return old_item_size != size ? true : false;
 }
 
 bool 
