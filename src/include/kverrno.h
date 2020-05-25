@@ -13,7 +13,8 @@ enum kverrno{
     KV_EINVAL,
     KV_EMPTY,
     KV_EOP_UNKNOWN,
-    KV_EOP_RACE
+    KV_EOP_RACE,
+    KV_EBUSY
 };
 
 #endif

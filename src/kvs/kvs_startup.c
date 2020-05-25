@@ -98,6 +98,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     worker_opts.reclaim_percentage_threshold = kvs->reclaim_percentage_threshold;
     worker_opts.shard = kvs->shards;
     worker_opts.target = kctx->bs;
+    worker_opts.meta_thread = spdk_get_thread();
 
     uint32_t i = 0;
     for(;i<kctx->opts->nb_works;i++){

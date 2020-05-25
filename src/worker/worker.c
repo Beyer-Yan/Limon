@@ -347,7 +347,8 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
     uint64_t pio_header_size = pool_header_size(nb_max_reqs*20);
     uint64_t size;
 
-    imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;;
+    imgr->meta_thread = opts->meta_thread;
+    imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;
     imgr->nb_pending_io = 0;
     imgr->read_hash.cache_hash = NULL;
     imgr->read_hash.page_hash = NULL;

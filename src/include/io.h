@@ -67,6 +67,9 @@ struct pending_io_hash{
 
 struct iomgr{
     struct spdk_io_channel *channel;
+    //When I resize blob, I shall send such operation to the 
+    //the thread that initializing the blobstore.
+    struct spdk_thread *meta_thread;
     uint32_t max_pending_io; 
     uint32_t nb_pending_io;
     struct pending_io_hash read_hash;

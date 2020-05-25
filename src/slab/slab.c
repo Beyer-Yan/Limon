@@ -3,6 +3,8 @@
 #include "kvutil.h"
 #include "kverrno.h"
 
+#include "spdk/thread.h"
+
 //All slab sizes are 4-bytes-aligment.
 static const uint32_t _g_slab_chunk_pages = 135;
 static uint32_t slab_sizes[]={
@@ -102,36 +104,65 @@ slab_create_async(struct iomgr* imgr,
 struct resize_ctx{
     struct slab* slab;
     uint64_t new_size; //chunks
-    uint64_t slot_idx;
-    void (*user_cb)(uint64_t slot_idx,void*ctx, int kverrno);
-    void (*truncate_cb)(void* ctx, int kverrno);
-    void* ctx;
+    struct spdk_thread *thread;
+    int kverrno;
+    void (*resize_cb)(void*ctx);
+    void (*user_slot_cb)(uint64_t slot_idx,void*ctx, int kverrno);
+    void (*user_truncate_cb)(void* ctx, int kverrno);
+    void* user_ctx;
+    TAILQ_HEAD(,resize_ctx) ctx_head;
+    TAILQ_ENTRY(resize_ctx) link;
+    UT_hash_handle hh;
 };
 
+static struct resize_ctx* _g_resize_ctx_hash = NULL; 
+
 static void
-_truncate_sync_md_complete(void*ctx, int bserrno){
+_slab_blob_resize_common(void*ctx){
     struct resize_ctx *rctx = ctx;
-    //Unmap failed.
-    if(bserrno){
-        rctx->truncate_cb(rctx->ctx,-KV_EIO);
-        free(rctx);
-        return;
+    struct resize_ctx* i,*tmp = NULL;
+    TAILQ_FOREACH_SAFE(i,&rctx->ctx_head,link,tmp){
+        TAILQ_REMOVE(&rctx->ctx_head,i,link);
+        i->resize_cb(i);
     }
-    rctx->truncate_cb(rctx->ctx,-KV_ESUCCESS);
-    free(rctx);
+    HASH_DEL(_g_resize_ctx_hash,rctx);
+    rctx->resize_cb(rctx);
 }
 
 static void
-_truncate_resize_complete(void*ctx, int bserrno){
+_slab_blob_md_sync_complete(void*ctx, int bserrno){
     struct resize_ctx *rctx = ctx;
+
+    rctx->kverrno =  bserrno ? -KV_EIO : -KV_ESUCCESS;
+    spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common,rctx);
+}
+
+static void
+_slab_blob_resize_complete(void*ctx, int bserrno){
+    struct resize_ctx *rctx = ctx;
+    struct spdk_blob *blob = rctx->slab->blob;
     if(bserrno){
-        //Unmap failed.
-        rctx->truncate_cb(rctx->ctx,-KV_EIO);
-        free(rctx);
+        //Resize error;
+        rctx->kverrno = -KV_EIO;
+        spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
         return;
     }
+    spdk_blob_sync_md(blob, _slab_blob_md_sync_complete, rctx);
+}
 
-    spdk_blob_sync_md(rctx->slab->blob,_truncate_sync_md_complete,rctx);
+static void
+_slab_blob_resize(void* ctx){
+    struct resize_ctx *rctx = ctx;
+    struct spdk_blob *blob = rctx->slab->blob;
+    uint64_t new_size = rctx->new_size;
+    spdk_blob_resize(blob,new_size,_slab_blob_resize_complete,rctx);
+}
+
+static void
+_slab_truncate_resize_complete(void*ctx){
+    struct resize_ctx *rctx = ctx;
+    rctx->user_truncate_cb(rctx->user_ctx,rctx->kverrno ? -KV_EIO : -KV_ESUCCESS);
+    free(rctx);
 }
 
 static void
@@ -139,11 +170,13 @@ _truncate_unmap_complete(void*ctx, int bserrno){
     struct resize_ctx *rctx = ctx;
     if(bserrno){
         //Unmap failed.
-        rctx->truncate_cb(rctx->ctx,KV_EIO);
+        rctx->user_truncate_cb(rctx->user_ctx,KV_EIO);
         free(rctx);
         return;
     }
-    spdk_blob_resize(rctx->slab->blob,rctx->new_size,_truncate_resize_complete,rctx);
+    rctx->resize_cb = _slab_truncate_resize_complete;
+    rctx->thread  = spdk_get_thread();
+    spdk_thread_send_msg(rctx->thread,_slab_blob_resize,rctx);
 }
 
 void slab_truncate_async(struct iomgr* imgr,
@@ -163,8 +196,8 @@ void slab_truncate_async(struct iomgr* imgr,
 
     rctx->slab = slab;
     rctx->new_size = new_size;
-    rctx->truncate_cb = cb;
-    rctx->ctx = ctx;
+    rctx->user_truncate_cb = cb;
+    rctx->user_ctx = ctx;
 
     //Tell the disk driver that the data can be deserted.
     uint64_t offset = new_size*slab->reclaim.nb_pages_per_chunk;
@@ -173,19 +206,18 @@ void slab_truncate_async(struct iomgr* imgr,
 }
 
 static void
-_slab_md_sync_complete(void*ctx, int kverrno){
+_slab_request_resize_complete_cb(void*ctx){
     struct resize_ctx* rctx = ctx;
     struct slab* slab = rctx->slab;
 
-    if(kverrno){
-        rctx->user_cb(UINT64_MAX,rctx->ctx,-KV_EIO);
+    if(rctx->kverrno){
+        rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,KV_EIO);
         free(rctx);
         return;
-    }  
-
+    }
     struct reclaim_node *node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
     if(!node){
-        rctx->user_cb(UINT64_MAX,rctx->ctx,-KV_EMEM);
+        rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,-KV_EMEM);
         free(rctx);
         return;
     }
@@ -205,21 +237,8 @@ _slab_md_sync_complete(void*ctx, int kverrno){
     node->nb_free_slots--;
     slab->reclaim.nb_free_slots--;
 
-    rctx->user_cb(slot_idx,rctx->ctx,-KV_ESUCCESS);
+    rctx->user_slot_cb(slot_idx,rctx->user_ctx,-KV_ESUCCESS);
     free(rctx); 
-}
-
-static void
-_resize_complete_cb(void*ctx, int kverrno){
-    struct resize_ctx* rctx = ctx;
-    struct slab* slab = rctx->slab;
-
-    if(kverrno){
-        rctx->user_cb(UINT64_MAX,rctx->ctx,KV_EIO);
-        free(rctx);
-        return;
-    }
-    spdk_blob_sync_md(slab->blob, _slab_md_sync_complete, rctx);
 }
 
 void slab_request_slot_async(struct iomgr* imgr,
@@ -254,6 +273,8 @@ void slab_request_slot_async(struct iomgr* imgr,
                 return;
             }
         }
+        //Never comes here.
+        assert(0);
     }
     
     if(slab->flag&SLAB_FLAG_RECLAIMING){
@@ -263,18 +284,32 @@ void slab_request_slot_async(struct iomgr* imgr,
     }
 
     //The slab is fully utilized. It should be resized.
-    uint64_t new_size = (slab->reclaim.nb_reclaim_nodes+1) * slab->reclaim.nb_chunks_per_node;
     //Since it seldom happens, I use malloc here, which does not cost much.
-    struct resize_ctx *resize_ctx = malloc(sizeof(struct resize_ctx));
-    if(!resize_ctx){
+    struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));
+    if(!rctx){
         cb(UINT64_MAX,ctx,-KV_EMEM);
         return;
     }
 
-    resize_ctx->slab = slab;
-    resize_ctx->user_cb = cb;
-    resize_ctx->ctx = ctx;
-    spdk_blob_resize(slab->blob,new_size,_resize_complete_cb,resize_ctx);
+    rctx->slab = slab;
+    rctx->new_size = (slab->reclaim.nb_reclaim_nodes+1) * slab->reclaim.nb_chunks_per_node;
+    rctx->thread = spdk_get_thread();
+    rctx->user_slot_cb = cb;
+    rctx->resize_cb = _slab_request_resize_complete_cb;
+    rctx->user_ctx = ctx;
+
+    struct resize_ctx *tmp = NULL;
+    HASH_FIND_64(_g_resize_ctx_hash,slab,rctx);
+    if(tmp!=NULL){
+        //Other request is resizing the slab;
+        TAILQ_INSERT_TAIL(&tmp->ctx_head,tmp,link);
+    }
+    else{
+        //This is the first resizing request.
+        TAILQ_INIT(&rctx->ctx_head);
+        HASH_ADD_64(_g_resize_ctx_hash,slab,rctx);
+        spdk_thread_send_msg(imgr->meta_thread,_slab_blob_resize,rctx);
+    }
 }
 
 void slab_free_slot_async(struct reclaim_mgr* rmgr,

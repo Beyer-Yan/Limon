@@ -3,6 +3,7 @@
 #include "item.h"
 #include "slab.h"
 #include "spdk/blob.h"
+#include "sodk/thread.h"
 
 struct worker_context;
 struct chunkmgr_worker_context;
@@ -15,7 +16,9 @@ struct worker_init_opts{
 
     uint32_t nb_shards;
     struct slab_shard *shard;
+
     struct spdk_blob_store *target;
+    struct spdk_thread *meta_thread;
 
     struct chunkmgr_worker_context *chunkmgr_worker;
 
