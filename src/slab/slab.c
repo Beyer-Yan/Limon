@@ -59,10 +59,10 @@ void slab_get_slab_conf(uint32_t **slab_size_array, uint32_t *nb_slabs, uint32_t
 
 bool 
 slab_is_slab_changed(uint32_t old_item_size, uint32_t new_item_size){
-    if(old_item_size != slab_find_slab(new_item_size)) {
-        return true;
-    }
-    return false;
+    uint32_t idx = slab_find_slab(new_item_size);
+    uint32_t size = slab_sizes[idx];
+    
+    return old_item_size == size ? true : false;
 }
 
 bool 
