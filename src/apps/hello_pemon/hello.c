@@ -15,13 +15,12 @@ struct _hello_context{
 
 static void
 _batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
-    struct kv_item *ori_item  = ctx;
     if(kverrno){
         printf("Get error\n");
         exit(-1);
     }
-    if(memcmp(ori_item->data+4,item->data+4,5)){
-        printf("Get value mismatch, ori_val:%5s, get_val:%5s\n",ori_item->data+4,item->data+4 );
+    if(memcmp("testb",item->data+4,5)){
+        printf("Get value mismatch, get_val:%5s\n",item->data+4 );
 
         exit(-1);
     }
@@ -36,7 +35,7 @@ static void
 _batch_read_test(void){
     printf("Testing get\n");
     int i = 0;
-    for(;i<1000000;i++){
+    for(;i<100000;i++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&i,4);
         item->meta.ksize = 4;
@@ -62,7 +61,7 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
 static void*
 _batch_test(void* ctx){
     int i = 0;
-    for(;i<1000000;i++){
+    for(;i<100000;i++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&i,4);
         memcpy(item->data+4,"testb",5);
