@@ -506,7 +506,7 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
         TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
     }   
     else{
-        SPDK_NOTICELOG("New chunk mem request\n");
+        //SPDK_NOTICELOG("New chunk mem request\n");
         TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
         chunkmgr_request_one_aysnc(cb_obj);
     }
