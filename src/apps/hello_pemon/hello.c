@@ -27,7 +27,7 @@ _batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
     if(i%10000==0){
-        printf("Put key success, count:%d\n",cnt);
+        printf("Gut key success, count:%d\n",cnt);
     }
 }
 
@@ -41,7 +41,7 @@ _batch_read_test(void){
         item->meta.ksize = 4;
         kv_get_async(item,_batch_get_complete,item);
     }
-    printf("Put test completes\n");
+    printf("Gut test completes\n");
     exit(-1);
 }
 
@@ -60,8 +60,9 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
 
 static void*
 _batch_test(void* ctx){
-    int i = 0;
-    for(;i<100000;i++){
+    int i = (int)ctx;
+    int nb = i + 100000;
+    for(;i<nb;i++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&i,4);
         memcpy(item->data+4,"testb",5);
@@ -77,7 +78,9 @@ _batch_test(void* ctx){
 static void
 _start_batch_test(void){
     pthread_t pid;
-    pthread_create(&pid,NULL,_batch_test,NULL);
+    
+    pthread_create(&pid,NULL,_batch_test,100000);
+    pthread_create(&pid,NULL,_batch_test,200000);
 }
 
 static void
