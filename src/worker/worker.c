@@ -50,7 +50,8 @@ _worker_business_processor_poll(void*ctx){
     int events = 0;
 
     // The pending requests in the worker context no-lock request queue
-    uint32_t p_reqs = spdk_ring_count(wctx->req_used_ring);
+    //uint32_t p_reqs = spdk_ring_count(wctx->req_used_ring);
+    uint32_t p_reqs = wctx->max_pending_kv_request - spdk_mempool_count(wctx->req_pool);
 
     // The avalaible pending requests in the worker request pool
     uint32_t a_reqs = wctx->kv_request_internal_pool->nb_frees;
@@ -107,8 +108,7 @@ _worker_business_processor_poll(void*ctx){
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
 
-            res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req,1,NULL);
-            assert(res==1);
+            spdk_mempool_put(wctx->req_pool,req);
         }
     }
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
@@ -209,11 +209,12 @@ submit_request_buffer(struct worker_context *wctx, uint32_t buffer_idx) {
 static struct kv_request*
 _get_free_req_buffer(struct worker_context* wctx){
     struct kv_request *req;
-    while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1)==0){
-        //No free kv_request are available.
-        //Wait here.
-        spdk_delay_us(1);
-    }
+    //while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1)==0){
+    //   //No free kv_request are available.
+    //    //Wait here.
+    //    spdk_delay_us(1);
+    //}
+    while( !(req = spdk_mempool_get(wctx->req_pool)) );
     return req;
 }
 
@@ -427,6 +428,10 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     wctx->req_free_ring = spdk_ring_create(SPDK_RING_TYPE_MP_MC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
     assert(wctx->req_used_ring!=NULL);
     assert(wctx->req_free_ring!=NULL);
+
+    wctx->req_pool = spdk_mempool_create("kv_req",nb_max_reqs,sizeof(struct kv_request),
+                                         SPDK_MEMPOOL_DEFAULT_CACHE_SIZE,
+                                         SPDK_ENV_SOCKET_ID_ANY);
 
     //Put all free kv_request into req_free_ring.
     uint32_t i = 0;
