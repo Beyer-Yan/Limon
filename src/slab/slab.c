@@ -4,6 +4,7 @@
 #include "kverrno.h"
 
 #include "spdk/thread.h"
+#include "spdk/log.h"
 
 //All slab sizes are 4-bytes-aligment.
 static const uint32_t _g_slab_chunk_pages = 135;
@@ -156,6 +157,8 @@ _slab_blob_resize(void* ctx){
     struct spdk_blob *blob = rctx->slab->blob;
     uint64_t new_size = rctx->new_size;
     spdk_blob_resize(blob,new_size,_slab_blob_resize_complete,rctx);
+    uint32_t old_size = rctx->slab->reclaim.nb_reclaim_nodes * rctx->slab->reclaim.nb_chunks_per_node;
+    SPDK_NOTICELOG("slab %u resized, old size:%u,new size:%u\n",rctx->slab->slab_size,old_size,rctx->new_size);
 }
 
 static void
