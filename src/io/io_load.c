@@ -180,6 +180,10 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
 
     struct cache_io *cio = NULL, *tmp = NULL;
 
+    //for debug
+    cb(ctx, KV_ESUCCESS);
+    return;
+
     cio = pool_get(imgr->cache_io_pool);
     assert(cio!=NULL);
     cio->cb = cb;
