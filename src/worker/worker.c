@@ -90,7 +90,7 @@ _worker_business_processor_poll(void*ctx){
     if(process_size > 0){
         for(;i<process_size;i++){
             uint64_t res;
-            res = spdk_ring_dequeue(wctx->req_used_ring,&req,1);
+            res = spdk_ring_dequeue(wctx->req_used_ring,(void**)&req,1);
             assert(req==1);
 
             req_internal = pool_get(wctx->kv_request_internal_pool);
@@ -107,7 +107,7 @@ _worker_business_processor_poll(void*ctx){
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
 
-            res = spdk_ring_enqueue(wctx->req_free_ring,&req,1,NULL);
+            res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req,1,NULL);
             assert(req==1);
         }
     }
@@ -220,7 +220,7 @@ _get_free_req_buffer(struct worker_context* wctx){
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
     uint64_t res;
-    res = spdk_ring_enqueue(wctx->req_used_ring,&req,1,NULL);
+    res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
     assert(res!=1);
 }
 
@@ -429,8 +429,11 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     assert(wctx->req_free_ring!=NULL);
 
     //Put all free kv_request into req_free_ring.
-    for( uint32_t i = 0;i<nb_max_reqs;i++){
-        spdk_ring_enqueue(wctx->req_free_ring, &wctx->request_queue[i],1,NULL);
+    uint32_t i = 0;
+    struct kv_request* req;
+    for(;i<nb_max_reqs;i++){
+        req = &wctx->request_queue[i];
+        spdk_ring_enqueue(wctx->req_free_ring, (void**)&req,1,NULL);
     }
 
     TAILQ_INIT(&wctx->submit_queue);
