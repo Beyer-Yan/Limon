@@ -174,6 +174,10 @@ iomgr_store_pages_async(struct iomgr* imgr,
 
     assert( ((uint64_t)buf) % KVS_PAGE_SIZE==0 );
 
+    //for debug
+    cb(ctx, KV_ESUCCESS);
+    return;
+
     struct cache_io *cio = NULL, *tmp = NULL;
 
     cio = pool_get(imgr->cache_io_pool);
