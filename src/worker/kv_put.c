@@ -160,6 +160,8 @@ _process_put_update_not_in_place_item(struct kv_request_internal *req, bool slab
 
 static void
 _process_put_add_store_data_cb(void*ctx, int kverrno){
+    
+    SPDK_NOTICELOG("Put storing complete\n");
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -203,6 +205,8 @@ _process_put_add_load_data_cb(void*ctx, int kverrno){
         return;  
     }
 
+    SPDK_NOTICELOG("Put storing item\n");
+
     //Now I load the item successfully. Next, I will perform writing.
     pagechunk_put_item(wctx->pmgr,entry->chunk_desc,entry->slot_idx,req->item);
     pagechunk_store_item_async( wctx->pmgr,
@@ -230,6 +234,8 @@ _process_put_add_pagechunk_cb(void* ctx, int kverrno){
 
 static void
 _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
+    
+    SPDK_NOTICELOG("Put add slot request, slot:%lu\n",slot_idx);
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -270,6 +276,8 @@ _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
 
 static void
 _process_put_add(struct kv_request_internal *req){
+
+    SPDK_NOTICELOG("Put add\n");
 
     struct worker_context *wctx = req->pctx.wctx;
 
