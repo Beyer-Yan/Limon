@@ -13,6 +13,7 @@
 #include "kvutil.h"
 
 #include "spdk/thread.h"
+#include "spdk/env.h"
 
 enum op_code { GET=0, PUT, DELETE, FIRST, SEEK, NEXT,};
 
@@ -86,6 +87,11 @@ struct worker_context{
     // thread unsafe queue, but we do not care the unsafety in single thread program
     TAILQ_HEAD(, kv_request_internal) submit_queue;
     TAILQ_HEAD(, kv_request_internal) resubmit_queue;
+
+    //User thread get a free kv_req and enqueue it to req_used_ring.
+    //worker thread get a used kv_req and enqueu a free req to req_free_ring.
+    struct spdk_ring *req_used_ring;  
+    struct spdk_ring *req_free_ring;
 
     struct object_cache_pool *kv_request_internal_pool;
 

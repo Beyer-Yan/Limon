@@ -50,7 +50,7 @@ _worker_business_processor_poll(void*ctx){
     int events = 0;
 
     // The pending requests in the worker context no-lock request queue
-    uint32_t p_reqs = atomic_load(&wctx->sent_requests) - atomic_load(&wctx->processed_requests);
+    uint32_t p_reqs = spdk_ring_count(wctx->req_used_ring);
 
     // The avalaible pending requests in the worker request pool
     uint32_t a_reqs = wctx->kv_request_internal_pool->nb_frees;
@@ -89,8 +89,10 @@ _worker_business_processor_poll(void*ctx){
      */
     if(process_size > 0){
         for(;i<process_size;i++){
-            uint32_t pr = atomic_load(&wctx->processed_requests);
-            req = &wctx->request_queue[pr%wctx->max_pending_kv_request];
+            uint64_t res;
+            res = spdk_ring_dequeue(wctx->req_used_ring,&req,1);
+            assert(req==1);
+
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
 
@@ -104,7 +106,9 @@ _worker_business_processor_poll(void*ctx){
             req_internal->pctx.no_lookup = false;
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
-            atomic_store(&wctx->processed_requests,pr+1);
+
+            res = spdk_ring_enqueue(wctx->req_free_ring,&req,1,NULL);
+            assert(req==1);
         }
     }
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
@@ -202,6 +206,24 @@ submit_request_buffer(struct worker_context *wctx, uint32_t buffer_idx) {
     return atomic_fetch_add(&wctx->sent_requests, 1);
 }
 
+static struct kv_request*
+_get_free_req_buffer(struct worker_context* wctx){
+    struct kv_request *req;
+    while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1)==0){
+        //No free kv_request are available.
+        //Wait here.
+        spdk_delay_us(1);
+    }
+    return req;
+}
+
+static void
+_submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
+    uint64_t res;
+    res = spdk_ring_enqueue(wctx->req_used_ring,&req,1,NULL);
+    assert(res!=1);
+}
+
 static inline void
 _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *item, 
                        worker_cb cb_fn,void* ctx,
@@ -215,52 +237,58 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
 
 void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                         worker_cb cb_fn, void* ctx){
-    unsigned int buffer_slot  = get_request_buffer(wctx);
-    struct kv_request *req = &wctx->request_queue[buffer_slot];
+
+    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,GET);
-    submit_request_buffer(wctx,buffer_slot);
+    _submit_req_buffer(wctx,req);
+    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                         worker_cb cb_fn, void* ctx){
-    unsigned int buffer_slot  = get_request_buffer(wctx);
-    struct kv_request *req = &wctx->request_queue[buffer_slot];
+    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,PUT);
-    submit_request_buffer(wctx,buffer_slot);
+    _submit_req_buffer(wctx,req);
+    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                            worker_cb cb_fn, void* ctx){
-    unsigned int buffer_slot  = get_request_buffer(wctx);
-    struct kv_request *req = &wctx->request_queue[buffer_slot];
+    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,DELETE);
-    submit_request_buffer(wctx,buffer_slot);
+    _submit_req_buffer(wctx,req);
+    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                          worker_cb cb_fn, void* ctx){
-    unsigned int buffer_slot  = get_request_buffer(wctx);
-    struct kv_request *req = &wctx->request_queue[buffer_slot];
+   // unsigned int buffer_slot  = get_request_buffer(wctx);
+    struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,FIRST);
-    submit_request_buffer(wctx,buffer_slot);
+    _submit_req_buffer(wctx,req);
+    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                          worker_cb cb_fn, void* ctx){
-    unsigned int buffer_slot  = get_request_buffer(wctx);
-    struct kv_request *req = &wctx->request_queue[buffer_slot];
+    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,SEEK);
-    submit_request_buffer(wctx,buffer_slot);
+    _submit_req_buffer(wctx,req);
+    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                          worker_cb cb_fn, void* ctx){
-    unsigned int buffer_slot  = get_request_buffer(wctx);
-    struct kv_request *req = &wctx->request_queue[buffer_slot];
+    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,NEXT);
-    submit_request_buffer(wctx,buffer_slot);
+    _submit_req_buffer(wctx,req);
+    //submit_request_buffer(wctx,buffer_slot);
 }
-
 
 static void
 _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
@@ -394,6 +422,17 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     wctx->sent_requests = 0;
     wctx->processed_requests = 0;
     wctx->max_pending_kv_request = nb_max_reqs;
+    
+    wctx->req_used_ring = spdk_ring_create(SPDK_RING_TYPE_MP_SC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
+    wctx->req_free_ring = spdk_ring_create(SPDK_RING_TYPE_MP_MC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
+    assert(wctx->req_used_ring!=NULL);
+    assert(wctx->req_free_ring!=NULL);
+
+    //Put all free kv_request into req_free_ring.
+    for( uint32_t i = 0;i<nb_max_reqs;i++){
+        spdk_ring_enqueue(wctx->req_free_ring, &wctx->request_queue[i],1,NULL);
+    }
+
     TAILQ_INIT(&wctx->submit_queue);
     TAILQ_INIT(&wctx->resubmit_queue);
 
