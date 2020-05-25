@@ -43,6 +43,7 @@ _batch_read_test(void){
         kv_get_async(item,_batch_get_complete,item);
     }
     printf("Put test completes\n");
+    exit(-1);
 }
 
 static void
