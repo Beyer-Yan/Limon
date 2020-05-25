@@ -7,15 +7,54 @@
 
 #include <pthread.h>
 
+#include <stdatomic.h>
+
 struct _hello_context{
     int i;
 };
+
+static void
+_batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
+    struct kv_item *ori_item  = ctx;
+    if(kverrno){
+        printf("Get error\n");
+        exit(-1);
+    }
+    if(memcmp(ori_item->data+4,item->data+4,5){
+        printf("Get value mismatch, ori_val:%5s, get_val:%5s\n",ori_item->data+4,item->data+4 );
+
+        exit(-1);
+    }
+    static atomic_int i = 0;
+    int cnt = atomic_fetch_add(&i,1);
+    if(i%10000==0){
+        printf("Put key success, count:%d\n",cnt);
+    }
+}
+
+static void
+_batch_read_test(void){
+    printf("Testing get\n");
+    int i = 0;
+    for(;i<1000000;i++){
+        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
+        memcpy(item->data,&i,4);
+        item->meta.ksize = 4;
+        kv_get_async(item,_batch_get_complete,item);
+    }
+    printf("Put test completes\n");
+}
 
 static void
 _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
     if(kverrno){
         printf("Put error\n");
         exit(-1);
+    }
+    static atomic_int i = 0;
+    int cnt = atomic_fetch_add(&i,1);
+    if(i%10000==0){
+        printf("Put key success, count:%d\n",cnt);
     }
 }
 
@@ -30,6 +69,7 @@ _batch_test(void* ctx){
         item->meta.vsize = 5;
         kv_put_async(item,_batch_put_complete,item);
     }
+    printf("Put test completes\n");
     return NULL;
 }
 
