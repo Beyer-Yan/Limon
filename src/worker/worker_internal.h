@@ -92,7 +92,6 @@ struct worker_context{
     //worker thread get a used kv_req and enqueu a free req to req_free_ring.
     struct spdk_ring *req_used_ring;  
     struct spdk_ring *req_free_ring;
-    struct spdk_mempool *req_pool;
 
     struct object_cache_pool *kv_request_internal_pool;
 
