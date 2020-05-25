@@ -495,6 +495,7 @@ _rebuild_complete(void*ctx, int kverrno){
         SPDK_ERRLOG("Fails in database recovering\n");
         assert(0);
     }
+    SPDK_NOTICELOG("Rebuild completes\n");
     //All initialization jobs complete.
     //Register pollers to start the service.
     struct spdk_poller *poller;
@@ -518,6 +519,7 @@ _do_worker_start(void*ctx){
 
     //Perform recovering for all slab file.
     //All kv request all blocked, before the recovering completes,
+    SPDK_NOTICELOG("Start rebuilding\n");
     worker_perform_rebuild_async(wctx,_rebuild_complete,wctx);
 }
 

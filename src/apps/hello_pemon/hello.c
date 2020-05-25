@@ -71,6 +71,7 @@ _batch_test(void* ctx){
         kv_put_async(item,_batch_put_complete,item);
     }
     printf("Put test completes\n");
+    _batch_read_test();
     return NULL;
 }
 
