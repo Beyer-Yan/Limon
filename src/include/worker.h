@@ -3,7 +3,7 @@
 #include "item.h"
 #include "slab.h"
 #include "spdk/blob.h"
-#include "sodk/thread.h"
+#include "spdk/thread.h"
 
 struct worker_context;
 struct chunkmgr_worker_context;
