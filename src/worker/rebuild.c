@@ -192,6 +192,8 @@ static void
 _rebuild_one_slab(struct rebuild_ctx* rctx){
     struct slab* slab  = rctx->cur->slab;
     
+    SPDK_NOTICELOG("Rebuilding shard:%u, slab:%u\n",rctx->cur->shard_idx,slab->slab_size);
+
     rctx->reclaim_node_idx = 0;
     //Assume that All slots are free.
     slab->reclaim.nb_free_slots = slab->reclaim.nb_total_slots;
