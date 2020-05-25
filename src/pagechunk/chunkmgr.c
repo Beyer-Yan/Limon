@@ -112,6 +112,8 @@ _chunkmgr_worker_get_one_chunk_mem(void *ctx){
     struct chunk_miss_callback *cb_obj = ctx;
     struct worker_context* requestor_wctx = _get_worker_context_from_pmgr(cb_obj->requestor_pmgr);
 
+    SPDK_NOTICELOG("Chunk mem request incomming,p_reqs:%u, mkgr_pool:%u\n", requestor_wctx->kv_request_internal_pool->nb_frees,requestor_wctx->pmgr->kv_chunk_request_pool->nb_frees );
+
     struct chunk_mem* mem = _get_one_chunk_mem();
     if(mem){
         cb_obj->mem = mem;

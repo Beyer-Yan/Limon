@@ -489,7 +489,6 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
                                  struct chunk_desc* desc,
                                  void(*cb)(void*ctx,int kverrno), 
                                  void* ctx){
-
     struct chunk_miss_callback *cb_obj = pool_get(pmgr->kv_chunk_request_pool);
     assert(cb_obj!=NULL);
     cb_obj->requestor_pmgr = pmgr;
