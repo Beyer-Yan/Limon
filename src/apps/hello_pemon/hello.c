@@ -62,6 +62,7 @@ static void*
 _batch_test(void* ctx){
     int i = (int)ctx;
     int nb = i + 100000;
+    printf("start id %d\n",i);
     for(;i<nb;i++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&i,4);
