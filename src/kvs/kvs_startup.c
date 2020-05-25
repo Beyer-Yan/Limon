@@ -84,7 +84,8 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     chunk_opts.wctx_array = wctx;
     chunk_opts.nb_pages_per_chunk = kctx->sl->nb_pages_per_chunk;
     chunk_opts.nb_max_cache_chunks = kctx->opts->max_cache_chunks;
-    chunk_opts.core_id  = kctx->opts->nb_works;
+    chunk_opts.core_id  = 0;
+    //Distribute the chunk manager thread in master core
     kctx->kvs->chunkmgr_worker = chunkmgr_worker_init(&chunk_opts);
 
     struct worker_init_opts worker_opts;
@@ -103,7 +104,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     uint32_t i = 0;
     for(;i<kctx->opts->nb_works;i++){
         worker_opts.reclaim_shard_start_id = i*kvs->nb_workers;
-        worker_opts.core_id = i;
+        worker_opts.core_id = i+1;
         wctx[i] = worker_init(&worker_opts);
     }
     
