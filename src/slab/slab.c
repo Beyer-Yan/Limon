@@ -305,7 +305,7 @@ void slab_request_slot_async(struct iomgr* imgr,
     HASH_FIND_64(_g_resize_ctx_hash,slab,tmp);
     if(tmp!=NULL){
         //Other request is resizing the slab;
-        TAILQ_INSERT_TAIL(&tmp->ctx_head,tmp,link);
+        TAILQ_INSERT_TAIL(&tmp->ctx_head,rctx,link);
     }
     else{
         //This is the first resizing request.
