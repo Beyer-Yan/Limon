@@ -98,7 +98,7 @@ _worker_business_processor_poll(void*ctx){
             req_internal->cb_fn = req->cb_fn;
             req_internal->shard = req->shard;
 
-            //I have to perform a lookup, since it is a new request.
+            //I do not perform a lookup, since it is a new request.
             req_internal->pctx.no_lookup = false;
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
@@ -395,7 +395,7 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     TAILQ_INIT(&wctx->resubmit_queue);
 
     wctx->kv_request_internal_pool = (struct object_cache_pool*)(wctx->request_queue + nb_max_reqs);
-    uint8_t* req_pool_data = (uint8_t*)(wctx->kv_request_internal_pool + pool_header_size(nb_max_reqs));
+    uint8_t* req_pool_data = (uint8_t*)wctx->kv_request_internal_pool + pool_header_size(nb_max_reqs);
 
     assert((uint64_t)wctx->kv_request_internal_pool%8==0);
     assert((uint64_t)req_pool_data%8==0);
