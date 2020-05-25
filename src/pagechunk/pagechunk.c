@@ -257,6 +257,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_ctx = ctx;
 
     cls_ctx->nb_segs = 0;
+    cls_ctx->cnt=0;
 
     uint8_t *buf;
     uint64_t start_page_in_slab;
