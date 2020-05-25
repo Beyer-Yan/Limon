@@ -477,6 +477,8 @@ static void _chunk_mem_request_finish(void*ctx){
         pmgr->nb_used_chunks++;
     }
 
+    SPDK_NOTICELOG("Get one chunk mem:%p\n",mem);
+
     struct chunk_miss_callback *tmp=NULL;
 
     TAILQ_FOREACH_SAFE(cb_obj,&desc->chunk_miss_callback_head,link,tmp){
