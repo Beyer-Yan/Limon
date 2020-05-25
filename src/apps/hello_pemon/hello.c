@@ -20,7 +20,7 @@ _batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
         printf("Get error\n");
         exit(-1);
     }
-    if(memcmp(ori_item->data+4,item->data+4,5){
+    if(memcmp(ori_item->data+4,item->data+4,5)){
         printf("Get value mismatch, ori_val:%5s, get_val:%5s\n",ori_item->data+4,item->data+4 );
 
         exit(-1);
