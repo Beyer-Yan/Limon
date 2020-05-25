@@ -176,11 +176,11 @@ _process_put_add_store_data_cb(void*ctx, int kverrno){
         mem_index_delete(wctx->mem_index,req->item);    
     }
     else{
-        SPDK_NOTICELOG("Put storing success for key:%d\n",*(int*)req->item->data);
         //Wonderful! Everthing is OK!
         req->cb_fn(req->ctx,NULL,-KV_ESUCCESS);
         entry->writing = 0;
     }
+    SPDK_NOTICELOG("Put storing completes for key:%d, err:%d\n",*(int*)req->item->data,kverrno);
     pool_release(wctx->kv_request_internal_pool,req);
     desc->flag &=~ CHUNK_PIN;
 }
@@ -205,7 +205,7 @@ _process_put_add_load_data_cb(void*ctx, int kverrno){
         return;  
     }
 
-    SPDK_NOTICELOG("Put storing item\n");
+    SPDK_NOTICELOG("Put add new load data completes, storing key:%d\n",*(int*)req->item->data);
 
     //Now I load the item successfully. Next, I will perform writing.
     pagechunk_put_item(wctx->pmgr,entry->chunk_desc,entry->slot_idx,req->item);
@@ -235,7 +235,7 @@ _process_put_add_pagechunk_cb(void* ctx, int kverrno){
 static void
 _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     
-    SPDK_NOTICELOG("Put add slot request, slot:%lu\n",slot_idx);
+    SPDK_NOTICELOG("Put add new slot request, slot:%lu\n",slot_idx);
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -277,8 +277,6 @@ _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
 static void
 _process_put_add(struct kv_request_internal *req){
 
-    SPDK_NOTICELOG("Put add\n");
-
     struct worker_context *wctx = req->pctx.wctx;
 
     struct index_entry new_entry;
@@ -306,6 +304,8 @@ _process_put_add(struct kv_request_internal *req){
 
     struct slab* slab = &(wctx->shards[shard_idx].slab_set[slab_idx]);
     req->pctx.slab = slab;
+
+    SPDK_NOTICELOG("Get slab from shard:%u, slab size:%u\n",req->shard,slab->slab_size);
 
     slab_request_slot_async(wctx->imgr,slab,_process_put_add_request_slot_cb,req);
 }
