@@ -471,13 +471,14 @@ static void _chunk_mem_request_finish(void*ctx){
     struct chunk_mem* mem = cb_obj->mem;
 
     if(!kverrno){
+        SPDK_NOTICELOG("Error in getting one chunk\n",mem);
         bitmap_clear_bit_all(mem->bitmap);
         desc->chunk_mem = mem;
         TAILQ_INSERT_HEAD(&pmgr->global_chunks,desc,link);
         pmgr->nb_used_chunks++;
     }
 
-    SPDK_NOTICELOG("Get one chunk mem:%p\n",mem);
+    //SPDK_NOTICELOG("Get one chunk mem:%p\n",mem);
 
     struct chunk_miss_callback *tmp=NULL;
 
