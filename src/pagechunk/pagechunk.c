@@ -471,7 +471,7 @@ static void _chunk_mem_request_finish(void*ctx){
     struct chunk_mem* mem = cb_obj->mem;
 
     if(!kverrno){
-        SPDK_NOTICELOG("Error in getting one chunk\n",mem);
+        //SPDK_NOTICELOG("Success in getting one chunk, err:%d\n",kverrno);
         bitmap_clear_bit_all(mem->bitmap);
         desc->chunk_mem = mem;
         TAILQ_INSERT_HEAD(&pmgr->global_chunks,desc,link);
