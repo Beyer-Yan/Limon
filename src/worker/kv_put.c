@@ -161,7 +161,6 @@ _process_put_update_not_in_place_item(struct kv_request_internal *req, bool slab
 static void
 _process_put_add_store_data_cb(void*ctx, int kverrno){
     
-    SPDK_NOTICELOG("Put storing complete\n");
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -177,6 +176,7 @@ _process_put_add_store_data_cb(void*ctx, int kverrno){
         mem_index_delete(wctx->mem_index,req->item);    
     }
     else{
+        SPDK_NOTICELOG("Put storing success for key:%d\n",*(int*)req->item->data);
         //Wonderful! Everthing is OK!
         req->cb_fn(req->ctx,NULL,-KV_ESUCCESS);
         entry->writing = 0;
