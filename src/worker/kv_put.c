@@ -176,7 +176,7 @@ _process_put_add_store_data_cb(void*ctx, int kverrno){
     }
 
     SPDK_NOTICELOG("Put storing completes for key:%d, err:%d\n",*(int*)req->item->data,kverrno);
-    
+
     pool_release(wctx->kv_request_internal_pool,req);
     desc->flag &=~ CHUNK_PIN;
     entry->writing = 0;
@@ -388,6 +388,8 @@ void worker_process_put(struct kv_request_internal *req){
 
     if(!entry){
         //item does not exist. It a new item!
+        static int i = 0;
+        memcpy(&i,req->item->data,4);
         SPDK_NOTICELOG("put new item, item->key:%d\n",*(int*)req->item->data);
         _process_put_add(req);
         return;
