@@ -26,7 +26,7 @@ _batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
     }
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
-    if(i%10000==0){
+    if(cnt%10000==0){
         printf("Gut key success, count:%d\n",cnt);
     }
 }
@@ -53,7 +53,7 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
     }
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
-    if(i%10000==0){
+    if(cnt%10000==0){
         printf("Put key success, count:%d\n",cnt);
     }
 }
