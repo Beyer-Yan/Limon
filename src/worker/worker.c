@@ -221,7 +221,7 @@ static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
     uint64_t res;
     res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
-    assert(res!=1);
+    assert(res==1);
 }
 
 static inline void
