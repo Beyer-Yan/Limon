@@ -50,8 +50,7 @@ _worker_business_processor_poll(void*ctx){
     int events = 0;
 
     // The pending requests in the worker context no-lock request queue
-    //uint32_t p_reqs = spdk_ring_count(wctx->req_used_ring);
-    uint32_t p_reqs = wctx->max_pending_kv_request - spdk_mempool_count(wctx->req_pool);
+    uint32_t p_reqs = spdk_ring_count(wctx->req_used_ring);
 
     // The avalaible pending requests in the worker request pool
     uint32_t a_reqs = wctx->kv_request_internal_pool->nb_frees;
