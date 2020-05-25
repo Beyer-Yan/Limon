@@ -91,7 +91,7 @@ _worker_business_processor_poll(void*ctx){
         for(;i<process_size;i++){
             uint64_t res;
             res = spdk_ring_dequeue(wctx->req_used_ring,(void**)&req,1);
-            assert(req==1);
+            assert(res==1);
 
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
@@ -108,7 +108,7 @@ _worker_business_processor_poll(void*ctx){
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
 
             res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req,1,NULL);
-            assert(req==1);
+            assert(res==1);
         }
     }
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
