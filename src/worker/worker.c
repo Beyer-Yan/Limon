@@ -38,8 +38,8 @@ _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal 
             worker_process_next(req);
             break;
         default:
-            req->cb_fn(req->ctx,NULL,-KV_EOP_UNKNOWN);
             pool_release(wctx->kv_request_internal_pool,req);
+            req->cb_fn(req->ctx,NULL,-KV_EOP_UNKNOWN);
             break;
     }
 }

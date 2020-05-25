@@ -22,8 +22,6 @@ _process_put_update_not_in_place_item_store_data_cb(void*ctx, int kverrno){
 
     if(kverrno){
         //Store data error, which may be caused by IO error.
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
-        entry->writing = 0;
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
     }
     else{
@@ -45,6 +43,8 @@ _process_put_update_not_in_place_item_store_data_cb(void*ctx, int kverrno){
     }
     pool_release(wctx->kv_request_internal_pool,req);
     desc->flag &=~ CHUNK_PIN;
+    entry->writing = 0;
+    req->cb_fn(req->ctx,NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
 
 static void
@@ -58,13 +58,13 @@ _process_put_update_not_in_place_item_load_data_cb(void*ctx, int kverrno){
 
     if(kverrno){
         //Load data error, which may be caused by IO error.
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
-
-        entry->writing = 0;
         pool_release( wctx->kv_request_internal_pool,req);
+        entry->writing = 0;
         entry->chunk_desc->flag &=~ CHUNK_PIN;
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
+        
+        req->cb_fn(req->ctx,NULL,-KV_EIO);
         return;
     }
 
@@ -103,9 +103,9 @@ _process_put_update_not_in_place_item_request_slot_cb(uint64_t slot_idx, void* c
     
     if(kverrno){
         //Slot request failed. This may be caused by out-of-disk-space.
-        req->cb_fn(req->ctx,NULL,-KV_EFULL);
-        entry->writing = 0;
         pool_release(wctx->kv_request_internal_pool,req);
+        entry->writing = 0;
+        req->cb_fn(req->ctx,NULL,-KV_EFULL);
         return;
     }
     struct chunk_desc* new_desc = pagechunk_get_desc(pctx->slab,slot_idx);
@@ -171,18 +171,17 @@ _process_put_add_store_data_cb(void*ctx, int kverrno){
     if(kverrno){
         //Store data error, which may be caused by IO error.
         //The newly inseerted index shall be deleted.
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
         slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
         mem_index_delete(wctx->mem_index,req->item);    
     }
-    else{
-        //Wonderful! Everthing is OK!
-        req->cb_fn(req->ctx,NULL,-KV_ESUCCESS);
-        entry->writing = 0;
-    }
+
     SPDK_NOTICELOG("Put storing completes for key:%d, err:%d\n",*(int*)req->item->data,kverrno);
+    
     pool_release(wctx->kv_request_internal_pool,req);
     desc->flag &=~ CHUNK_PIN;
+    entry->writing = 0;
+
+    req->cb_fn(req->ctx,NULL,kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
 
 static void
@@ -195,13 +194,13 @@ _process_put_add_load_data_cb(void*ctx, int kverrno){
 
     if(kverrno){
         //Load data error, which may be caused by IO error.
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
-
         pool_release(wctx->kv_request_internal_pool,req);
         entry->chunk_desc->flag &=~ CHUNK_PIN;
         //I have to free the allocated slot in background
         slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
-        mem_index_delete(wctx->mem_index,req->item);  
+        mem_index_delete(wctx->mem_index,req->item); 
+
+        req->cb_fn(req->ctx,NULL,-KV_EIO); 
         return;  
     }
 
@@ -244,9 +243,9 @@ _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     if(kverrno){
         //Slot request failed. This may be caused by out-of-disk-space.
         //Adding item failed.
-        req->cb_fn(req->ctx,NULL,-KV_EFULL);
         pool_release(wctx->kv_request_internal_pool,req);
         mem_index_delete(wctx->mem_index,req->item);
+        req->cb_fn(req->ctx,NULL,-KV_EFULL);
         return;
     }
     struct chunk_desc* desc = pagechunk_get_desc(pctx->slab,slot_idx);
@@ -294,8 +293,8 @@ _process_put_add(struct kv_request_internal *req){
     if(!entry){
         //The entry does not exist in memory index, but it returns an error.
         //So it is the OOM! Just return memory error.
-        req->cb_fn(req->ctx,NULL,-KV_EMEM);
         pool_release(wctx->kv_request_internal_pool,req);
+        req->cb_fn(req->ctx,NULL,-KV_EMEM);
         return;
     }
     req->pctx.entry = entry;
@@ -321,19 +320,11 @@ _process_put_single_page_store_data_cb(void* ctx, int kverrno){
     struct index_entry* entry       = pctx->entry;
     struct chunk_desc *desc         = entry->chunk_desc;
 
-    if(kverrno){
-        //Error hits when store data into disk
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
-    }
-    else{
-        assert(pagechunk_is_cached(desc,entry->slot_idx));
-        //Now we load the data into the page chunk cache. Just read it out happily.
-        struct kv_item *item = pagechunk_get_item(wctx->pmgr,desc,entry->slot_idx);
-        req->cb_fn(req->ctx, item, -KV_ESUCCESS);
-    }
-    entry->writing = 0;
     pool_release(wctx->kv_request_internal_pool,req);
+    entry->writing = 0;
     desc->flag &=~ CHUNK_PIN;
+
+    req->cb_fn(req->ctx, NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
 
 static void
@@ -365,11 +356,11 @@ _process_put_single_page_load_data_cb(void* ctx, int kverrno){
 
     if(kverrno){
         //Error hits when load data from disk
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
-
-        entry->writing = 0;
         pool_release(wctx->kv_request_internal_pool,req);
+        entry->writing = 0;
         desc->flag &=~ CHUNK_PIN;
+        
+        req->cb_fn(req->ctx,NULL,-KV_EIO);
         return;
     } 
 
