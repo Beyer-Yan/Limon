@@ -302,7 +302,7 @@ void slab_request_slot_async(struct iomgr* imgr,
     rctx->user_ctx = ctx;
 
     struct resize_ctx *tmp = NULL;
-    HASH_FIND_64(_g_resize_ctx_hash,slab,tmp);
+    HASH_FIND_PTR(_g_resize_ctx_hash,slab,tmp);
     if(tmp!=NULL){
         //Other request is resizing the slab;
         TAILQ_INSERT_TAIL(&tmp->ctx_head,rctx,link);
@@ -310,7 +310,7 @@ void slab_request_slot_async(struct iomgr* imgr,
     else{
         //This is the first resizing request.
         TAILQ_INIT(&rctx->ctx_head);
-        HASH_ADD_64(_g_resize_ctx_hash,slab,rctx);
+        HASH_ADD_PTR(_g_resize_ctx_hash,slab,rctx);
         spdk_thread_send_msg(imgr->meta_thread,_slab_blob_resize,rctx);
     }
 }
