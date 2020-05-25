@@ -175,7 +175,7 @@ _process_put_add_store_data_cb(void*ctx, int kverrno){
         mem_index_delete(wctx->mem_index,req->item);    
     }
 
-    SPDK_NOTICELOG("Put storing completes for key:%d, err:%d\n",*(int*)req->item->data,kverrno);
+    //SPDK_NOTICELOG("Put storing completes for key:%d, err:%d\n",*(int*)req->item->data,kverrno);
 
     pool_release(wctx->kv_request_internal_pool,req);
     desc->flag &=~ CHUNK_PIN;
@@ -204,7 +204,7 @@ _process_put_add_load_data_cb(void*ctx, int kverrno){
         return;  
     }
 
-    SPDK_NOTICELOG("Put add new load data completes, storing key:%d\n",*(int*)req->item->data);
+    //SPDK_NOTICELOG("Put add new load data completes, storing key:%d\n",*(int*)req->item->data);
 
     //Now I load the item successfully. Next, I will perform writing.
     pagechunk_put_item(wctx->pmgr,entry->chunk_desc,entry->slot_idx,req->item);
@@ -234,7 +234,7 @@ _process_put_add_pagechunk_cb(void* ctx, int kverrno){
 static void
 _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     
-    SPDK_NOTICELOG("Put add new slot request, slot:%lu\n",slot_idx);
+    //SPDK_NOTICELOG("Put add new slot request, slot:%lu\n",slot_idx);
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -304,7 +304,7 @@ _process_put_add(struct kv_request_internal *req){
     struct slab* slab = &(wctx->shards[shard_idx].slab_set[slab_idx]);
     req->pctx.slab = slab;
 
-    SPDK_NOTICELOG("Get slab from shard:%u, slab size:%u\n",req->shard,slab->slab_size);
+    //SPDK_NOTICELOG("Get slab from shard:%u, slab size:%u\n",req->shard,slab->slab_size);
 
     slab_request_slot_async(wctx->imgr,slab,_process_put_add_request_slot_cb,req);
 }
@@ -388,8 +388,6 @@ void worker_process_put(struct kv_request_internal *req){
 
     if(!entry){
         //item does not exist. It a new item!
-        static int i = 0;
-        memcpy(&i,req->item->data,4);
         SPDK_NOTICELOG("put new item, item->key:%d\n",*(int*)req->item->data);
         _process_put_add(req);
         return;

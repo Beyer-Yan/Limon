@@ -66,7 +66,7 @@ _worker_business_processor_poll(void*ctx){
     uint32_t process_size = p_reqs < a_reqs ? p_reqs : a_reqs;
     process_size = process_size < a_ios ? process_size : a_ios;
 
-    SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, a_ios:%u, process:%u\n",p_reqs,a_reqs, a_ios, process_size);
+    //SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, a_ios:%u, process:%u\n",p_reqs,a_reqs, a_ios, process_size);
 
     uint32_t i = 0;
     struct kv_request_internal *req_internal,*tmp=NULL;
