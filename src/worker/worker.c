@@ -381,9 +381,6 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     wctx->reclaim_shards_start_id = opts->reclaim_shard_start_id;
     wctx->reclaim_percentage_threshold = opts->reclaim_percentage_threshold;
     wctx->request_queue = (struct kv_request*)(wctx + 1);
-    wctx->buffered_request_idx = 0;
-    wctx->sent_requests = 0;
-    wctx->processed_requests = 0;
     wctx->max_pending_kv_request = nb_max_reqs;
     
     wctx->req_used_ring = spdk_ring_create(SPDK_RING_TYPE_MP_SC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
