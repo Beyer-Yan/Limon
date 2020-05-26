@@ -17,7 +17,7 @@ int
 main(int argc, char **argv){
     uint64_t i = 1;
     for(;i<10000;i++){
-        int res = test_hash(i,8);
+        int res = kv_hash(i,8);
         printf("hash:%d\n",res);
     }
 }
