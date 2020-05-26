@@ -50,17 +50,25 @@ _batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
 }
 
 static void
-_batch_read_test(void){
+_batch_read_test( struct batch_context *bctx){
     printf("Testing get\n");
-    int i = 0;
-    for(;i<100000;i++){
+    int end_item = bctx->start_num + bctx->nb_items;
+    int start_num = bctx->start_num;
+
+    struct timeval t0,t1;
+    gettimeofday(&t0,NULL);
+
+    for(;start_num<end_item;start_num++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
-        memcpy(item->data,&i,4);
+        memcpy(item->data,&start_num,4);
         item->meta.ksize = 4;
         kv_get_async(item,_batch_get_complete,item);
     }
-    printf("Gut test completes\n");
-    exit(-1);
+    printf("Get test completes\n");
+    gettimeofday(&t1,NULL);
+    long secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
+    long pps = bctx->nb_items/secs;
+    printf("Get test completes,w:%d, sec:%ld, items:%d,pps:%ld\n",bctx->core_id,secs,bctx->nb_items,pps);
 }
 
 static void
@@ -102,7 +110,7 @@ _batch_put_test(void* ctx){
     long secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
     long pps = bctx->nb_items/secs;
     printf("Put test completes,w:%d, sec:%ld, items:%d,pps:%ld\n",core_id,secs,bctx->nb_items,pps);
-    //_batch_read_test();
+    _batch_read_test(bctx);
     return NULL;
 }
 
