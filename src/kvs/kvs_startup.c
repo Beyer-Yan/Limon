@@ -187,8 +187,11 @@ _kvs_start_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
         return;
     }
 
+
     struct slab_layout *slab_base = &iter->sl->slab[iter->slab_idx];
     slab_base->resv = (uint64_t)blob;
+
+    SPDK_NOTICELOG("Open slab blob success, slab:%u,id:%u\n",slab_base->slab_size,iter->slab_idx);
 
     if(iter->slab_idx == iter->total_slabs - 1){
         //All slab have been opened;
