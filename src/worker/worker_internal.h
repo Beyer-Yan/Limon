@@ -70,6 +70,7 @@ struct worker_context{
     //The shards filed points to the shards field of kvs structure.
     struct slab_shard *shards;
     uint32_t nb_shards;
+    uint32_t core_id;
 
     //The migrating of shards below are processed by this worker. 
     uint32_t nb_reclaim_shards;

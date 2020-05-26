@@ -192,8 +192,10 @@ _get_free_req_buffer(struct worker_context* wctx){
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
     uint64_t res;
-    while( (res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL)) != 1);
-    assert(res==1);
+    res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
+    if(res!=1){
+        printf("Queue full, worker:%u\n",wctx->core_id);
+    }
 }
 
 static inline void
@@ -427,6 +429,8 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     spdk_cpuset_zero(&cpumask);
     spdk_cpuset_set_cpu(&cpumask,opts->core_id,true);
     snprintf(thread_name,sizeof(thread_name),"worker_%u",opts->core_id);
+
+    wctx->core_id = opts->core_id;
     wctx->target = opts->target;
     wctx->thread = spdk_thread_create(thread_name,&cpumask);
     //wctx->thread = spdk_thread_create(thread_name,NULL);
