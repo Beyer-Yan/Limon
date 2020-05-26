@@ -517,6 +517,11 @@ _rebuild_complete(void*ctx, int kverrno){
 }
 
 static void
+_rebuild_complete_test(void*ctx, int kverrno){
+    printf("Test OK\n");
+}
+
+static void
 _do_worker_start(void*ctx){
     struct worker_context* wctx = ctx;
 
@@ -527,7 +532,7 @@ _do_worker_start(void*ctx){
     //Perform recovering for all slab file.
     //All kv request all blocked, before the recovering completes,
     SPDK_NOTICELOG("Start rebuilding\n");
-    worker_perform_rebuild_async(wctx,_rebuild_complete,wctx);
+    worker_perform_rebuild_async(wctx,_rebuild_complete_test,wctx);
 }
 
 
