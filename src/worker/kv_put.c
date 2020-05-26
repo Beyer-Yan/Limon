@@ -279,7 +279,7 @@ _process_put_add(struct kv_request_internal *req){
 
     struct worker_context *wctx = req->pctx.wctx;
 
-    struct index_entry new_entry;
+    struct index_entry new_entry = {0};
     new_entry.writing = 1;
     new_entry.slot_idx = 0;
     new_entry.chunk_desc = NULL;

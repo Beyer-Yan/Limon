@@ -46,8 +46,6 @@ void worker_process_get(struct kv_request_internal *req){
     struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
 
-    printf("Get item, w:%d\n",wctx->core_id);
-
     if(!entry){
         //item does not exist
         pool_release(wctx->kv_request_internal_pool,req);
@@ -55,7 +53,6 @@ void worker_process_get(struct kv_request_internal *req){
         return;
     }
     else if(entry->writing|entry->deleting){
-        printf("Item writed, w:%d\n",wctx->core_id);
         //There is already a modifying operation for this item.
         //It should be resubmited.
         //For the entry in deleting state, it has to be re-lookuped, since its
