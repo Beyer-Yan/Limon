@@ -9,9 +9,25 @@
 
 #include <stdatomic.h>
 
-struct _hello_context{
-    int i;
+struct batch_context{
+    int core_id;
+    int start_num;
 };
+
+void pin_me_on(int core) {
+
+   cpu_set_t cpuset;
+   pthread_t thread = pthread_self();
+
+   CPU_ZERO(&cpuset);
+   CPU_SET(core, &cpuset);
+
+   int s = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+   if (s != 0){
+       printf("pin failed\n");
+       exit(-1);
+   }
+}
 
 static void
 _batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
@@ -59,10 +75,12 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
 }
 
 static void*
-_batch_test(void* ctx){
-    int i = (int)ctx;
-    int nb = i + 100000;
-    printf("start id %d\n",i);
+_batch_put_test(void* ctx){
+    struct batch_context *bctx = ctx;
+    int nb = bctx->start_num + 1000000;
+    pin_me_on(bctx->core_id);
+    printf("start id %d\n",bctx->core_id);
+    int i = bctx->start_num;
     for(;i<nb;i++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&i,4);
@@ -72,16 +90,24 @@ _batch_test(void* ctx){
         kv_put_async(item,_batch_put_complete,item);
     }
     printf("Put test completes\n");
-    _batch_read_test();
+    exit(0);
+    //_batch_read_test();
     return NULL;
 }
 
 static void
 _start_batch_test(void){
     pthread_t pid;
+    struct batch_context *ctx = malloc(sizeof(struct batch_context));
+    ctx->core_id = 10;
+    ctx->start_num = 1000000;
     
-    pthread_create(&pid,NULL,_batch_test,100000);
-    pthread_create(&pid,NULL,_batch_test,200000);
+    pthread_create(&pid,NULL,_batch_put_test,ctx);
+
+    ctx = malloc(sizeof(struct batch_context));
+    ctx->core_id = 11;
+    ctx->start_num = 2000000;
+    pthread_create(&pid,NULL,_batch_put_test,ctx);
 }
 
 static void

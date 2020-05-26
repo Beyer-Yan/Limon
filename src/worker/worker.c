@@ -191,10 +191,8 @@ _get_free_req_buffer(struct worker_context* wctx){
 
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
-    uint64_t res;
-    res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
-    if(res!=1){
-        printf("Queue full, worker:%u, count:%lu\n",wctx->core_id,spdk_ring_count(wctx->req_used_ring));
+    while(spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL) !=1 ){
+        spdk_delay_us(10);
     }
 }
 
