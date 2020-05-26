@@ -108,6 +108,16 @@ _start_batch_test(void){
     ctx->core_id = 11;
     ctx->start_num = 2000000;
     pthread_create(&pid,NULL,_batch_put_test,ctx);
+
+    ctx = malloc(sizeof(struct batch_context));
+    ctx->core_id = 12;
+    ctx->start_num = 3000000;
+    pthread_create(&pid,NULL,_batch_put_test,ctx);
+
+    ctx = malloc(sizeof(struct batch_context));
+    ctx->core_id = 13;
+    ctx->start_num = 4000000;
+    pthread_create(&pid,NULL,_batch_put_test,ctx);
 }
 
 static void
