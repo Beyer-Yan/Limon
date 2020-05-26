@@ -89,8 +89,7 @@ static void
 _kvs_start_close_all_blobs(void){
     //I have to send this operaiton to meta thread.
     struct slab* slab = &g_kvs->shards[0].slab_set[0];
-    spdk_thread_send_msg(g_kvs->meta_thread,_close_all_blobs,slab);
-    
+    spdk_thread_send_msg(g_kvs->meta_thread,_close_all_blobs,slab);   
 }
 
 static void
@@ -99,7 +98,11 @@ _kvs_shutdown_all_worker(void){
     for(;i<g_kvs->nb_workers;i++){
         worker_destroy(g_kvs->workers[i]);
     }
-    chunkmgr_worker_destroy();
+    // Bug in spdk v20. When I  destroy the chunkmkr thread without 
+    //io channels, the reactor will report a coredump that says the 
+    //chunkmgr thread still has io channel. But in fact, the chunkmgr
+    //has no any io channel.
+    //chunkmgr_worker_destroy();
 }
 
 void

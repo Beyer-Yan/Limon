@@ -170,7 +170,7 @@ main(int argc, char **argv){
     kvs_start_loop(&kvs_opts);
 
     //Shall not be here.
-    printf("Kvs start failed\n");
+    printf("KVS %s stoped\n",opts.name);
     
 	return -1;
 }
