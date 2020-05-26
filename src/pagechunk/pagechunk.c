@@ -165,10 +165,10 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
         last_page--;
     }
 
-    if(first_page>last_page){
-        //The item has already been cached, so this function shall not be called.
-        //If this happens, the program has bug here.
-        //assert(0); ???
+    if( (first_page>last_page) || (last_page==UINT32_MAX)){
+        //The item has already been cached.
+        //If the first_page==last_page, and they are 0, then the last_page will be
+        //the UINT32_MAX.
         cb(ctx,-KV_ESUCCESS);
         return;
     }

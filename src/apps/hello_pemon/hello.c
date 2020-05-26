@@ -107,7 +107,7 @@ _batch_put_test(void* ctx){
         kv_put_async(item,_batch_put_complete,item);
     }
     gettimeofday(&t1,NULL);
-    double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
+    double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000.0;
     double pps = bctx->nb_items/secs;
     printf("Put test completes,w:%d, sec:%f, items:%d,pps:%f\n",core_id,secs,bctx->nb_items,pps);
     _batch_read_test(bctx);
