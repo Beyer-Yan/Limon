@@ -8,9 +8,9 @@ int test_hash(uint64_t key,int numBuckets) {
   for(;j<numBuckets;){
     b = j;
     key = key*2862933555777941757 + 1;
-    j = (int64_t)( (double)(b+1)  * ((double)( (int64_t)1<<31) / (double)((key>>33)+1) ) );
+    j = (int64_t)( (double)(b+1)*((double)((int64_t)1<<31)/(double)((key>>33)+1)) );
   }
-  return (int32_t)b;
+  return (int)b;
 }
 
 int

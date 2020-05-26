@@ -148,16 +148,16 @@ _crc64(const char *s, int l) {
 }
 
 static uint32_t 
-_hash(uint64_t key, uint32_t num_buckets) {
-    uint64_t b = 1,j = 0;
-    while (j < num_buckets) {
-        b = j;
-        key = key * 2862933555777941757ULL + 1;
-        double x = (double)(1<<31);
-        double y = (double)(key >> 33) + 1;
-        j = (b + 1) * x / y;
-    }
-    return b;
+_hash(uint64_t key,int numBuckets) {
+  int64_t b  = -1;
+  int64_t j = 0;;
+
+  for(;j<numBuckets;){
+    b = j;
+    key = key*2862933555777941757 + 1;
+    j = (int64_t)( (double)(b+1)*((double)((int64_t)1<<31)/(double)((key>>33)+1)) );
+  }
+  return (uint32_t)b;
 }
 
 uint32_t 
