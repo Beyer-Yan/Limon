@@ -8,10 +8,12 @@
 #include <pthread.h>
 
 #include <stdatomic.h>
+#include <time.h>
 
 struct batch_context{
     int core_id;
     int start_num;
+    int nb_items;
 };
 
 void pin_me_on(int core) {
@@ -77,80 +79,51 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
 static void*
 _batch_put_test(void* ctx){
     struct batch_context *bctx = ctx;
-    int nb = bctx->start_num + 5000000;
-    pin_me_on(bctx->core_id);
+
+    int core_id = bctx->core_id;
+    int end_item = bctx->start_num + bctx->nb_items;
+    int start_num = bctx->start_num;
+
+    pin_me_on(core_id);
     printf("start id %d\n",bctx->core_id);
-    int i = bctx->start_num;
-    for(;i<nb;i++){
+
+    struct timeval t0,t1;
+    gettimeofday(&t0,NULL);
+
+    for(;start_num<end_item;start_num++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
-        memcpy(item->data,&i,4);
+        memcpy(item->data,&start_num,4);
         memcpy(item->data+4,"testb",5);
         item->meta.ksize = 4;
         item->meta.vsize = 5;
         kv_put_async(item,_batch_put_complete,item);
     }
-    printf("Put test completes\n");
-    exit(0);
+    gettimeofday(&t1,NULL);
+    long secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
+    long pps = bctx->nb_items/secs;
+    printf("Put test completes,w:%d, pps:%ld\n",core_id,pps);
     //_batch_read_test();
     return NULL;
 }
 
 static void
-_start_batch_test(void){
+_start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
     pthread_t pid;
-    struct batch_context *ctx = malloc(sizeof(struct batch_context));
-    ctx->core_id = 10;
-    ctx->start_num = 0;
+    struct batch_context *ctx ;
     
-    pthread_create(&pid,NULL,_batch_put_test,ctx);
-
-    ctx = malloc(sizeof(struct batch_context));
-    ctx->core_id = 11;
-    ctx->start_num = 5000000;
-    pthread_create(&pid,NULL,_batch_put_test,ctx);
-
-    ctx = malloc(sizeof(struct batch_context));
-    ctx->core_id = 12;
-    ctx->start_num = 10000000;
-    pthread_create(&pid,NULL,_batch_put_test,ctx);
-
-    ctx = malloc(sizeof(struct batch_context));
-    ctx->core_id = 13;
-    ctx->start_num = 15000000;
-    pthread_create(&pid,NULL,_batch_put_test,ctx);
-}
-
-static void
-_get_complete(void*ctx, struct kv_item* item,  int kverrno){
-    struct kv_item *origin_item = ctx;
-    if(!kverrno){
-        printf("Get sucess\n");
+    for(int i=0;i<nb_workers;i++){
+        ctx = malloc(sizeof(struct batch_context));
+        ctx->core_id = start_core_id + i;
+        ctx->start_num = i*nb_items_per_worker;
+        ctx->nb_items = nb_items_per_worker;
+        pthread_create(&pid,NULL,_batch_put_test,ctx);
     }
-    if(memcmp(origin_item->data,item->data,10)){
-        printf("Error:item mismatch!!\n");
-    }
-    _start_batch_test();
-}
-
-static void
-_put_complete(void*ctx, struct kv_item* item, int kverrno){
-    struct kv_item *origin_item = ctx;
-    if(!kverrno){
-        printf("Put sucess\n");
-    }
-    kv_get_async(origin_item,_get_complete,origin_item);
 }
 
 static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
-    //struct kv_item *item = malloc(sizeof(struct item_meta) + 5 + 5);
-    //item->meta.ksize = 5;
-    //item->meta.vsize = 5;
-    //memcpy(item->data,"12345",5);
-    //memcpy(item->data + 5,"54321",5);
-    //kv_put_async(item,_put_complete,item);
-    _start_batch_test();
+    _start_batch_test(10,4,1000000);
 }
 
 static void

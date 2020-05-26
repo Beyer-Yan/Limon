@@ -93,12 +93,6 @@ _worker_business_processor_poll(void*ctx){
             res = spdk_ring_dequeue(wctx->req_used_ring,(void**)&req,1);
             assert(res==1);
 
-            //For test
-            req->cb_fn(req->ctx,NULL,0);
-            free(req);
-
-            return 0;
-
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
 
@@ -185,15 +179,18 @@ _worker_slab_evaluation_poll(void* ctx){
 
 static struct kv_request*
 _get_free_req_buffer(struct worker_context* wctx){
-    struct kv_request *req = malloc(sizeof(struct kv_request));
+    struct kv_request *req;
+    while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1) !=1 ){
+        spdk_pause();
+    }
     return req;
 }
 
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
-    while(spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL) !=1 ){
-        spdk_delay_us(10);
-    }
+    uint64_t res;
+    res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
+    assert(res==1);
 }
 
 static inline void
