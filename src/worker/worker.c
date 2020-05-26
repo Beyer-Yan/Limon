@@ -94,9 +94,7 @@ _worker_business_processor_poll(void*ctx){
             assert(res==1);
 
             //For test
-            req->cb_fn(req->ctx,NULL,0);
-            res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req,1,NULL);
-            assert(res==1);
+            free(req);
 
             return 0;
 
@@ -183,51 +181,17 @@ _worker_slab_evaluation_poll(void* ctx){
     return events;
 }
 
-// Get a slot buffer from woker request queue.
-static uint32_t
-get_request_buffer(struct worker_context *wctx) {
-    uint32_t next_buffer = atomic_fetch_add(&wctx->buffered_request_idx,1);
-    while(1) {
-        uint32_t pending = next_buffer - atomic_load(&wctx->processed_requests);
-        if(pending >= wctx->max_pending_kv_request) { // Queue is full, wait
-            NOP10();
-        } else {
-            break;
-        }
-    }
-    return next_buffer % wctx->max_pending_kv_request;
-}
-
-// Once we get a slot, we fill it, and then submit it */
-static uint32_t
-submit_request_buffer(struct worker_context *wctx, uint32_t buffer_idx) {
-    while(1) {
-        uint32_t sr = atomic_load(&wctx->sent_requests);
-        if(sr%wctx->max_pending_kv_request != buffer_idx) { 
-        // Somebody else is enqueuing a request, wait!
-            NOP10();
-        } else {
-            break;
-        }
-    }
-    return atomic_fetch_add(&wctx->sent_requests, 1);
-}
 
 static struct kv_request*
 _get_free_req_buffer(struct worker_context* wctx){
-    struct kv_request *req;
-    while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1)==0){
-        //No free kv_request are available.
-        //Wait here.
-        spdk_delay_us(10);
-    }
+    struct kv_request *req = malloc(sizeof(struct kv_request));
     return req;
 }
 
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
     uint64_t res;
-    res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
+    while( (res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL)) != 1);
     assert(res==1);
 }
 
