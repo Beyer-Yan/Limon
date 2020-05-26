@@ -3,7 +3,7 @@
 
 int test_hash(uint64_t key,int numBuckets) {
   int64_t b  = -1;
-  int64_t j;
+  int64_t j = 0;;
 
   for(;j<numBuckets;){
     b = j;
