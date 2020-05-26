@@ -77,7 +77,7 @@ _batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
 static void*
 _batch_put_test(void* ctx){
     struct batch_context *bctx = ctx;
-    int nb = bctx->start_num + 1000000;
+    int nb = bctx->start_num + 5000000;
     pin_me_on(bctx->core_id);
     printf("start id %d\n",bctx->core_id);
     int i = bctx->start_num;
@@ -100,23 +100,23 @@ _start_batch_test(void){
     pthread_t pid;
     struct batch_context *ctx = malloc(sizeof(struct batch_context));
     ctx->core_id = 10;
-    ctx->start_num = 1000000;
+    ctx->start_num = 0;
     
     pthread_create(&pid,NULL,_batch_put_test,ctx);
 
     ctx = malloc(sizeof(struct batch_context));
     ctx->core_id = 11;
-    ctx->start_num = 2000000;
+    ctx->start_num = 5000000;
     pthread_create(&pid,NULL,_batch_put_test,ctx);
 
     ctx = malloc(sizeof(struct batch_context));
     ctx->core_id = 12;
-    ctx->start_num = 3000000;
+    ctx->start_num = 10000000;
     pthread_create(&pid,NULL,_batch_put_test,ctx);
 
     ctx = malloc(sizeof(struct batch_context));
     ctx->core_id = 13;
-    ctx->start_num = 4000000;
+    ctx->start_num = 15000000;
     pthread_create(&pid,NULL,_batch_put_test,ctx);
 }
 
