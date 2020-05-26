@@ -86,7 +86,7 @@ _kvs_start_close_all_blobs(void){
 }
 
 static void
-_kvs_shutdown_all_worker(){
+_kvs_shutdown_all_worker(void){
     uint32_t i=0;
     for(;i<g_kvs->nb_workers;i++){
         worker_destroy(g_kvs->workers[i]);
@@ -94,7 +94,7 @@ _kvs_shutdown_all_worker(){
     chunkmgr_worker_destroy();
 }
 
-static void
+void
 kvs_shutdown(void){
     //Close all the slab blob, and unload the blobstore.
     SPDK_NOTICELOG("Shutdowning kvs:\n",g_kvs->kvs_name);
