@@ -516,10 +516,6 @@ _rebuild_complete(void*ctx, int kverrno){
     wctx->business_poller = poller;
 }
 
-static void
-_rebuild_complete_test(void*ctx, int kverrno){
-    printf("Test OK\n");
-}
 
 static void
 _do_worker_start(void*ctx){
@@ -532,13 +528,35 @@ _do_worker_start(void*ctx){
     //Perform recovering for all slab file.
     //All kv request all blocked, before the recovering completes,
     SPDK_NOTICELOG("Start rebuilding\n");
-    worker_perform_rebuild_async(wctx,_rebuild_complete_test,wctx);
+    worker_perform_rebuild_async(wctx,_rebuild_complete,wctx);
 }
 
 
 void worker_start(struct worker_context* wctx){
     assert(wctx!=NULL);
     spdk_thread_send_msg(wctx->thread,_do_worker_start,wctx);
+}
+
+static void
+_do_worker_destroy_check_pollers(void*ctx){
+    struct worker_context* wctx = ctx;
+    if(spdk_thread_has_active_pollers(wctx->thread)){
+        SPDK_ERRLOG("Error in bdev poller unregister\n");
+    }
+    else{
+        spdk_thread_exit(wctx->thread);
+        spdk_thread_destroy(wctx->thread);
+
+        //Free all the memory
+        spdk_ring_free(wctx->req_free_ring);
+        spdk_ring_free(wctx->req_used_ring);
+
+        mem_index_destroy(wctx->mem_index);
+
+        //Release the worker context memory.
+        SPDK_NOTICELOG("Worker has been destroyed,w:%d\n",wctx->core_id);
+        free(wctx);
+    }
 }
 
 static void
@@ -551,17 +569,7 @@ _do_worker_destroy(void*ctx){
 
     spdk_put_io_channel(wctx->imgr->channel);
 
-    spdk_thread_exit(wctx->thread);
-    spdk_thread_destroy(wctx->thread);
-
-    //Free all the memory
-    spdk_ring_free(wctx->req_free_ring);
-    spdk_ring_free(wctx->req_used_ring);
-
-    mem_index_destroy(wctx->mem_index);
-
-    //Release the worker context memory.
-    free(wctx);
+    spdk_thread_send_msg(wctx->thread,_do_worker_destroy_check_pollers,wctx);
 }
 
 void worker_destroy(struct worker_context* wctx){
