@@ -26,6 +26,7 @@ struct kvs_start_opts{
 
 //The kvs is implemented in sinleton mode. Only one instance is the kvs allowed to startup.
 void kvs_start_loop(struct kvs_start_opts *opts);
+void kvs_shutdown(void);
 bool kvs_is_started(void);
 
 typedef void (*kv_cb)(void* ctx, struct kv_item* item, int kverrno);
