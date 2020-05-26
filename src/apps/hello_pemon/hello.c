@@ -66,9 +66,9 @@ _batch_read_test( struct batch_context *bctx){
     }
     printf("Get test completes\n");
     gettimeofday(&t1,NULL);
-    long secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000; //ms
-    double pps = bctx->nb_items/secs/1000.0;
-    printf("Get test completes,w:%d, sec:%ld, items:%d,pps:%f\n",bctx->core_id,secs,bctx->nb_items,pps);
+    double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
+    double pps = bctx->nb_items/secs;
+    printf("Get test completes,w:%d, sec:%f, items:%d,pps:%f\n",bctx->core_id,secs,bctx->nb_items,pps);
 }
 
 static void
@@ -107,9 +107,9 @@ _batch_put_test(void* ctx){
         kv_put_async(item,_batch_put_complete,item);
     }
     gettimeofday(&t1,NULL);
-    long secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000; //ms
-    double pps = bctx->nb_items/secs/1000.0;
-    printf("Put test completes,w:%d, sec:%ld, items:%d,pps:%f\n",core_id,secs,bctx->nb_items,pps);
+    double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
+    double pps = bctx->nb_items/secs;
+    printf("Put test completes,w:%d, sec:%f, items:%d,pps:%f\n",core_id,secs,bctx->nb_items,pps);
     _batch_read_test(bctx);
     return NULL;
 }
@@ -131,7 +131,7 @@ _start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
 static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
-    _start_batch_test(10,4,1000000);
+    _start_batch_test(10,1,1000000);
 }
 
 static void
