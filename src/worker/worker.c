@@ -94,6 +94,7 @@ _worker_business_processor_poll(void*ctx){
             assert(res==1);
 
             //For test
+            req->cb_fn(req->ctx,NULL,0);
             free(req);
 
             return 0;
