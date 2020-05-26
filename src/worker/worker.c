@@ -68,10 +68,7 @@ _worker_business_processor_poll(void*ctx){
 
     //SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, a_ios:%u, process:%u\n",p_reqs,a_reqs, a_ios, process_size);
 
-    uint32_t i = 0;
     struct kv_request_internal *req_internal,*tmp=NULL;
-    struct kv_request *req;
-
     /**
      * @brief Process the resubmit queue. I needn't get new cached requests
      * from requests pool, since requests from resubmit queue already have 
@@ -84,33 +81,33 @@ _worker_business_processor_poll(void*ctx){
     }
 
     /**
-     * @brief Process the submit queue. For every kv request from users, I have to
+     * @brief Batch process the submit queue. For every kv request from users, I have to
      * get a request_internal object from request object pool to wrap it.
      */
-    if(process_size > 0){
+    if(process_size>0){
+        struct kv_request *req_array[wctx->max_pending_kv_request];
+        uint64_t res = spdk_ring_dequeue(wctx->req_used_ring,(void**)&req_array,process_size);
+        assert(res==process_size);
+        
+        uint32_t i = 0;
         for(;i<process_size;i++){
-            uint64_t res;
-            res = spdk_ring_dequeue(wctx->req_used_ring,(void**)&req,1);
-            assert(res==1);
-
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
 
-            req_internal->ctx = req->ctx;
-            req_internal->item = req->item;
-            req_internal->op_code = req->op_code;
-            req_internal->cb_fn = req->cb_fn;
-            req_internal->shard = req->shard;
-
+            req_internal->ctx = req_array[i]->ctx;
+            req_internal->item = req_array[i]->item;
+            req_internal->op_code = req_array[i]->op_code;
+            req_internal->cb_fn = req_array[i]->cb_fn;
+            req_internal->shard = req_array[i]->shard;
             //I do not perform a lookup, since it is a new request.
             req_internal->pctx.no_lookup = false;
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
-
-            res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req,1,NULL);
-            assert(res==1);
         }
+        res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req_array,process_size,NULL);
+        assert(res==process_size);
     }
+ 
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
         TAILQ_REMOVE(&wctx->submit_queue,req_internal,link);
         _process_one_kv_request(wctx, req_internal);
