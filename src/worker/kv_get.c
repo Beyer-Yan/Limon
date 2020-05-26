@@ -11,6 +11,9 @@ _process_get_load_data_cb(void* ctx, int kverrno){
     struct index_entry* entry       = pctx->entry;
     struct chunk_desc *desc         = entry->chunk_desc;
 
+    pool_release(wctx->kv_request_internal_pool,req);
+    desc->flag &=~ CHUNK_PIN;
+
     if(kverrno){
         //Error hits when load data from disk
         req->cb_fn(req->ctx,NULL,-KV_EIO);
@@ -21,9 +24,6 @@ _process_get_load_data_cb(void* ctx, int kverrno){
         struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,entry->slot_idx);
         req->cb_fn(req->ctx, item, -KV_ESUCCESS);
     }
-
-    pool_release(wctx->kv_request_internal_pool,req);
-    desc->flag &=~ CHUNK_PIN;
 }
 
 static void 
@@ -46,13 +46,16 @@ void worker_process_get(struct kv_request_internal *req){
     struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
 
+    printf("Get item, w:%d\n",wctx->core_id);
+
     if(!entry){
         //item does not exist
-        req->cb_fn(req->ctx, NULL, -KV_EITEM_NOT_EXIST);
         pool_release(wctx->kv_request_internal_pool,req);
+        req->cb_fn(req->ctx, NULL, -KV_EITEM_NOT_EXIST);
         return;
     }
     else if(entry->writing|entry->deleting){
+        printf("Item writed, w:%d\n",wctx->core_id);
         //There is already a modifying operation for this item.
         //It should be resubmited.
         //For the entry in deleting state, it has to be re-lookuped, since its
