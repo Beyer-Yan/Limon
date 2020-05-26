@@ -441,11 +441,7 @@ pagechunk_evict_one_chunk(struct pagechunk_mgr *pmgr){
     struct chunk_desc *desc = NULL;
 
     TAILQ_FOREACH(desc,&pmgr->global_chunks,link){
-        printf("flag:%x\n",desc->flag);
-    }
-
-    TAILQ_FOREACH(desc,&pmgr->global_chunks,link){
-        if(!(desc->flag|CHUNK_PIN)){
+        if(!(desc->flag&CHUNK_PIN)){
             mem = desc->chunk_mem;
             desc->chunk_mem=NULL;
             break;
