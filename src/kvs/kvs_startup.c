@@ -103,7 +103,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
 
     uint32_t i = 0;
     for(;i<kctx->opts->nb_works;i++){
-        worker_opts.reclaim_shard_start_id = i*kvs->nb_workers;
+        worker_opts.reclaim_shard_start_id = i*worker_opts.nb_reclaim_shards;
         worker_opts.core_id = i+1;
         wctx[i] = worker_init(&worker_opts);
     }
