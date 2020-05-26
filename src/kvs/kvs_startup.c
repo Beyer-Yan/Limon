@@ -86,7 +86,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     chunk_opts.nb_max_cache_chunks = kctx->opts->max_cache_chunks;
     chunk_opts.core_id  = 0;
     //Distribute the chunk manager thread in master core
-    kctx->kvs->chunkmgr_worker = chunkmgr_worker_init(&chunk_opts);
+    kctx->kvs->chunkmgr_worker = chunkmgr_worker_alloc(&chunk_opts);
 
     struct worker_init_opts worker_opts;
     
@@ -105,7 +105,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     for(;i<kctx->opts->nb_works;i++){
         worker_opts.reclaim_shard_start_id = i*worker_opts.nb_reclaim_shards;
         worker_opts.core_id = i+1;
-        wctx[i] = worker_init(&worker_opts);
+        wctx[i] = worker_alloc(&worker_opts);
     }
     
     chunkmgr_worker_start();
@@ -146,7 +146,7 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
     kvs->max_io_pending_queue_size_per_worker = kctx->opts->max_io_pending_queue_size_per_worker;
 
     kvs->super_blob = kctx->super_blob;
-    kvs->bs = kctx->bs;
+    kvs->bs_target = kctx->bs;
 
     kvs->workers = (struct worker_context**)(kvs+1);
     kvs->shards = (struct slab_shard*)(kvs->workers + nb_workers);
@@ -404,13 +404,13 @@ kvs_start_loop(struct kvs_start_opts *opts){
         SPDK_NOTICELOG("Override shutdown callback!!\n");
     }
 
-    opts->spdk_opts- = _kvs_shutdown;
+    opts->spdk_opts->shutdown_cb = kvs_shutdown;
 
     rc = spdk_app_start(opts->spdk_opts, _kvs_start, opts);
     if (rc) {
-        SPDK_NOTICELOG("KVS starts ERROR!\n");
+        SPDK_NOTICELOG("KVS stops ERROR,%d!\n",rc);
     } else {
-        SPDK_NOTICELOG("KVS starts SUCCESS!\n");
+        SPDK_NOTICELOG("KVS stops SUCCESS!\n");
     }
 
 	spdk_app_fini();
