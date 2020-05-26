@@ -225,8 +225,6 @@ _blob_read_all_super_pages_complete(void* ctx, int bserrno){
         return;
 	}
 
-    SPDK_NOTICELOG("Loading super blob completes\n");
-
     _kvs_start_open_all_blobs(kctx); 
 }
 
@@ -316,7 +314,6 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
 
     kctx->io_unit_size = io_unit_size;
     
-    SPDK_NOTICELOG("Loading super blob\n");
     spdk_bs_get_super(bs,_kvs_start_get_super_complete,kctx);
 }
 
@@ -348,7 +345,7 @@ _kvs_start(void* ctx){
 		return;
 	}
 
-    SPDK_NOTICELOG("Loading blobstore,name%s\n",opts->devname);
+    SPDK_NOTICELOG("Loading blobstore,name:%s\n",opts->devname);
 
 	spdk_bs_load(bs_dev, NULL, _kvs_start_load_bs_complete, opts);
 }
