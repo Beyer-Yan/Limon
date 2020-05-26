@@ -98,7 +98,7 @@ _worker_business_processor_poll(void*ctx){
             res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req,1,NULL);
             assert(res==1);
 
-            return;
+            return 0;
 
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
