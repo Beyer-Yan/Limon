@@ -64,7 +64,7 @@ _kvs_start_close_blob_next(void*ctx,int bserrno){
     }
     uint32_t last_shard_idx = g_kvs->nb_shards-1;
     uint32_t last_slab_idx = g_kvs->shards[last_shard_idx].nb_slabs;
-    struct slab* last_slab = &g_kvs->shards[last_shard_idx].slab_set[last_slab_idx];
+    struct slab* last_slab = &g_kvs->shards[last_shard_idx].slab_set[last_slab_idx-1];
 
     if(slab==last_slab){
         //This is the last slab
