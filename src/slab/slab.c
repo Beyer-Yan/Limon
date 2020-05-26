@@ -185,6 +185,7 @@ _truncate_unmap_complete(void*ctx, int bserrno){
     }
     rctx->resize_cb = _slab_truncate_resize_complete;
     rctx->thread  = spdk_get_thread();
+
     spdk_thread_send_msg(rctx->thread,_slab_blob_resize,rctx);
 }
 
@@ -207,6 +208,7 @@ void slab_truncate_async(struct iomgr* imgr,
     rctx->new_size = new_size;
     rctx->user_truncate_cb = cb;
     rctx->user_ctx = ctx;
+    rctx->kverrno = 0;
 
     //Tell the disk driver that the data can be deserted.
     uint64_t offset = new_size*slab->reclaim.nb_pages_per_chunk;
@@ -220,7 +222,6 @@ _slab_request_resize_complete_cb(void*ctx){
     struct slab* slab = rctx->slab;
 
     if(rctx->kverrno){
-        SPDK_ERRLOG("Error in slab resizing request, core:%d, err:%d",spdk_env_get_current_core(),rctx->kverrno);
         rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,-KV_EIO);
         free(rctx);
         return;
@@ -307,6 +308,7 @@ void slab_request_slot_async(struct iomgr* imgr,
     rctx->user_slot_cb = cb;
     rctx->resize_cb = _slab_request_resize_complete_cb;
     rctx->user_ctx = ctx;
+    rctx->kverrno = 0;
 
     struct resize_ctx *tmp = NULL;
     HASH_FIND_PTR(_g_resize_ctx_hash,&slab,tmp);
