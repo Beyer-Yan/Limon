@@ -101,7 +101,7 @@ _batch_put_test(void* ctx){
     gettimeofday(&t1,NULL);
     long secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
     long pps = bctx->nb_items/secs;
-    printf("Put test completes,w:%d, pps:%ld\n",core_id,pps);
+    printf("Put test completes,w:%d, sec:%ld, items:%d,pps:%ld\n",core_id,secs,bctx->nb_items,pps);
     //_batch_read_test();
     return NULL;
 }
