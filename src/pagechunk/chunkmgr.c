@@ -159,7 +159,7 @@ void chunkmgr_release_one(struct pagechunk_mgr* pmgr,struct chunk_mem* mem){
 struct chunkmgr_worker_context* 
 chunkmgr_worker_alloc(struct chunkmgr_worker_init_opts *opts){
     assert(g_chunkmgr_worker.thread==NULL);
-    
+
     g_chunkmgr_worker.nb_business_workers = opts->nb_business_workers;
     g_chunkmgr_worker.nb_max_chunks = opts->nb_max_cache_chunks;
     g_chunkmgr_worker.nb_pages_per_chunk = opts->nb_pages_per_chunk;
@@ -189,8 +189,8 @@ void chunkmgr_worker_start(void){
     spdk_thread_send_msg(g_chunkmgr_worker.thread,_do_start,NULL);
 }
 
-void chunkmgr_worker_destroy(void){
-    assert(g_chunkmgr_worker.thread!=NULL);
+static void
+_do_destroy(void*ctx){
     spdk_thread_exit(g_chunkmgr_worker.thread);
     spdk_thread_destroy(g_chunkmgr_worker.thread);
     g_chunkmgr_worker.thread = NULL;
@@ -198,6 +198,11 @@ void chunkmgr_worker_destroy(void){
     //Release all the chunk memory
     spdk_free(_g_mem_pool);
     _g_mem_pool = NULL;
+    SPDK_NOTICELOG("chunkmgr worker destroyed\n");
+}
 
+void chunkmgr_worker_destroy(void){
+    assert(g_chunkmgr_worker.thread!=NULL);
+    spdk_thread_send_msg(g_chunkmgr_worker.thread,_do_destroy,NULL);
 }
 
