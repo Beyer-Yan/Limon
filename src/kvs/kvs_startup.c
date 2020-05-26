@@ -147,6 +147,8 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
 
     kvs->super_blob = kctx->super_blob;
     kvs->bs_target = kctx->bs;
+    kvs->meta_channel = kctx->channel;
+    kvs->meta_thread = spdk_get_thread();
 
     kvs->workers = (struct worker_context**)(kvs+1);
     kvs->shards = (struct slab_shard*)(kvs->workers + nb_workers);

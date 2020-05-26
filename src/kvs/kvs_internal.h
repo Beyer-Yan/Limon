@@ -24,9 +24,11 @@ struct kvs{
     uint32_t nb_shards;
     struct slab_shard *shards;
 
+    //For any operation for blob, it shall be send to meta thread
     struct spdk_blob *super_blob;
     struct spdk_blob_store *bs_target;
     struct spdk_io_channel *meta_channel;
+    struct spdk_thread *meta_thread;
 
     struct chunkmgr_worker_context *chunkmgr_worker;
     uint32_t nb_workers;

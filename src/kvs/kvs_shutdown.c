@@ -80,9 +80,17 @@ _kvs_start_close_blob_next(void*ctx,int bserrno){
 }
 
 static void
-_kvs_start_close_all_blobs(void){
-    struct slab* slab = &g_kvs->shards[0].slab_set[0];
+_close_all_blobs(void*ctx){
+    struct slab* slab = ctx;
     spdk_blob_close(slab->blob,_kvs_start_close_blob_next,slab);
+}
+
+static void
+_kvs_start_close_all_blobs(void){
+    //I have to send this operaiton to meta thread.
+    struct slab* slab = &g_kvs->shards[0].slab_set[0];
+    spdk_thread_send_msg(g_kvs->meta_thread,_close_all_blobs,slab);
+    
 }
 
 static void
