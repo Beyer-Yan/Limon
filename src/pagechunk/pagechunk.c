@@ -95,7 +95,7 @@ pagechunk_get_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     //Bump the LRU list.
     chunk_mgr->hit_times++;
     TAILQ_REMOVE(&chunk_mgr->global_chunks,desc,link);
-    TAILQ_INSERT_HEAD(&chunk_mgr->global_chunks,desc,link);
+    TAILQ_INSERT_TAIL(&chunk_mgr->global_chunks,desc,link);
     
     //Remove 8 bytes tsc;
     return (struct kv_item*)(addr + 8);
@@ -127,7 +127,7 @@ pagechunk_put_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     //Bump the LRU list.
     chunk_mgr->hit_times++;
     TAILQ_REMOVE(&chunk_mgr->global_chunks,desc,link);
-    TAILQ_INSERT_HEAD(&chunk_mgr->global_chunks,desc,link);
+    TAILQ_INSERT_TAIL(&chunk_mgr->global_chunks,desc,link);
 }
 
 static void
@@ -439,7 +439,7 @@ struct chunk_mem*
 pagechunk_evict_one_chunk(struct pagechunk_mgr *pmgr){
     struct chunk_mem * mem = NULL;
     struct chunk_desc *desc;
-    TAILQ_FOREACH_REVERSE(desc,&pmgr->global_chunks,chunk_list_head,link){
+    TAILQ_FOREACH(desc,&pmgr->global_chunks,link){
         if(!(desc->flag|CHUNK_PIN)){
             mem = desc->chunk_mem;
             desc->chunk_mem=NULL;
@@ -474,7 +474,7 @@ static void _chunk_mem_request_finish(void*ctx){
         //SPDK_NOTICELOG("Success in getting one chunk, err:%d\n",kverrno);
         bitmap_clear_bit_all(mem->bitmap);
         desc->chunk_mem = mem;
-        TAILQ_INSERT_HEAD(&pmgr->global_chunks,desc,link);
+        TAILQ_INSERT_TAIL(&pmgr->global_chunks,desc,link);
         pmgr->nb_used_chunks++;
     }
 
