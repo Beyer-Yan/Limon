@@ -5,6 +5,7 @@
 
 #include "spdk/thread.h"
 #include "spdk/log.h"
+#include "spdk/env.h"
 
 //All slab sizes are 4-bytes-aligment.
 static const uint32_t _g_slab_chunk_pages = 135;
@@ -219,6 +220,7 @@ _slab_request_resize_complete_cb(void*ctx){
     struct slab* slab = rctx->slab;
 
     if(rctx->kverrno){
+        SPDK_ERRLOG("Error in slab resizing request, core:%d, err:%d",spdk_env_get_current_core(),rctx->kverrno);
         rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,-KV_EIO);
         free(rctx);
         return;
