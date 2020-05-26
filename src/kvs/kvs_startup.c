@@ -191,8 +191,6 @@ _kvs_start_open_blob_next(void*ctx, struct spdk_blob* blob, int bserrno){
     struct slab_layout *slab_base = &iter->sl->slab[iter->slab_idx];
     slab_base->resv = (uint64_t)blob;
 
-    SPDK_NOTICELOG("Open slab blob success, slab:%u,id:%u\n",slab_base->slab_size,iter->slab_idx);
-
     if(iter->slab_idx == iter->total_slabs - 1){
         //All slab have been opened;
         free(iter);
@@ -226,6 +224,9 @@ _blob_read_all_super_pages_complete(void* ctx, int bserrno){
 		_unload_bs(kctx, "Error in read completion", bserrno);
         return;
 	}
+
+    SPDK_NOTICELOG("Loading super blob completes\n");
+
     _kvs_start_open_all_blobs(kctx); 
 }
 
@@ -298,6 +299,9 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
         _unload_bs(NULL, "Error in load callback",bserrno);
         return;
 	}
+
+    SPDK_NOTICELOG("Loading blobstore completes\n");
+
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(bs);
     if(io_unit_size!=KVS_PAGE_SIZE){
         SPDK_ERRLOG("Not a valid-formated kvs!!\n");
@@ -311,6 +315,8 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     kctx->opts = ctx;
 
     kctx->io_unit_size = io_unit_size;
+    
+    SPDK_NOTICELOG("Loading super blob\n");
     spdk_bs_get_super(bs,_kvs_start_get_super_complete,kctx);
 }
 
@@ -341,6 +347,8 @@ _kvs_start(void* ctx){
 		spdk_app_stop(-1);
 		return;
 	}
+
+    SPDK_NOTICELOG("Loading blobstore,name%s\n",opts->devname);
 
 	spdk_bs_load(bs_dev, NULL, _kvs_start_load_bs_complete, opts);
 }
