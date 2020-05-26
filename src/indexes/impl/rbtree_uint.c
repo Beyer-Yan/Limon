@@ -462,6 +462,55 @@ void delete_case6(rbtree t, node n) {
       rotate_right(t, n->parent);
    }
 }
+
+static void
+_do_rbtree_apply(rbtree_node node, void(*apply)(rbtree_node node)){
+   if(!node){
+      return;
+   }
+   apply(node);
+   
+   if(node->left){
+      _do_rbtree_apply(node->left,apply);
+   }
+
+   if(node->right){
+      _do_rbtree_apply(node->right,apply);
+   }
+}
+
+void rbtree_apply(rbtree t, void(*apply)(rbtree_node node)){
+   if (!t){
+      return ; 
+   }  
+   rbtree_node node = t->root;
+   _do_rbtree_apply(node,apply);
+}
+
+static void
+_do_rbtree_free(rbtree_node node){
+   if(!node){
+      return;
+   }
+
+   if(node->left){
+      _do_rbtree_free(node->left);
+   }
+   if(node->right){
+      _do_rbtree_free(node->right);
+   }
+   free(node);
+}
+
+void rbtree_destroy(rbtree t){
+   if (!t){
+		return; 
+   }  
+   rbtree_node node = t->root;
+
+   _do_rbtree_free(node);
+   free(t);
+}
 /*
 void rbtree_print_nodes(node n, compare_func show) {
    if(!n)

@@ -145,6 +145,9 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
     kvs->max_request_queue_size_per_worker = kctx->opts->max_request_queue_size_per_worker;
     kvs->max_io_pending_queue_size_per_worker = kctx->opts->max_io_pending_queue_size_per_worker;
 
+    kvs->super_blob = kctx->super_blob;
+    kvs->bs = kctx->bs;
+
     kvs->workers = (struct worker_context**)(kvs+1);
     kvs->shards = (struct slab_shard*)(kvs->workers + nb_workers);
 
@@ -396,6 +399,12 @@ kvs_start_loop(struct kvs_start_opts *opts){
 
     assert(!atomic_load(&g_started));
     atomic_store(&g_started,1);
+    
+    if(opts->spdk_opts->shutdown_cb){
+        SPDK_NOTICELOG("Override shutdown callback!!\n");
+    }
+
+    opts->spdk_opts- = _kvs_shutdown;
 
     rc = spdk_app_start(opts->spdk_opts, _kvs_start, opts);
     if (rc) {

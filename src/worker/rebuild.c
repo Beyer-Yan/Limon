@@ -22,8 +22,10 @@ struct rebuild_ctx{
     struct list_slab* cur;
     uint32_t reclaim_node_idx;
 
+    //Used for callback when a slab is rebuilt.
     void(*slab_rebuild_complete)(struct rebuild_ctx *rctx,int kverrno);
 
+    //User callback
     void(*cb_fn)(void*ctx, int kverrno);
     void*ctx;
 

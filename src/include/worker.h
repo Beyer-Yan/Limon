@@ -28,8 +28,9 @@ struct worker_init_opts{
     uint32_t reclaim_shard_start_id;
 };
 
-struct worker_context* worker_init(struct worker_init_opts* opts);
+struct worker_context* worker_alloc(struct worker_init_opts* opts);
 void worker_start(struct worker_context* wctx);
+void worker_destroy(struct worker_context* wctx);
 
 //The item in kv_cb function is allocated temporarily. If you want to do something else, please copy it out 
 //in kv_cb function
@@ -60,8 +61,9 @@ struct chunkmgr_worker_init_opts{
     uint32_t nb_pages_per_chunk;
     struct worker_context **wctx_array;
 };
-struct chunkmgr_worker_context* chunkmgr_worker_init(struct chunkmgr_worker_init_opts *opts);
+struct chunkmgr_worker_context* chunkmgr_worker_alloc(struct chunkmgr_worker_init_opts *opts);
 void chunkmgr_worker_start(void);
+void chunkmgr_worker_destroy(void);
 
 
 #endif

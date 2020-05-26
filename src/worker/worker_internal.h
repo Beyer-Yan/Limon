@@ -64,7 +64,6 @@ struct kv_request_internal{
 
 
 struct worker_context{
-    
     struct mem_index *mem_index;
     
     //The shards filed points to the shards field of kvs structure.
@@ -78,12 +77,8 @@ struct worker_context{
     uint32_t reclaim_percentage_threshold;
 
     //simple thread safe mp-sc queue
-    struct kv_request *request_queue;  // lock-free queue, multi-prod-single-cons
-    atomic_uint buffered_request_idx;  // Number of requests enqueued or in the process of being enqueued         
-    atomic_uint sent_requests;         // Number of requests fully enqueued     
-    atomic_uint processed_requests;    // Number of requests fully submitted and processed on disk  
-
-    uint32_t max_pending_kv_request;          // Maximum number of enqueued requests 
+    struct kv_request *request_queue;  // kv_request mempool for this worker
+    uint32_t max_pending_kv_request;   // Maximum number of enqueued requests 
 
     // thread unsafe queue, but we do not care the unsafety in single thread program
     TAILQ_HEAD(, kv_request_internal) submit_queue;
@@ -93,6 +88,10 @@ struct worker_context{
     //worker thread get a used kv_req and enqueu a free req to req_free_ring.
     struct spdk_ring *req_used_ring;  
     struct spdk_ring *req_free_ring;
+    
+    struct spdk_poller *business_poller;
+    struct spdk_poller* slab_evaluation_poller;
+    struct spdk_poller* reclaim_poller;
 
     struct object_cache_pool *kv_request_internal_pool;
 

@@ -140,6 +140,7 @@ _chunkmgr_worker_get_one_chunk_mem(void *ctx){
 }
 
 void chunkmgr_request_one_aysnc(struct chunk_miss_callback *cb_obj){
+    assert(g_chunkmgr_worker.thread!=NULL);
     spdk_thread_send_msg(cb_obj->requestor_pmgr->chunkmgr_worker->thread,
                          _chunkmgr_worker_get_one_chunk_mem, cb_obj);
 }
@@ -151,11 +152,14 @@ _chunkmgr_worker_release_one_chunk_mem(void *ctx){
 }
 
 void chunkmgr_release_one(struct pagechunk_mgr* pmgr,struct chunk_mem* mem){
+    assert(g_chunkmgr_worker.thread!=NULL);
     spdk_thread_send_msg(pmgr->chunkmgr_worker->thread, _chunkmgr_worker_release_one_chunk_mem, mem);
 }
 
 struct chunkmgr_worker_context* 
-chunkmgr_worker_init(struct chunkmgr_worker_init_opts *opts){
+chunkmgr_worker_alloc(struct chunkmgr_worker_init_opts *opts){
+    assert(g_chunkmgr_worker.thread==NULL);
+    
     g_chunkmgr_worker.nb_business_workers = opts->nb_business_workers;
     g_chunkmgr_worker.nb_max_chunks = opts->nb_max_cache_chunks;
     g_chunkmgr_worker.nb_pages_per_chunk = opts->nb_pages_per_chunk;
@@ -183,5 +187,17 @@ _do_start(void*ctx){
 void chunkmgr_worker_start(void){
     assert(g_chunkmgr_worker.thread!=NULL);
     spdk_thread_send_msg(g_chunkmgr_worker.thread,_do_start,NULL);
+}
+
+void chunkmgr_worker_destroy(void){
+    assert(g_chunkmgr_worker.thread!=NULL);
+    spdk_thread_exit(g_chunkmgr_worker.thread);
+    spdk_thread_destroy(g_chunkmgr_worker.thread);
+    g_chunkmgr_worker.thread = NULL;
+
+    //Release all the chunk memory
+    spdk_free(_g_mem_pool);
+    _g_mem_pool = NULL;
+
 }
 

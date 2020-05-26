@@ -6,6 +6,8 @@
 #include "kvutil.h"
 #include "kverrno.h"
 
+#include "spdk/blob.h"
+
 struct kvs{
 
     char* kvs_name;
@@ -22,11 +24,17 @@ struct kvs{
     uint32_t nb_shards;
     struct slab_shard *shards;
 
+    struct spdk_blob *super_blob;
+    struct spdk_blob_store *bs_target;
+    struct spdk_io_channel *meta_channel;
+
     struct chunkmgr_worker_context *chunkmgr_worker;
     uint32_t nb_workers;
     struct worker_context **workers;
 };
 
 extern struct kvs *g_kvs;
+
+void kvs_shutdown(void);
 
 #endif

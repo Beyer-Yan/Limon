@@ -207,56 +207,50 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
 void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                         worker_cb cb_fn, void* ctx){
 
-    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,GET);
     _submit_req_buffer(wctx,req);
-    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                         worker_cb cb_fn, void* ctx){
-    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,PUT);
     _submit_req_buffer(wctx,req);
-    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                            worker_cb cb_fn, void* ctx){
-    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,DELETE);
     _submit_req_buffer(wctx,req);
-    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                          worker_cb cb_fn, void* ctx){
-   // unsigned int buffer_slot  = get_request_buffer(wctx);
+    assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,FIRST);
     _submit_req_buffer(wctx,req);
-    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
                          worker_cb cb_fn, void* ctx){
-    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,SEEK);
     _submit_req_buffer(wctx,req);
-    //submit_request_buffer(wctx,buffer_slot);
 }
 
 void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
                          worker_cb cb_fn, void* ctx){
-    //unsigned int buffer_slot  = get_request_buffer(wctx);
+    assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,NEXT);
     _submit_req_buffer(wctx,req);
-    //submit_request_buffer(wctx,buffer_slot);
 }
 
 static void
@@ -445,7 +439,7 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
 }
 
 struct worker_context* 
-worker_init(struct worker_init_opts* opts)
+worker_alloc(struct worker_init_opts* opts)
 {
     uint64_t size = 0;
     uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
@@ -514,12 +508,15 @@ _rebuild_complete(void*ctx, int kverrno){
     struct spdk_poller *poller;
     poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
     assert(poller!=NULL);
+    wctx->slab_evaluation_poller = poller;
 
     poller = SPDK_POLLER_REGISTER(_worker_reclaim_poll,wctx,0);
     assert(poller!=NULL);
+    wctx->reclaim_poller = poller;
 
     poller = SPDK_POLLER_REGISTER(_worker_business_processor_poll,wctx,0);
     assert(poller!=NULL);
+    wctx->business_poller = poller;
 }
 
 static void
@@ -536,17 +533,48 @@ _do_worker_start(void*ctx){
     worker_perform_rebuild_async(wctx,_rebuild_complete,wctx);
 }
 
+
 void worker_start(struct worker_context* wctx){
+    assert(wctx!=NULL);
     spdk_thread_send_msg(wctx->thread,_do_worker_start,wctx);
+}
+
+static void
+_do_worker_destroy(void*ctx){
+    struct worker_context* wctx = ctx;
+    //Release all the poller.
+    spdk_poller_unregister(&wctx->business_poller);
+    spdk_poller_unregister(&wctx->reclaim_poller);
+    spdk_poller_unregister(&wctx->slab_evaluation_poller);
+
+    spdk_put_io_channel(wctx->imgr->channel);
+
+    spdk_thread_exit(wctx->thread);
+    spdk_thread_destroy(wctx->thread);
+
+    //Free all the memory
+    spdk_ring_free(wctx->req_free_ring);
+    spdk_ring_free(wctx->req_used_ring);
+
+    mem_index_destroy(wctx->mem_index);
+
+    //Release the worker context memory.
+    free(wctx);
+}
+
+void worker_destroy(struct worker_context* wctx){
+    assert(wctx!=NULL);
+    spdk_thread_send_msg(wctx->thread,_do_worker_destroy,wctx);
 }
 
 /************************************************************************************/
 //Statistics related.
 
 void worker_get_statistics(struct worker_context* wctx, struct worker_statistics* ws_out){
+    assert(wctx!=NULL);
     ws_out->chunk_miss_times = wctx->pmgr->miss_times;
     ws_out->chunk_hit_times  = wctx->pmgr->hit_times;
-    ws_out->nb_pending_reqs  = atomic_load(&wctx->sent_requests) - atomic_load(&wctx->processed_requests);
+    ws_out->nb_pending_reqs  = spdk_ring_count(wctx->req_used_ring);
     ws_out->nb_pending_ios   = wctx->imgr->nb_pending_io;
     ws_out->nb_used_chunks   = wctx->pmgr->nb_used_chunks;
 }

@@ -95,4 +95,8 @@ static inline void* rbtree_last(rbtree t){
 		node = node->right;
 	return node->value;
 }
+
+void rbtree_apply(rbtree t, void(*apply)(rbtree_node node));
+void rbtree_destroy(rbtree t);
+
 #endif
