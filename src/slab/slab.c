@@ -109,6 +109,9 @@ struct resize_ctx{
     struct spdk_thread *thread;
     int kverrno;
 
+    //Callback when the blob is resized. The ctx is the resize_ctx self.
+    void (*resize_cb)(void*ctx);
+
     void (*user_slot_cb)(uint64_t slot_idx,void*ctx, int kverrno);
     void (*user_truncate_cb)(void* ctx, int kverrno);
     void* user_ctx;
@@ -131,7 +134,7 @@ _slab_blob_md_sync_complete(void*ctx, int bserrno){
     }
 
     rctx->kverrno =  bserrno ? -KV_EIO : -KV_ESUCCESS;
-    spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common_cb,rctx);
+    spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
 }
 
 static void
@@ -142,7 +145,7 @@ _slab_blob_resize_complete(void*ctx, int bserrno){
         //Resize error;
         SPDK_NOTICELOG("blob resize error:%d\n",bserrno);
         rctx->kverrno = -KV_EIO;
-        spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common_cb,rctx);
+        spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
         return;
     }
     spdk_blob_sync_md(blob, _slab_blob_md_sync_complete, rctx);
@@ -324,6 +327,7 @@ void slab_request_slot_async(struct iomgr* imgr,
     struct resize_ctx *tmp = NULL;
     HASH_FIND_PTR(_g_resize_ctx_hash,&slab,tmp);
     if(tmp!=NULL){
+        rctx->resize_cb = NULL;
         //Other request is resizing the slab;
         TAILQ_INSERT_TAIL(&tmp->ctx_head,rctx,link);
     }
@@ -331,6 +335,7 @@ void slab_request_slot_async(struct iomgr* imgr,
         //This is the first resizing request.
         TAILQ_INIT(&rctx->ctx_head);
         HASH_ADD_PTR(_g_resize_ctx_hash,slab,rctx);
+        rctx->resize_cb = _slab_blob_resize_common_cb;
         spdk_thread_send_msg(imgr->meta_thread,_slab_blob_resize,rctx);
     }
 }
