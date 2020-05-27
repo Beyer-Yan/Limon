@@ -248,7 +248,7 @@ _slab_blob_resize_common_cb(void*ctx){
     struct resize_ctx* rctx = ctx;
     struct slab* slab = rctx->slab;
 
-    struct reclaim_node *node = NULL;;
+    struct reclaim_node *node = NULL;
 
     if(!rctx->kverrno){
         node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
@@ -282,9 +282,9 @@ _slab_blob_resize_common_cb(void*ctx){
         }
         else{
             uint64_t slot = _get_one_slot_from_free_slab(slab,node);
-            rctx->user_slot_cb(slot,rctx->user_ctx,-KV_ESUCCESS);
+            i->user_slot_cb(slot,i->user_ctx,-KV_ESUCCESS);
         }
-        free(rctx);
+        free(i);
     }
     HASH_DEL(_g_resize_ctx_hash,rctx);
     free(rctx);
