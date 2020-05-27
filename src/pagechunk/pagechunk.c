@@ -51,7 +51,8 @@ _get_position(struct chunk_desc *desc, uint64_t slot_idx,
 
 bool 
 pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx){
-    
+    assert(desc->chunk_mem!=NULL);
+
     uint32_t first_page, last_page;
     _get_position(desc,slot_idx,&first_page,&last_page);
 
@@ -142,6 +143,9 @@ _item_load_complete_cb_fn(void* ctx, int kverrno){
         //Load success. Set the cache bits.
         bitmap_set_bit_range(desc->chunk_mem->bitmap,first_page,last_page);
     }
+    else{
+        SPDK_ERRLOG("Error in loading item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+    }
     pool_release(cls_ctx->pmgr->load_store_ctx_pool,cls_ctx);
     cls_ctx->user_cb(cls_ctx->user_ctx,kverrno);
 }
@@ -209,6 +213,9 @@ _item_share_load_complete_cb_fn(void* ctx, int kverrno){
         if(!cls_ctx->kverrno){
             first_page!=UINT32_MAX ?  bitmap_set_bit(desc->chunk_mem->bitmap,first_page): (void)0;
             last_page !=UINT32_MAX ?  bitmap_set_bit(desc->chunk_mem->bitmap,last_page) : (void)0;
+        }
+        else{
+            SPDK_ERRLOG("Error in loading item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
         }
         pool_release(pmgr->load_store_ctx_pool,cls_ctx);
         cls_ctx->user_cb(cls_ctx->user_ctx,cls_ctx->kverrno);
@@ -297,6 +304,9 @@ _item_meta_load_complete_cb_fn(void* ctx, int kverrno){
         //Load success. Set the cache bits.
         bitmap_set_bit(desc->chunk_mem->bitmap,first_page);
     }
+    else{
+        SPDK_ERRLOG("Error in loading item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+    }
     pool_release(pmgr->load_store_ctx_pool,cls_ctx);
     cls_ctx->user_cb(cls_ctx->user_ctx,kverrno);
 }
@@ -352,6 +362,9 @@ _item_store_complete_cb_fn(void* ctx, int kverrno){
             bitmap_set_bit_range(desc->chunk_mem->bitmap,first_page,last_page);
         }
     }
+    else{
+        SPDK_ERRLOG("Error in storing item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+    }
     pool_release(pmgr->load_store_ctx_pool,cls_ctx);
     cls_ctx->user_cb(cls_ctx->user_ctx,cls_ctx->kverrno);
 }
@@ -390,8 +403,11 @@ static void
 _item_meta_store_complete_cb_fn(void* ctx, int kverrno){
     struct chunk_load_store_ctx* cls_ctx  = ctx;
     struct pagechunk_mgr *pmgr = cls_ctx->pmgr;
+    struct chunk_desc *desc = cls_ctx->desc;
 
-    //uint32_t first_page  = cls_ctx->first_page;
+    if(kverrno){
+        SPDK_ERRLOG("Error in storing item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+    }
 
     //I needn't set the chunk bitmap, since I have loaded the meta page and set the cache bit
     //in the loading phase.

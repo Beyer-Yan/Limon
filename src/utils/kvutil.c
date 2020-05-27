@@ -150,7 +150,7 @@ _crc64(const char *s, int l) {
 static uint32_t 
 _hash(uint64_t key,int numBuckets) {
   int64_t b  = -1;
-  int64_t j = 0;;
+  int64_t j = 0;
 
   for(;j<numBuckets;){
     b = j;

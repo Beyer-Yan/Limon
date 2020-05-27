@@ -11,7 +11,7 @@
 /*----------------------------------------------------------*/
 
 static void
-_process_put_update_not_in_place_item_store_data_cb(void*ctx, int kverrno){
+_process_put_case1_store_data_cb(void*ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -48,7 +48,7 @@ _process_put_update_not_in_place_item_store_data_cb(void*ctx, int kverrno){
 }
 
 static void
-_process_put_update_not_in_place_item_load_data_cb(void*ctx, int kverrno){
+_process_put_case1_load_data_cb(void*ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -74,11 +74,11 @@ _process_put_update_not_in_place_item_load_data_cb(void*ctx, int kverrno){
                                 wctx->imgr,
                                 new_entry->chunk_desc,
                                 new_entry->slot_idx,
-                                _process_put_update_not_in_place_item_store_data_cb, 
+                                _process_put_case1_store_data_cb, 
                                 req);
 }
 
-static void _process_put_update_not_in_place_item_pagechunk_request_cb(void* ctx, int kverrno){
+static void _process_put_case1_pagechunk_request_cb(void* ctx, int kverrno){
 
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
@@ -88,13 +88,13 @@ static void _process_put_update_not_in_place_item_pagechunk_request_cb(void* ctx
                                pctx->wctx->imgr, 
                                pctx->new_entry.chunk_desc,
                                pctx->new_entry.slot_idx,
-                               _process_put_update_not_in_place_item_load_data_cb,
+                               _process_put_case1_load_data_cb,
                                req);
 
 }
 
 static void 
-_process_put_update_not_in_place_item_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
+_process_put_case1_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -118,10 +118,10 @@ _process_put_update_not_in_place_item_request_slot_cb(uint64_t slot_idx, void* c
     if(!new_desc->chunk_mem){
         //Page chunk is evicted. Now request a new page chunk memory
         pagechunk_request_one_async(wctx->pmgr,new_desc,
-                                    _process_put_update_not_in_place_item_pagechunk_request_cb,req);
+                                    _process_put_case1_pagechunk_request_cb,req);
     }else if(pagechunk_is_cached(new_desc,slot_idx)){
         //I needn't load the item from disk, just write it.
-        _process_put_update_not_in_place_item_load_data_cb(req,-KV_ESUCCESS);
+        _process_put_case1_load_data_cb(req,-KV_ESUCCESS);
     }else{
         //I have to load the pages where the item stays in case I write dirty
         //data for other items that also stay in the same pages.
@@ -129,13 +129,13 @@ _process_put_update_not_in_place_item_request_slot_cb(uint64_t slot_idx, void* c
                                    wctx->imgr,
                                    new_desc,
                                    slot_idx,
-                                   _process_put_update_not_in_place_item_load_data_cb, 
+                                   _process_put_case1_load_data_cb, 
                                    req);
     }
 }
 
 static void 
-_process_put_update_not_in_place_item(struct kv_request_internal *req, bool slab_changed){
+_process_put_case1(struct kv_request_internal *req, bool slab_changed){
     struct process_ctx *pctx = &(req->pctx);
     struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
@@ -152,14 +152,112 @@ _process_put_update_not_in_place_item(struct kv_request_internal *req, bool slab
     }
 
     slab_request_slot_async(wctx->imgr,pctx->slab,
-                                 _process_put_update_not_in_place_item_request_slot_cb,
+                                 _process_put_case1_request_slot_cb,
                                  req);
 }
 
 /*-------------------------------------------------------------*/
 
 static void
-_process_put_add_store_data_cb(void*ctx, int kverrno){
+_process_put_case2_store_data_cb(void* ctx, int kverrno){
+    struct kv_request_internal *req = ctx;
+    struct process_ctx *pctx = &req->pctx;
+
+    struct worker_context *wctx     = pctx->wctx;
+    struct index_entry* entry       = pctx->entry;
+    struct chunk_desc *desc         = entry->chunk_desc;
+
+    pool_release(wctx->kv_request_internal_pool,req);
+    entry->writing = 0;
+    desc->flag &=~ CHUNK_PIN;
+
+    req->cb_fn(req->ctx, NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
+}
+
+
+static void
+_process_put_case2_cached(struct kv_request_internal *req){
+
+    struct process_ctx *pctx = &req->pctx;
+
+    pagechunk_put_item(pctx->wctx->pmgr,
+                       pctx->entry->chunk_desc, 
+                       pctx->entry->slot_idx,
+                       req->item);
+
+    pagechunk_store_item_async(pctx->wctx->pmgr,
+                               pctx->wctx->imgr,
+                               pctx->entry->chunk_desc,
+                               pctx->entry->slot_idx,
+                               _process_put_case2_store_data_cb,
+                               req);
+}
+
+static void
+_process_put_case2_load_data_cb(void* ctx, int kverrno){
+    struct kv_request_internal *req = ctx;
+    struct process_ctx *pctx = &req->pctx;
+
+    struct worker_context *wctx     = pctx->wctx;
+    struct index_entry* entry       = pctx->entry;
+    struct chunk_desc *desc         = entry->chunk_desc;
+
+    if(kverrno){
+        //Error hits when load data from disk
+        pool_release(wctx->kv_request_internal_pool,req);
+        entry->writing = 0;
+        desc->flag &=~ CHUNK_PIN;
+        
+        req->cb_fn(req->ctx,NULL,-KV_EIO);
+        return;
+    } 
+    _process_put_case2_cached(req);
+}
+
+static void 
+_process_put_case2_pagechunk_cb(void* ctx, int kverrno){
+    struct kv_request_internal *req = ctx;
+    struct process_ctx *pctx = &req->pctx;
+    // Now, load the data from disk.
+    assert(!kverrno);
+
+    pagechunk_load_item_share_async(pctx->wctx->pmgr,
+                              pctx->wctx->imgr, 
+                              pctx->entry->chunk_desc,
+                              pctx->entry->slot_idx,
+                              _process_put_case2_load_data_cb,
+                              req);
+}
+
+static void
+_process_put_case2(struct kv_request_internal *req){
+    struct process_ctx *pctx = &(req->pctx);
+    struct worker_context *wctx     = pctx->wctx;
+    struct index_entry *entry = req->pctx.entry;
+    struct chunk_desc *desc = entry->chunk_desc;
+
+    // Now I know that the item is stored into single page. So if the page chunk
+    // is evicted, I have to get a new page chunk memory.
+    if(!desc->chunk_mem){
+        //Page chunk is evicted , Now request a new page chunk memory
+        pagechunk_request_one_async(wctx->pmgr,desc,_process_put_case2_pagechunk_cb,req);
+    }
+    else if(pagechunk_is_cached(desc,entry->slot_idx)){
+        //The item is cached and stored in single page, just update in place
+        _process_put_case2_cached(req);
+    }
+    else{
+        //The item is stored into a single page but not cached, so I have to load 
+        //the data into page chunk cache before I perform update
+        pagechunk_load_item_share_async(wctx->pmgr,wctx->imgr, desc,entry->slot_idx,
+                                    _process_put_case2_load_data_cb,req);
+    }
+}
+
+
+/*-------------------------------------------------------------*/
+static void
+_process_put_case3_store_data_cb(void*ctx, int kverrno){
     
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
@@ -185,7 +283,7 @@ _process_put_add_store_data_cb(void*ctx, int kverrno){
 }
 
 static void
-_process_put_add_load_data_cb(void*ctx, int kverrno){
+_process_put_case3_load_data_cb(void*ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -212,12 +310,12 @@ _process_put_add_load_data_cb(void*ctx, int kverrno){
                                 wctx->imgr,
                                 entry->chunk_desc,
                                 entry->slot_idx,
-                                _process_put_add_store_data_cb, 
+                                _process_put_case3_store_data_cb, 
                                 req);
 }
 
 static void 
-_process_put_add_pagechunk_cb(void* ctx, int kverrno){
+_process_put_case3_pagechunk_cb(void* ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
 
@@ -227,12 +325,12 @@ _process_put_add_pagechunk_cb(void* ctx, int kverrno){
                                pctx->wctx->imgr, 
                                pctx->entry->chunk_desc,
                                pctx->entry->slot_idx,
-                               _process_put_add_load_data_cb,
+                               _process_put_case3_load_data_cb,
                                req);
 }
 
 static void
-_process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
+_process_put_case3_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     
     //SPDK_NOTICELOG("Put add new slot request, slot:%lu\n",slot_idx);
     struct kv_request_internal *req = ctx;
@@ -258,10 +356,10 @@ _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
 
     if(!desc->chunk_mem){
         //Page chunk is evicted. Now request a new page chunk memory
-        pagechunk_request_one_async(wctx->pmgr,desc,_process_put_add_pagechunk_cb,req);
+        pagechunk_request_one_async(wctx->pmgr,desc,_process_put_case3_pagechunk_cb,req);
     }else if(pagechunk_is_cached(desc,slot_idx)){
         //I needn't load the item from disk, just write it.
-        _process_put_add_load_data_cb(req,-KV_ESUCCESS);
+        _process_put_case3_load_data_cb(req,-KV_ESUCCESS);
     }else{
         //I have to load the pages where the item stays in case I write dirty
         //data for other items that also stay in the same pages.
@@ -269,13 +367,13 @@ _process_put_add_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
                                   wctx->imgr,
                                   desc,
                                   slot_idx,
-                                  _process_put_add_load_data_cb, 
+                                  _process_put_case3_load_data_cb, 
                                   req);
     }
 }
 
 static void
-_process_put_add(struct kv_request_internal *req){
+_process_put_case3(struct kv_request_internal *req){
 
     struct worker_context *wctx = req->pctx.wctx;
 
@@ -307,82 +405,27 @@ _process_put_add(struct kv_request_internal *req){
 
     //SPDK_NOTICELOG("Get slab from shard:%u, slab size:%u\n",req->shard,slab->slab_size);
 
-    slab_request_slot_async(wctx->imgr,slab,_process_put_add_request_slot_cb,req);
+    slab_request_slot_async(wctx->imgr,slab,_process_put_case3_request_slot_cb,req);
 }
 
 /*--------------------------------------------------------------------*/
 
-static void
-_process_put_single_page_store_data_cb(void* ctx, int kverrno){
-    struct kv_request_internal *req = ctx;
-    struct process_ctx *pctx = &req->pctx;
-
-    struct worker_context *wctx     = pctx->wctx;
-    struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = entry->chunk_desc;
-
-    pool_release(wctx->kv_request_internal_pool,req);
-    entry->writing = 0;
-    desc->flag &=~ CHUNK_PIN;
-
-    req->cb_fn(req->ctx, NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
-}
-
-static void
-_process_put_update_single_page_cached(struct kv_request_internal *req){
-
-    struct process_ctx *pctx = &req->pctx;
-
-    pagechunk_put_item(pctx->wctx->pmgr,
-                       pctx->entry->chunk_desc, 
-                       pctx->entry->slot_idx,
-                       req->item);
-
-    pagechunk_store_item_async(pctx->wctx->pmgr,
-                               pctx->wctx->imgr,
-                               pctx->entry->chunk_desc,
-                               pctx->entry->slot_idx,
-                               _process_put_single_page_store_data_cb,
-                               req);
-}
-
-static void
-_process_put_single_page_load_data_cb(void* ctx, int kverrno){
-    struct kv_request_internal *req = ctx;
-    struct process_ctx *pctx = &req->pctx;
-
-    struct worker_context *wctx     = pctx->wctx;
-    struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = entry->chunk_desc;
-
-    if(kverrno){
-        //Error hits when load data from disk
-        pool_release(wctx->kv_request_internal_pool,req);
-        entry->writing = 0;
-        desc->flag &=~ CHUNK_PIN;
-        
-        req->cb_fn(req->ctx,NULL,-KV_EIO);
-        return;
-    } 
-
-    _process_put_update_single_page_cached(req);
-}
-
-static void 
-_process_put_single_page_pagechunk_cb(void* ctx, int kverrno){
-    struct kv_request_internal *req = ctx;
-    struct process_ctx *pctx = &req->pctx;
-    // Now, load the data from disk.
-    assert(!kverrno);
-
-    pagechunk_load_item_share_async(pctx->wctx->pmgr,
-                              pctx->wctx->imgr, 
-                              pctx->entry->chunk_desc,
-                              pctx->entry->slot_idx,
-                              _process_put_single_page_load_data_cb,
-                              req);
-}
-
+/**
+ * @brief put case1 : for an item that is updated not in place. The case is designed to 
+ *                    process items that are stored across pages or the size of the slab
+ *                    for the item is changed. Under such case, the item shall be stored
+ *                    into another slot, and the original data is marked as "delete" and 
+ *                    posted to the background reclaim manager.
+ * 
+ *        put case2 : for an item that is updated in place. The case is designed to process
+ *                    items that are stored in a page. Under such case, the item is updated
+ *                    directly in place. No extra reclaiming work shall be performed.
+ *        
+ *        put case3 : for the new item. I need request a new slot and insert it into the mem
+ *                    index.
+ * 
+ * @param req The kv_request_internal object
+ */
 void worker_process_put(struct kv_request_internal *req){
     struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
@@ -390,7 +433,7 @@ void worker_process_put(struct kv_request_internal *req){
     if(!entry){
         //item does not exist. It a new item!
         //SPDK_NOTICELOG("put new item, item->key:%d\n",*(int*)req->item->data);
-        _process_put_add(req);
+        _process_put_case3(req);
         return;
     }
     if(entry->writing | entry->deleting){
@@ -414,30 +457,15 @@ void worker_process_put(struct kv_request_internal *req){
         //The item is stored into multi page, so I needn't
         //load it and I do not pay attention to page chunk evicting.
         //Just add the item into other place.
-        _process_put_update_not_in_place_item(req,false);
+        _process_put_case1(req,false);
     }
     else if(slab_is_slab_changed(desc->slab_size,item_packed_size(req->item))){
         //The updated item is not situable for the slab, I have to write it
         //into other slab. So I needn't load it and I do not pay 
         //attention to page chunk evicting. Just add the item into other place.
-        _process_put_update_not_in_place_item(req,true);
+        _process_put_case1(req,true);
     }
     else{
-        // Now I know that the item is stored into single page. So if the page chunk
-        // is evicted, I have to get a new page chunk memory.
-        if(!desc->chunk_mem){
-            //Page chunk is evicted , Now request a new page chunk memory
-            pagechunk_request_one_async(wctx->pmgr,desc,_process_put_single_page_pagechunk_cb,req);
-        }
-        else if(pagechunk_is_cached(desc,entry->slot_idx)){
-            //The item is cached and stored in single page, just update in place
-            _process_put_update_single_page_cached(req);
-        }
-        else{
-            //The item is stored into a single page but not cached, so I have to load 
-            //the data into page chunk cache before I perform update
-            pagechunk_load_item_share_async(wctx->pmgr,wctx->imgr, desc,entry->slot_idx,
-                                      _process_put_single_page_load_data_cb,req);
-        }
+        _process_put_case2(req);
     }
 }

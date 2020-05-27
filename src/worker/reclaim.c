@@ -2,6 +2,8 @@
 #include "assert.h"
 #include "kverrno.h"
 
+#include "spdk/log.h"
+
 static void _default_reclaim_io_cb_fn(void*ctx, int kverrno){
     struct slab_migrate_request *req = ctx;
     if(!kverrno){
@@ -19,12 +21,11 @@ _process_one_pending_delete_store_data_cb(void* ctx, int kverrno){
     struct worker_context *wctx = del->rctx.wctx;
     struct chunk_desc *desc         = del->rctx.desc;
 
-    if(!del->io_cb_fn){
-        del->io_cb_fn(del->ctx, (!kverrno)?-KV_EIO:-KV_ESUCCESS);
-    }
-
     pool_release(wctx->rmgr->pending_delete_pool,del);
     desc->flag &=~ CHUNK_PIN;
+    if(del->io_cb_fn){
+        del->io_cb_fn(del->ctx, (!kverrno)?-KV_EIO:-KV_ESUCCESS);
+    }
 }
 
 static void
@@ -32,22 +33,33 @@ _process_one_pending_delete_load_data_cb(void* ctx, int kverrno){
     struct pending_item_delete *del = ctx;
     struct worker_context *wctx     = del->rctx.wctx;
     struct chunk_desc *desc         = del->rctx.desc;
+    struct slab* slab = del->slab;
+    uint64_t slot_idx = del->slot_idx;
 
     if(kverrno){
         //Error hits when load data from disk
-        if(!del->io_cb_fn){
-            del->io_cb_fn(del->ctx,-KV_EIO);
-        }
         pool_release(wctx->rmgr->pending_delete_pool,del);
         desc->flag &=~ CHUNK_PIN;
+
+        if(del->io_cb_fn){
+            del->io_cb_fn(del->ctx,-KV_EIO);
+        }
+
         return;
     }
 
-    //Now I get only the meta data into the page chunk cache.
-    struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,del->slot_idx);
-    item->meta.ksize=0;
-    pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,desc,del->slot_idx,
-                               _process_one_pending_delete_store_data_cb,del);
+    if(!slab_is_slot_occupied(slab,slot_idx)){
+        //Now I get only the meta data into the page chunk cache.
+        //And the slot is not allocated, just write tombstone 
+        struct kv_item *item = pagechunk_get_item(wctx->pmgr,desc,slot_idx);
+        item->meta.ksize=0;
+    }
+    //The slot has been cached,  but the slot may not be utilized.
+    //The other flyling may have put the data into the slot or be going
+    //to put it, but I need not care more.
+    pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,desc,slot_idx,
+                            _process_one_pending_delete_store_data_cb,del);
+
 }
 
 static void 
@@ -58,12 +70,34 @@ _process_one_pending_delete_pagechunk_cb(void* ctx, int kverrno){
     // Now, load the data from disk.
     assert(!kverrno);
 
-    pagechunk_load_item_meta_async(wctx->pmgr,
-                              wctx->imgr, 
-                              del->rctx.desc,
-                              del->slot_idx,
-                              _process_one_pending_delete_load_data_cb,
-                              del);
+    struct slab* slab = del->slab;
+    uint64_t slot_idx = del->slot_idx;
+    struct chunk_desc* desc = pagechunk_get_desc(slab,slot_idx);
+
+    if(slab_is_slot_occupied(slab,slot_idx) && pagechunk_is_cached(desc,slot_idx) ){
+        //I am going to reclaim the  slot, but  it is re-allocated by other one.
+
+        //Other write operation has loaded the slot and put data the slot.
+        //I may not write tombstone since the other operation has acquired
+        //the slot. Two cases are considered below:
+        // - case1 : the other writing request has put data into the slot, and I
+        //need not write tombstone anymore. Just issue empty writing request in
+        //case that other write request fails.
+        // - case2: the other writing request has acquired this slot, but the data
+        //has not been put into the slot. Since other writing request will put new
+        //data into the slot, I still never need write tombstone.
+        //But I don't know whether the other flying writing request finished, I have
+        //to issue an empty writing request for this slot.
+        pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,desc,slot_idx,
+                            _process_one_pending_delete_store_data_cb,del);
+    }
+    else{
+        //Ether the slot has been acquired but the slot has not been cached, or the slot is not
+        //re-allcated, I shall issue a data loading command.
+        pagechunk_load_item_meta_async(wctx->pmgr,wctx->imgr, 
+                                        del->rctx.desc,del->slot_idx,
+                                        _process_one_pending_delete_load_data_cb,del);
+    }
 }
 
 static void
@@ -79,18 +113,16 @@ _process_one_pending_delete(struct pending_item_delete *del){
     del->rctx.desc = desc;
 
     if(!desc->chunk_mem){
-        pagechunk_request_one_async(wctx->pmgr,desc,_process_one_pending_delete_pagechunk_cb,del);
+        pagechunk_request_one_async(wctx->pmgr,desc,
+                                    _process_one_pending_delete_pagechunk_cb,del);
     }
     else if(pagechunk_is_cached(desc,del->slot_idx)){
         _process_one_pending_delete_load_data_cb(del,-KV_ESUCCESS);
     }
     else{
-        pagechunk_load_item_meta_async(wctx->pmgr,
-                                  wctx->imgr,
-                                  desc,
-                                  del->slot_idx,
-                                  _process_one_pending_delete_load_data_cb,
-                                  del);
+        pagechunk_load_item_meta_async(wctx->pmgr,wctx->imgr,
+                                  desc,del->slot_idx,
+                                  _process_one_pending_delete_load_data_cb,del);
     }
 }
 
@@ -127,7 +159,6 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
     
     if(kverrno){
         //Error hits when store data into disk
-        mig->io_cb_fn(mig->ctx,-KV_EIO);
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,slab,mig->new_slot,NULL,NULL);
     }
@@ -142,6 +173,8 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
     pool_release(wctx->kv_request_internal_pool,mig);
     mig->rctx.desc->flag &=~ CHUNK_PIN;
     mig->new_desc->flag &=~ CHUNK_PIN;
+
+    mig->io_cb_fn(mig->ctx,kverrno ? -KV_EIO : -KV_ESUCCESS );
 }
 
 static void
@@ -152,13 +185,14 @@ _process_one_pending_migrate_new_load_data_cb(void* ctx, int kverrno){
 
     if(kverrno){
         //Error hits when load data from disk
-        mig->io_cb_fn(mig->ctx,-KV_EIO);
-
         pool_release(wctx->rmgr->pending_migrate_pool,mig);
         mig->rctx.desc->flag &=~ CHUNK_PIN;
         mig->new_desc->flag &=~ CHUNK_PIN;
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,slab,mig->new_slot,NULL,NULL);
+
+        mig->io_cb_fn(mig->ctx,-KV_EIO);
+
         return;
     }
 
@@ -246,9 +280,11 @@ _process_one_pending_migrate_load_data_cb(void* ctx, int kverrno){
 
     if(kverrno){
         //Error hits when load data from disk
-        mig->io_cb_fn(mig->ctx,-KV_EIO);
         pool_release(wctx->rmgr->pending_migrate_pool,mig);
         desc->flag &=~ CHUNK_PIN;
+
+        mig->io_cb_fn(mig->ctx,-KV_EIO);
+
         return;
     }
 
@@ -296,10 +332,10 @@ _process_one_pending_migrate(struct pending_item_migrate *mig){
         //And I have to check the slot occupation. 
         //If it is written not-in-place, I needn't do anything.
         if(!slab_is_slot_occupied(slab,mig->slot_idx)){
-            mig->io_cb_fn(mig->ctx,-KV_ESUCCESS);
-            
+
             pool_release(wctx->rmgr->pending_migrate_pool,mig);
             mig->rctx.desc->flag &=~ CHUNK_PIN;
+            mig->io_cb_fn(mig->ctx,-KV_ESUCCESS);
             return;
         }
     }
@@ -315,7 +351,9 @@ _process_one_pending_migrate(struct pending_item_migrate *mig){
     desc->flag |= CHUNK_PIN;
 
     if(!desc->chunk_mem){
-        pagechunk_request_one_async(wctx->pmgr,desc,_process_one_pending_migrate_pagechunk_cb,mig);
+        pagechunk_request_one_async(wctx->pmgr,desc,
+                                    _process_one_pending_migrate_pagechunk_cb,
+                                    mig);
     }
     else if(pagechunk_is_cached(desc,mig->slot_idx)){
         _process_one_pending_migrate_load_data_cb(mig,-KV_ESUCCESS);
