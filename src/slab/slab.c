@@ -158,7 +158,7 @@ _slab_blob_resize(void* ctx){
     uint64_t new_size = rctx->new_size;
     spdk_blob_resize(blob,new_size,_slab_blob_resize_complete,rctx);
     uint32_t old_size = rctx->slab->reclaim.nb_reclaim_nodes * rctx->slab->reclaim.nb_chunks_per_node;
-    SPDK_NOTICELOG("slab %p resized, slab size:%u old size:%u,new size:%u\n",rctx->slab,rctx->slab->slab_size,old_size,rctx->new_size);
+    SPDK_NOTICELOG("slab %p resized, slab size:%u old size:%u,new size:%lu\n",rctx->slab,rctx->slab->slab_size,old_size,rctx->new_size);
 }
 
 static void
