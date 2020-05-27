@@ -26,10 +26,8 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
     }
     else{
         //Wonderful! Everthing is OK!
-        req->cb_fn(req->ctx,NULL,-KV_ESUCCESS);
         entry->chunk_desc = new_entry->chunk_desc;
         entry->slot_idx = new_entry->slot_idx;
-        entry->writing = 0;
         //Now I have to reclaim the old slot index. But it is posted to 
         //background stage
         if(!pctx->old_slab){
@@ -42,8 +40,11 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
         }
     }
     pool_release(wctx->kv_request_internal_pool,req);
-    desc->flag &=~ CHUNK_PIN;
+
+    new_entry->chunk_desc->flag &=~ CHUNK_PIN;
+    entry->chunk_desc->flag &=~ CHUNK_PIN;
     entry->writing = 0;
+
     req->cb_fn(req->ctx,NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
 
@@ -59,8 +60,9 @@ _process_put_case1_load_data_cb(void*ctx, int kverrno){
     if(kverrno){
         //Load data error, which may be caused by IO error.
         pool_release( wctx->kv_request_internal_pool,req);
-        entry->writing = 0;
+        new_entry->chunk_desc->flag &=~ CHUNK_PIN;
         entry->chunk_desc->flag &=~ CHUNK_PIN;
+        entry->writing = 0;
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
         
@@ -105,6 +107,7 @@ _process_put_case1_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
         //Slot request failed. This may be caused by out-of-disk-space.
         pool_release(wctx->kv_request_internal_pool,req);
         entry->writing = 0;
+        entry->chunk_desc->flag &=~ CHUNK_PIN;
         req->cb_fn(req->ctx,NULL,-KV_EFULL);
         return;
     }
@@ -272,12 +275,12 @@ _process_put_case3_store_data_cb(void*ctx, int kverrno){
         slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
         mem_index_delete(wctx->mem_index,req->item);    
     }
-
-    //SPDK_NOTICELOG("Put storing completes for key:%d, err:%d\n",*(int*)req->item->data,kverrno);
+    else{
+        entry->writing = 0;
+    }
 
     pool_release(wctx->kv_request_internal_pool,req);
     desc->flag &=~ CHUNK_PIN;
-    entry->writing = 0;
 
     req->cb_fn(req->ctx,NULL,kverrno ? -KV_EIO : -KV_ESUCCESS);
 }

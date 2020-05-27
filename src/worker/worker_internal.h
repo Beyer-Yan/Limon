@@ -240,6 +240,7 @@ struct slab_migrate_request{
 
     //If a fault hits, I should abort the migrating.
     bool is_fault;
+    uint32_t nb_faults;
 
     uint64_t nb_processed;
     uint64_t start_slot;

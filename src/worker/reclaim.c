@@ -6,8 +6,9 @@
 
 static void _default_reclaim_io_cb_fn(void*ctx, int kverrno){
     struct slab_migrate_request *req = ctx;
-    if(!kverrno){
+    if(kverrno){
         req->is_fault = true;
+        req->nb_faults++;
     }
     req->nb_processed++;
 }
@@ -188,11 +189,11 @@ _process_one_pending_migrate_new_load_data_cb(void* ctx, int kverrno){
         pool_release(wctx->rmgr->pending_migrate_pool,mig);
         mig->rctx.desc->flag &=~ CHUNK_PIN;
         mig->new_desc->flag &=~ CHUNK_PIN;
+        mig->entry->writing = 0;
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,slab,mig->new_slot,NULL,NULL);
 
         mig->io_cb_fn(mig->ctx,-KV_EIO);
-
         return;
     }
 
@@ -252,10 +253,8 @@ _process_one_pending_migrate_request_slot_cb(uint64_t slot_idx, void* ctx, int k
     }else{
         //I have to load the pages where the item stays in case I write dirty
         //data for other items that also stay in the same pages.
-        pagechunk_load_item_share_async( wctx->pmgr,
-                                   wctx->imgr,
-                                   new_desc,
-                                   slot_idx,
+        pagechunk_load_item_share_async( wctx->pmgr,wctx->imgr,
+                                   new_desc,slot_idx,
                                    _process_one_pending_migrate_new_load_data_cb, 
                                    mig);
     }
@@ -284,16 +283,25 @@ _process_one_pending_migrate_load_data_cb(void* ctx, int kverrno){
         desc->flag &=~ CHUNK_PIN;
 
         mig->io_cb_fn(mig->ctx,-KV_EIO);
-
         return;
     }
 
     //Now I load the data into the page chunk cache.
     struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,mig->slot_idx);  
     mig->entry = mem_index_lookup(wctx->mem_index,item);
+
     if(mig->entry->writing){
         mig->rctx.no_lookup = true;
         TAILQ_INSERT_TAIL(&wctx->rmgr->remigrating_head,mig,link);
+        return;
+    }
+    if(mig->entry->deleting){
+        //There is a request doing deleting. I need not do anything.
+        //The deleting may fails because of IO error. But it does not matter.
+        pool_release(wctx->rmgr->pending_migrate_pool,mig);
+        desc->flag &=~ CHUNK_PIN;
+
+        mig->io_cb_fn(mig->ctx,-KV_ESUCCESS);
         return;
     }
     _process_one_pending_migrate_cached(mig);
@@ -359,10 +367,8 @@ _process_one_pending_migrate(struct pending_item_migrate *mig){
         _process_one_pending_migrate_load_data_cb(mig,-KV_ESUCCESS);
     }
     else{
-        pagechunk_load_item_async(wctx->pmgr,
-                                  wctx->imgr,
-                                  desc,
-                                  slot_idx,
+        pagechunk_load_item_async(wctx->pmgr,wctx->imgr,
+                                  desc,slot_idx,
                                   _process_one_pending_migrate_load_data_cb,
                                   mig);
     }
@@ -448,6 +454,8 @@ slab_truncate_complete(void*ctx,int kverrno){
     //Now I finish the request, just release it.
     TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
     pool_release(wctx->rmgr->migrate_slab_pool,req);
+
+    SPDK_NOTICELOG("Migrating for slab:%u sucesses, prcessed:%u\n",req->slab->slab_size,req->nb_processed);
 }
 
 int 
@@ -464,8 +472,8 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
         if(req->cur_slot == req->start_slot + req->nb_processed - 1){
             //Faults happened and all the submited item migrating request have been processed. 
             //So I should abort the migrating.
-            //Error here
-            //Print the error log.
+            SPDK_ERRLOG("Error in migrating, slab:%u, processed:%u,faults:%u. Abort.\n",
+                        req->slab->slab_size,req->nb_processed,req->nb_faults);
             TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
             pool_release(wctx->rmgr->migrate_slab_pool,req);
         }

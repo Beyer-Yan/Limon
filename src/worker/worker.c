@@ -135,14 +135,14 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
     req->node = rbtree_last(slab->reclaim.total_tree);
 
     req->nb_processed = 0;
+    req->nb_faults = 0;
     req->start_slot = slab_reclaim_get_start_slot(&slab->reclaim,req->node);
     req->cur_slot = req->start_slot;
     req->last_slot = slab->reclaim.nb_total_slots-1;
 
-    if(!rbtree_lookup(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1)){
-        //The last reclaim node is not allowed to performing allocating.  
-        rbtree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
-    }
+    //The last reclaim node is not allowed to performing allocating.
+    //If it is not in the free_node_tree, the deleting will no nothing.
+    btree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
 }
 //This poller shall be excecuted regularly, e.g. once a second.
 static int
@@ -155,7 +155,7 @@ _worker_slab_evaluation_poll(void* ctx){
     for(;i < wctx->nb_reclaim_shards;i++){
         struct slab_shard *shard = &wctx->shards[wctx->reclaim_shards_start_id + i];
         for(;j < shard->nb_slabs;j++){
-            if( !(shard->slab_set[j].flag | SLAB_FLAG_RECLAIMING) ){
+            if( !(shard->slab_set[j].flag & SLAB_FLAG_RECLAIMING) ){
                 struct slab* slab = &(shard->slab_set[j]);
                 if( slab_reclaim_evaluate_slab(slab) ){
                     struct slab_migrate_request *slab_migrate_req = pool_get(wctx->rmgr->migrate_slab_pool);
