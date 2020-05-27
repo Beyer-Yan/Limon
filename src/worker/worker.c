@@ -142,7 +142,7 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
 
     //The last reclaim node is not allowed to performing allocating.
     //If it is not in the free_node_tree, the deleting will no nothing.
-    btree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
+    rbtree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
 }
 //This poller shall be excecuted regularly, e.g. once a second.
 static int
