@@ -108,10 +108,11 @@ struct resize_ctx{
     uint64_t new_size; //chunks
     struct spdk_thread *thread;
     int kverrno;
-    void (*resize_cb)(void*ctx);
+
     void (*user_slot_cb)(uint64_t slot_idx,void*ctx, int kverrno);
     void (*user_truncate_cb)(void* ctx, int kverrno);
     void* user_ctx;
+
     TAILQ_HEAD(,resize_ctx) ctx_head;
     TAILQ_ENTRY(resize_ctx) link;
     UT_hash_handle hh;
@@ -119,17 +120,7 @@ struct resize_ctx{
 
 static struct resize_ctx* _g_resize_ctx_hash = NULL; 
 
-static void
-_slab_blob_resize_common(void*ctx){
-    struct resize_ctx *rctx = ctx;
-    struct resize_ctx* i,*tmp = NULL;
-    TAILQ_FOREACH_SAFE(i,&rctx->ctx_head,link,tmp){
-        TAILQ_REMOVE(&rctx->ctx_head,i,link);
-        i->resize_cb(i);
-    }
-    HASH_DEL(_g_resize_ctx_hash,rctx);
-    rctx->resize_cb(rctx);
-}
+static void _slab_blob_resize_common_cb(void*ctx);
 
 static void
 _slab_blob_md_sync_complete(void*ctx, int bserrno){
@@ -140,7 +131,7 @@ _slab_blob_md_sync_complete(void*ctx, int bserrno){
     }
 
     rctx->kverrno =  bserrno ? -KV_EIO : -KV_ESUCCESS;
-    spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common,rctx);
+    spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common_cb,rctx);
 }
 
 static void
@@ -216,40 +207,84 @@ void slab_truncate_async(struct iomgr* imgr,
     spdk_blob_io_unmap(slab->blob,imgr->channel,offset,length,_truncate_unmap_complete,rctx);
 }
 
+static inline uint64_t 
+_get_one_slot_from_free_slab(struct slab*slab, struct reclaim_node* node) {
+    assert(slab->reclaim.nb_free_slots!=0);
+    assert(node->nb_free_slots!=0);
+
+    struct chunk_desc* desc;
+    uint64_t slot_idx = UINT64_MAX;
+
+    uint32_t i = 0;
+    for(;i<slab->reclaim.nb_chunks_per_node;i++){
+        if(node->desc_array[i]->nb_free_slots){
+            desc = node->desc_array[i];
+            uint32_t offset = bitmap_get_first_clear_bit(desc->bitmap);
+            bitmap_set_bit(desc->bitmap,offset);
+
+            desc->nb_free_slots--;
+            node->nb_free_slots--;
+            slab->reclaim.nb_free_slots--;
+
+            if(!node->nb_free_slots){
+                //Wow! The reclaim node is full. I should remove it from
+                //free_node treemap.
+                rbtree_delete(slab->reclaim.free_node_tree,node->id,NULL);
+            }
+
+            uint64_t base = node->id*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk + 
+                            i*slab->reclaim.nb_slots_per_chunk;
+            slot_idx = offset + base;
+        }
+    }
+    return slot_idx;
+}
+
 static void
-_slab_request_resize_complete_cb(void*ctx){
+_slab_blob_resize_common_cb(void*ctx){
     struct resize_ctx* rctx = ctx;
     struct slab* slab = rctx->slab;
 
+    struct reclaim_node *node = NULL;;
+
+    if(!rctx->kverrno){
+        node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
+        if(!node){
+            rctx->kverrno = -KV_EMEM;
+        }
+        else{
+            slab->reclaim.nb_free_slots += node->nb_free_slots;
+            slab->reclaim.nb_total_slots += node->nb_free_slots;
+            slab->reclaim.nb_reclaim_nodes++;
+
+            rbtree_insert(slab->reclaim.total_tree,node->id,node,NULL);
+            rbtree_insert(slab->reclaim.free_node_tree,node->id,node,NULL);
+        }
+    }
+
     if(rctx->kverrno){
-        rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,-KV_EIO);
-        free(rctx);
-        return;
+        rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,rctx->kverrno);
     }
-    struct reclaim_node *node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
-    if(!node){
-        rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,-KV_EMEM);
-        free(rctx);
-        return;
+    else{
+        uint64_t slot = _get_one_slot_from_free_slab(slab,node);
+        rctx->user_slot_cb(slot,rctx->user_ctx,-KV_ESUCCESS);
     }
-
-    slab->reclaim.nb_free_slots += node->nb_free_slots;
-    slab->reclaim.nb_total_slots += node->nb_free_slots;
-    slab->reclaim.nb_reclaim_nodes++;
-    rbtree_insert(slab->reclaim.total_tree,node->id,node,NULL);
-    rbtree_insert(slab->reclaim.free_node_tree,node->id,node,NULL);
-
-    //Just retrieve a slot from the first chunk of the newly allocated reclaim node;
-    //The first slot of the first page chunk of the reclaim node is the one I want.
-    struct chunk_desc*desc = node->desc_array[0];
-    uint64_t slot_idx = node->id*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
-    bitmap_set_bit(desc->bitmap,0);
-    desc->nb_free_slots--;
-    node->nb_free_slots--;
-    slab->reclaim.nb_free_slots--;
-
-    rctx->user_slot_cb(slot_idx,rctx->user_ctx,-KV_ESUCCESS);
-    free(rctx); 
+    
+    //Process the linked request.
+    struct resize_ctx* i,*tmp = NULL;
+    TAILQ_FOREACH_SAFE(i,&rctx->ctx_head,link,tmp){
+        TAILQ_REMOVE(&rctx->ctx_head,i,link);
+        if(rctx->kverrno){
+            i->user_slot_cb(UINT64_MAX,i->user_ctx,rctx->kverrno);
+        }
+        else{
+            uint64_t slot = _get_one_slot_from_free_slab(slab,node);
+            rctx->user_slot_cb(slot,rctx->user_ctx,-KV_ESUCCESS);
+        }
+        free(rctx);
+    }
+    HASH_DEL(_g_resize_ctx_hash,rctx);
+    free(rctx);
 }
 
 void slab_request_slot_async(struct iomgr* imgr,
@@ -259,33 +294,10 @@ void slab_request_slot_async(struct iomgr* imgr,
     
     if(slab->reclaim.nb_free_slots!=0){
         struct reclaim_node* node = rbtree_first(slab->reclaim.free_node_tree);
-        struct chunk_desc* desc;
-
-        uint32_t i = 0;
-        for(;i<slab->reclaim.nb_chunks_per_node;i++){
-            if(node->desc_array[i]->nb_free_slots){
-                desc = node->desc_array[i];
-                uint32_t offset = bitmap_get_first_clear_bit(desc->bitmap);
-                bitmap_set_bit(desc->bitmap,offset);
-
-                desc->nb_free_slots--;
-                node->nb_free_slots--;
-                slab->reclaim.nb_free_slots--;
-
-                if(!node->nb_free_slots){
-                    //Wow! The reclaim node is full. I should remove it from
-                    //free_node treemap.
-                    rbtree_delete(slab->reclaim.free_node_tree,node->id,NULL);
-                }
-
-                uint64_t base = node->id*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk + i*slab->reclaim.nb_slots_per_chunk;
-                uint64_t slot_idx = offset + base;
-                cb(slot_idx,ctx,-KV_ESUCCESS);
-                return;
-            }
-        }
-        //Never comes here.
-        assert(0);
+        uint64_t slot = _get_one_slot_from_free_slab(slab,node);
+        
+        cb(slot,ctx,-KV_ESUCCESS);
+        return;
     }
     
     if(slab->flag&SLAB_FLAG_RECLAIMING){
@@ -306,7 +318,6 @@ void slab_request_slot_async(struct iomgr* imgr,
     rctx->new_size = (slab->reclaim.nb_reclaim_nodes+1) * slab->reclaim.nb_chunks_per_node;
     rctx->thread = spdk_get_thread();
     rctx->user_slot_cb = cb;
-    rctx->resize_cb = _slab_request_resize_complete_cb;
     rctx->user_ctx = ctx;
     rctx->kverrno = 0;
 
