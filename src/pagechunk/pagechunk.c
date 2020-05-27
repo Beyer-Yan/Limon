@@ -144,7 +144,7 @@ _item_load_complete_cb_fn(void* ctx, int kverrno){
         bitmap_set_bit_range(desc->chunk_mem->bitmap,first_page,last_page);
     }
     else{
-        SPDK_ERRLOG("Error in loading item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+        SPDK_ERRLOG("Error in loading,slab:%u, slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
     }
     pool_release(cls_ctx->pmgr->load_store_ctx_pool,cls_ctx);
     cls_ctx->user_cb(cls_ctx->user_ctx,kverrno);
@@ -215,7 +215,7 @@ _item_share_load_complete_cb_fn(void* ctx, int kverrno){
             last_page !=UINT32_MAX ?  bitmap_set_bit(desc->chunk_mem->bitmap,last_page) : (void)0;
         }
         else{
-            SPDK_ERRLOG("Error in loading item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+            SPDK_ERRLOG("Error in loading,slab:%u, slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
         }
         pool_release(pmgr->load_store_ctx_pool,cls_ctx);
         cls_ctx->user_cb(cls_ctx->user_ctx,cls_ctx->kverrno);
@@ -305,7 +305,7 @@ _item_meta_load_complete_cb_fn(void* ctx, int kverrno){
         bitmap_set_bit(desc->chunk_mem->bitmap,first_page);
     }
     else{
-        SPDK_ERRLOG("Error in loading item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+        SPDK_ERRLOG("Error in loading,slab:%u, slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
     }
     pool_release(pmgr->load_store_ctx_pool,cls_ctx);
     cls_ctx->user_cb(cls_ctx->user_ctx,kverrno);
@@ -342,7 +342,8 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
-    iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,1,_item_meta_load_complete_cb_fn,cls_ctx);
+    iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,1,
+                          _item_meta_load_complete_cb_fn,cls_ctx);
 }
 
 static void
@@ -363,7 +364,7 @@ _item_store_complete_cb_fn(void* ctx, int kverrno){
         }
     }
     else{
-        SPDK_ERRLOG("Error in storing item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+        SPDK_ERRLOG("Error in storing,slab:%u,slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
     }
     pool_release(pmgr->load_store_ctx_pool,cls_ctx);
     cls_ctx->user_cb(cls_ctx->user_ctx,cls_ctx->kverrno);
@@ -396,7 +397,8 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     uint64_t nb_pages = last_page - first_page + 1;
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
-    iomgr_store_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,nb_pages,_item_store_complete_cb_fn,cls_ctx);
+    iomgr_store_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,nb_pages,
+                            _item_store_complete_cb_fn,cls_ctx);
 }
 
 static void
@@ -406,7 +408,7 @@ _item_meta_store_complete_cb_fn(void* ctx, int kverrno){
     struct chunk_desc *desc = cls_ctx->desc;
 
     if(kverrno){
-        SPDK_ERRLOG("Error in storing item data,slab:%u, slot:%lu\n",desc->slab_size,cls_ctx->slot_idx);
+        SPDK_ERRLOG("Error in storing,slab:%u, slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
     }
 
     //I needn't set the chunk bitmap, since I have loaded the meta page and set the cache bit
