@@ -142,7 +142,7 @@ _slab_blob_resize_complete(void*ctx, int bserrno){
         //Resize error;
         SPDK_NOTICELOG("blob resize error:%d\n",bserrno);
         rctx->kverrno = -KV_EIO;
-        spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
+        spdk_thread_send_msg(rctx->thread,_slab_blob_resize_common_cb,rctx);
         return;
     }
     spdk_blob_sync_md(blob, _slab_blob_md_sync_complete, rctx);
