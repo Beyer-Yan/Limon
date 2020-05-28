@@ -35,8 +35,9 @@ void pin_me_on(int core) {
 
 static void
 _batch_op_complete(void*ctx, struct kv_item* item,  int kverrno){
+    struct kv_item* ori_item = ctx;
     if(kverrno){
-        printf("Op error, key:%d, err:%d\n", *(int*)item->data ,kverrno);
+        printf("Op error, key:%d, err:%d\n", *(int*)ori_item->data ,kverrno);
     }
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
