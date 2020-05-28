@@ -60,9 +60,10 @@ _batch_test(struct batch_context *bctx){
     gettimeofday(&t0,NULL);
 
     for(;start_num<end_item;start_num++){
-        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
+        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 4000);
         memcpy(item->data,&start_num,4);
         item->meta.ksize = 4;
+        item->meta.vsize = 4000;
         switch(op){
             case 0:
                 kv_put_async(item,_batch_op_complete,item);

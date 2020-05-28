@@ -24,8 +24,8 @@ _calc_tsc(void){
     return tsc;
 }
 
-static uint8_t*
-_get_position(struct chunk_desc *desc, uint64_t slot_idx, 
+static uint64_t
+_get_page_position(struct chunk_desc *desc, uint64_t slot_idx, 
               uint32_t *first_page_out, uint32_t *last_page_out){
     uint32_t slab_size = desc->slab_size;
     uint32_t offset = slot_idx%desc->nb_slots;
@@ -36,7 +36,7 @@ _get_position(struct chunk_desc *desc, uint64_t slot_idx,
         *last_page_out = ((offset+1) * slab_size - 1) / KVS_PAGE_SIZE;
 
         //int start_offset = (offset * slab_size % KVS_PAGE_SIZE);
-        return desc->chunk_mem->data + offset * slab_size;
+        return offset * slab_size;
     }
     else{
         //The item is not allowed to store across pages.
@@ -45,7 +45,7 @@ _get_position(struct chunk_desc *desc, uint64_t slot_idx,
         *last_page_out = *first_page_out;
 
         uint32_t start_offset = offset%slots_per_page;
-        return desc->chunk_mem->data + (*first_page_out)*KVS_PAGE_SIZE + start_offset*slab_size;
+        return (*first_page_out)*KVS_PAGE_SIZE + start_offset*slab_size;
     }
 }
 
@@ -54,7 +54,7 @@ pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx){
     assert(desc->chunk_mem!=NULL);
 
     uint32_t first_page, last_page;
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     if(first_page == last_page){
         //The item is stored in single page.
@@ -80,7 +80,7 @@ pagechunk_is_cross_page(struct chunk_desc *desc, uint64_t slot_idx){
     }
 
     uint32_t first_page, last_page;
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     return (first_page == last_page) ? false : true;
 }
@@ -91,7 +91,7 @@ pagechunk_get_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     assert(desc->chunk_mem!=NULL);
 
     uint32_t first_page, last_page;
-    uint8_t* addr = _get_position(desc,slot_idx,&first_page,&last_page);
+    uint64_t addr_offset = _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //Bump the LRU list.
     chunk_mgr->hit_times++;
@@ -99,7 +99,7 @@ pagechunk_get_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     TAILQ_INSERT_TAIL(&chunk_mgr->global_chunks,desc,link);
     
     //Remove 8 bytes tsc;
-    return (struct kv_item*)(addr + 8);
+    return (struct kv_item*)(desc->chunk_mem->data + addr_offset + 8);
 }
 
 void 
@@ -107,23 +107,25 @@ pagechunk_put_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     assert(desc->chunk_mem!=NULL);
 
     uint32_t first_page, last_page;
-    uint8_t *addr;
+    uint64_t addr_offset;
     uint64_t tsc;
     
-    addr = _get_position(desc,slot_idx,&first_page,&last_page);
+    addr_offset = _get_page_position(desc,slot_idx,&first_page,&last_page);
     tsc = _calc_tsc();
 
+    uint8_t* slot_addr = desc->chunk_mem->data + addr_offset;
+
     //Fill the 8 bytes timestamp in the header.
-    memcpy(addr,&tsc,8);
-    addr += 8;
+    memcpy(slot_addr,&tsc,8);
+    slot_addr += 8;
 
     //Fill the item
     uint32_t item_size = item_get_size(item);
-    memcpy(addr,item,item_size);
-    addr += item_size;
+    memcpy(slot_addr,item,item_size);
+    slot_addr += item_size;
 
     //Fill the 8 bytes timestamp in the tail.
-    memcpy(addr,&tsc,8);
+    memcpy(slot_addr,&tsc,8);
 
     //Bump the LRU list.
     chunk_mgr->hit_times++;
@@ -160,7 +162,7 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
 
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     if(bitmap_get_bit(desc->chunk_mem->bitmap,first_page)){
         first_page++;
@@ -232,7 +234,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
 
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //If the first page is not shared page, it will be in un-cached state.
     //If the fitst page is a shared page, then I should check the cached state.
@@ -320,7 +322,7 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
 
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //The noval slab placement makes it possible that only one page does the
     //meta data stay in.
@@ -380,7 +382,7 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
 
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
     assert(cls_ctx!=NULL);
@@ -426,7 +428,7 @@ void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
 
-    _get_position(desc,slot_idx,&first_page,&last_page);
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
     
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
     assert(cls_ctx!=NULL);
