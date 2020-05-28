@@ -127,7 +127,7 @@ _batch_test_start(void* ctx){
 
     //Test get, for items whose slab is changed
     printf("Testing get for item slab changed\n");
-    bctx->op = 0;
+    bctx->op = 1;
     bctx->vsize = 10;
     _batch_test(bctx);
 
@@ -138,14 +138,25 @@ _batch_test_start(void* ctx){
 
     //Test get after delete,
     //All geting op wil return -KV_EITEM_NOT_EXIST;
-    printf("Testing get after deleting\n");
+    //printf("Testing get after deleting\n");
+    //bctx->op = 1;
+    //_batch_test(bctx);
+
+    //Test putting item > 4KB,
+    //All geting op wil return -KV_EITEM_NOT_EXIST;
+    printf("Testing putting item > 4KB\n");
+    bctx->op = 0;
+    bctx->vsize = 10000;
+    _batch_test(bctx);
+
+    //Test get
+    printf("Testing get item > 4KB\n");
     bctx->op = 1;
+    bctx->vsize = 0;
     _batch_test(bctx);
 
     //Test scan
 
-
-    
     return NULL;
 }
 
