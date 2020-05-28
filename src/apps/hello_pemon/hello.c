@@ -14,6 +14,7 @@ struct batch_context{
     int core_id;
     int start_num;
     int nb_items;
+    int op;
 };
 
 void pin_me_on(int core) {
@@ -32,28 +33,28 @@ void pin_me_on(int core) {
 }
 
 static void
-_batch_get_complete(void*ctx, struct kv_item* item,  int kverrno){
+_batch_op_complete(void*ctx, struct kv_item* item,  int kverrno){
     if(kverrno){
-        printf("Get error\n");
-        exit(-1);
-    }
-    if(memcmp("testb",item->data+4,5)){
-        printf("Get value mismatch, get_val:%5s\n",item->data+4 );
-
+        printf("Op error\n");
         exit(-1);
     }
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
     if(cnt%10000==0){
-        printf("Gut key success, count:%d\n",cnt);
+        printf("Op success, count:%d\n",cnt);
     }
+    free(ctx);
 }
 
 static void
-_batch_read_test( struct batch_context *bctx){
-    printf("Testing get\n");
+_batch_test(struct batch_context *bctx){
     int end_item = bctx->start_num + bctx->nb_items;
     int start_num = bctx->start_num;
+    int op = bctx->op;
+
+    static char* op_name[3] = {"Put","Get","Updata"};
+
+    printf("Testing :%s\n",op_name[op]);
 
     struct timeval t0,t1;
     gettimeofday(&t0,NULL);
@@ -62,30 +63,28 @@ _batch_read_test( struct batch_context *bctx){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
         memcpy(item->data,&start_num,4);
         item->meta.ksize = 4;
-        kv_get_async(item,_batch_get_complete,item);
+        switch(op){
+            case 0:
+                kv_put_async(item,_batch_op_complete,item);
+                break;
+            case 1: 
+                kv_get_async(item,_batch_op_complete,item);  
+                break;
+            case 2:
+                kv_put_async(item,_batch_op_complete,item);
+                break;
+            default:
+                break;
+        }
     }
-    printf("Get test completes\n");
     gettimeofday(&t1,NULL);
     double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
     double pps = bctx->nb_items/secs;
-    printf("Get test completes,w:%d, sec:%f, items:%d,pps:%f\n",bctx->core_id,secs,bctx->nb_items,pps);
-}
-
-static void
-_batch_put_complete(void*ctx, struct kv_item* item,  int kverrno){
-    if(kverrno){
-        printf("Put error\n");
-        exit(-1);
-    }
-    static atomic_int i = 0;
-    int cnt = atomic_fetch_add(&i,1);
-    if(cnt%10000==0){
-        printf("Put key success, count:%d\n",cnt);
-    }
+    printf("%s test completes,w:%d, sec:%f, items:%d,pps:%f\n",op_name[op],bctx->core_id,secs,bctx->nb_items,pps);
 }
 
 static void*
-_batch_put_test(void* ctx){
+_batch_test_start(void* ctx){
     struct batch_context *bctx = ctx;
 
     int core_id = bctx->core_id;
@@ -95,22 +94,18 @@ _batch_put_test(void* ctx){
     pin_me_on(core_id);
     printf("start id %d\n",bctx->core_id);
 
-    struct timeval t0,t1;
-    gettimeofday(&t0,NULL);
+    //Test put
+    bctx->start_num = 0;
+    _batch_test(bctx);
 
-    for(;start_num<end_item;start_num++){
-        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 5);
-        memcpy(item->data,&start_num,4);
-        memcpy(item->data+4,"testb",5);
-        item->meta.ksize = 4;
-        item->meta.vsize = 5;
-        kv_put_async(item,_batch_put_complete,item);
-    }
-    gettimeofday(&t1,NULL);
-    double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000.0;
-    double pps = bctx->nb_items/secs;
-    printf("Put test completes,w:%d, sec:%f, items:%d,pps:%f\n",core_id,secs,bctx->nb_items,pps);
-    _batch_read_test(bctx);
+    //Test get
+    bctx->start_num = 1;
+    _batch_test(bctx);
+
+    //Test updata
+    bctx->start_num = 2;
+    _batch_test(bctx);
+    
     return NULL;
 }
 
@@ -124,7 +119,7 @@ _start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
         ctx->core_id = start_core_id + i;
         ctx->start_num = i*nb_items_per_worker;
         ctx->nb_items = nb_items_per_worker;
-        pthread_create(&pid,NULL,_batch_put_test,ctx);
+        pthread_create(&pid,NULL,_batch_test_start,ctx);
     }
 }
 
