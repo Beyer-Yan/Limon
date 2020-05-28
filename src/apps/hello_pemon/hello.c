@@ -15,6 +15,7 @@ struct batch_context{
     int start_num;
     int nb_items;
     int op;
+    int vsize;
 };
 
 void pin_me_on(int core) {
@@ -60,7 +61,7 @@ _batch_test(struct batch_context *bctx){
     gettimeofday(&t0,NULL);
 
     for(;start_num<end_item;start_num++){
-        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + 4000);
+        struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + bctx->vsize);
         memcpy(item->data,&start_num,4);
         item->meta.ksize = 4;
         item->meta.vsize = 4000;
@@ -103,9 +104,15 @@ _batch_test_start(void* ctx){
     bctx->op = 1;
     _batch_test(bctx);
 
-    //Test updata
+    //Test updata in place
     bctx->op = 2;
     _batch_test(bctx);
+
+    //Test updata slab changed
+    bctx->op = 2;
+    bctx->vsize = 2000;
+    _batch_test(bctx);
+
     
     return NULL;
 }
