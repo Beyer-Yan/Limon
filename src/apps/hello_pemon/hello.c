@@ -90,6 +90,11 @@ _scan_test(struct batch_context *bctx ){
 
 }
 
+static void
+_idel_running_cb(void*ctx, struct kv_item* item,  int kverrno){
+    //Do nothing
+}
+
 static void*
 _batch_test_start(void* ctx){
     struct batch_context *bctx = ctx;
@@ -101,12 +106,19 @@ _batch_test_start(void* ctx){
     pin_me_on(core_id);
     printf("start id %d\n",bctx->core_id);
 
+    //idel running. Just flush the queue and wait the completion of rebuilding.
+    struct kv_item *item  = malloc(sizeof(struct item_meta) + 4 + 0  );
+    for(int i = 0; i<1000; i++){
+        kv_get_async(item, _idel_running_cb, NULL);
+    }
+
     //Test put
     printf("Testing add\n");
     bctx->op = 0;
     bctx->vsize = 10;
     _batch_test(bctx);
 
+    /*
     //Test get
     printf("Testing get\n");
     bctx->op = 1;
@@ -154,7 +166,7 @@ _batch_test_start(void* ctx){
     bctx->op = 1;
     bctx->vsize = 0;
     _batch_test(bctx);
-
+    */
     //Test scan
 
     return NULL;
@@ -177,7 +189,7 @@ _start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
 static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
-    _start_batch_test(10,1,300000);
+    _start_batch_test(10,1,3000000);
 }
 
 static void
