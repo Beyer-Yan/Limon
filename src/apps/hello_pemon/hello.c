@@ -55,8 +55,6 @@ _batch_test(struct batch_context *bctx){
 
     static char* op_name[3] = {"Put","Get","Updata"};
 
-    printf("Testing :%s\n",op_name[op]);
-
     struct timeval t0,t1;
     gettimeofday(&t0,NULL);
 
@@ -97,18 +95,22 @@ _batch_test_start(void* ctx){
     printf("start id %d\n",bctx->core_id);
 
     //Test put
+    printf("Testing add\n");
     bctx->op = 0;
     _batch_test(bctx);
 
     //Test get
+    printf("Testing get\n");
     bctx->op = 1;
     _batch_test(bctx);
 
     //Test updata in place
+    printf("Testing update in place\n");
     bctx->op = 2;
     _batch_test(bctx);
 
     //Test updata slab changed
+    printf("Testing update slab changed\n");
     bctx->op = 2;
     bctx->vsize = 2000;
     _batch_test(bctx);
