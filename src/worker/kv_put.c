@@ -154,7 +154,7 @@ _process_put_case1(struct kv_request_internal *req, bool slab_changed){
         pctx->old_slab = pctx->slab;
         pctx->slab = new_slab;
 
-        SPDK_NOTICELOG("slab changed, ori_slab:%u, new_slab:%u\n",pctx->old_slab->slab_size, pctx->slab->slab_size);
+        //SPDK_NOTICELOG("slab changed, ori_slab:%u, new_slab:%u\n",pctx->old_slab->slab_size, pctx->slab->slab_size);
     }
 
     slab_request_slot_async(wctx->imgr,pctx->slab,

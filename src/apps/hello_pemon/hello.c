@@ -53,7 +53,7 @@ _batch_test(struct batch_context *bctx){
     int start_num = bctx->start_num;
     int op = bctx->op;
 
-    static char* op_name[3] = {"Put","Get","Updata"};
+    static char* op_name[3] = {"Put","Get","Update","Delete"};
 
     struct timeval t0,t1;
     gettimeofday(&t0,NULL);
@@ -83,6 +83,11 @@ _batch_test(struct batch_context *bctx){
     double secs = ((t1.tv_sec*1000000+t1.tv_usec)- (t0.tv_sec*1000000+t0.tv_usec))/1000000;
     double pps = bctx->nb_items/secs;
     printf("%s test completes,w:%d, sec:%f, items:%d,pps:%f\n",op_name[op],bctx->core_id,secs,bctx->nb_items,pps);
+}
+
+static void
+_scan_test(struct batch_context *bctx ){
+
 }
 
 static void*
@@ -136,6 +141,9 @@ _batch_test_start(void* ctx){
     printf("Testing get after deleting\n");
     bctx->op = 1;
     _batch_test(bctx);
+
+    //Test scan
+
 
     
     return NULL;

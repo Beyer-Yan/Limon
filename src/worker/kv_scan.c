@@ -196,7 +196,7 @@
  * to other place when nessacery.
  * The buffer will be flushed whenever the next scan request is performed.
  */
-static uint64_t _scan_data[MAX_SLAB_SIZE];
+static uint64_t _scan_data[MAX_SLAB_SIZE/sizeof(uint64_t)];
 
 void worker_process_first(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
@@ -210,9 +210,8 @@ void worker_process_first(struct kv_request_internal *req){
         memcpy(item->data,key,key_len);
     }
 
-    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
-
     pool_release(wctx->kv_request_internal_pool,req);
+    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
 }
 
 void worker_process_seek(struct kv_request_internal *req){
@@ -220,9 +219,9 @@ void worker_process_seek(struct kv_request_internal *req){
     struct index_entry *entry;
 
     entry = mem_index_lookup(wctx->mem_index,req->item);
-    req->cb_fn(req->ctx,NULL,entry!=NULL?-KV_ESUCCESS:KV_EITEM_NOT_EXIST);
 
     pool_release(wctx->kv_request_internal_pool,req);
+    req->cb_fn(req->ctx,NULL,entry!=NULL?-KV_ESUCCESS:KV_EITEM_NOT_EXIST);
 }
 
 void worker_process_next(struct kv_request_internal *req){
@@ -237,7 +236,6 @@ void worker_process_next(struct kv_request_internal *req){
         memcpy(item->data,key,key_len);
     }
 
-    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
-
     pool_release(wctx->kv_request_internal_pool,req);
+    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
 }

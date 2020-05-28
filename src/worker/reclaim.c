@@ -113,7 +113,7 @@ _process_one_pending_delete(struct pending_item_delete *del){
 
     del->rctx.desc = desc;
 
-    SPDK_NOTICELOG("Post deleting, slab:%u,slot:%lu\n",slab->slab_size,slot_idx);
+    //SPDK_NOTICELOG("Post deleting, slab:%u,slot:%lu\n",slab->slab_size,slot_idx);
 
     if(!desc->chunk_mem){
         pagechunk_request_one_async(wctx->pmgr,desc,
