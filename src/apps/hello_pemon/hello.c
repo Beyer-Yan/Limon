@@ -97,16 +97,19 @@ _batch_test_start(void* ctx){
     //Test put
     printf("Testing add\n");
     bctx->op = 0;
+    bctx->vsize = 10;
     _batch_test(bctx);
 
     //Test get
     printf("Testing get\n");
     bctx->op = 1;
+    bctx->vsize = 10;
     _batch_test(bctx);
 
     //Test updata in place
     printf("Testing update in place\n");
     bctx->op = 2;
+    bctx->vsize = 10;
     _batch_test(bctx);
 
     //Test updata slab changed
