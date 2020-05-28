@@ -62,7 +62,7 @@ _batch_test(struct batch_context *bctx){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + bctx->vsize);
         memcpy(item->data,&start_num,4);
         item->meta.ksize = 4;
-        item->meta.vsize = vsize;
+        item->meta.vsize = bctx->vsize;
         switch(op){
             case 0:
                 kv_put_async(item,_batch_op_complete,item);
