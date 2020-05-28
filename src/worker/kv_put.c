@@ -18,7 +18,6 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
     struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
     struct index_entry* new_entry   = &pctx->new_entry;
-    struct chunk_desc *desc = new_entry->chunk_desc;
 
     entry->chunk_desc->flag &=~ CHUNK_PIN;
     new_entry->chunk_desc->flag &=~ CHUNK_PIN;
