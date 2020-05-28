@@ -272,7 +272,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
 
-    cls_ctx->nb_segs = nb_segs;
+    cls_ctx->nb_segs = first_page==last_page ? 1 : nb_segs;
     cls_ctx->cnt=0;
 
     uint8_t *buf;
