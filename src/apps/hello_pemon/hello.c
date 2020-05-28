@@ -95,15 +95,15 @@ _batch_test_start(void* ctx){
     printf("start id %d\n",bctx->core_id);
 
     //Test put
-    bctx->start_num = 0;
+    bctx->op = 0;
     _batch_test(bctx);
 
     //Test get
-    bctx->start_num = 1;
+    bctx->op = 1;
     _batch_test(bctx);
 
     //Test updata
-    bctx->start_num = 2;
+    bctx->op = 2;
     _batch_test(bctx);
     
     return NULL;
