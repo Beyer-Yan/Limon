@@ -235,6 +235,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
                            void* ctx){
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
+    uint32_t nb_segs = 2;
 
     _get_page_position(desc,slot_idx,&first_page,&last_page);
 
@@ -244,12 +245,14 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     //is a shared page.
     if(bitmap_get_bit(desc->chunk_mem->bitmap,first_page)){
         first_page=UINT32_MAX;
+        nb_segs--;
     }
     if(bitmap_get_bit(desc->chunk_mem->bitmap,last_page)){
         last_page=UINT32_MAX;
+        nb_segs--;
     }
 
-    if( (first_page==last_page) && (first_page==UINT32_MAX) ){
+    if(!nb_segs){
         //Wonderful! All shared pages has been cached.
         cb(ctx,-KV_ESUCCESS);
         return;
@@ -267,19 +270,17 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
 
-    cls_ctx->nb_segs = 0;
+    cls_ctx->nb_segs = nb_segs;
     cls_ctx->cnt=0;
 
     uint8_t *buf;
     uint64_t start_page_in_slab;
     uint64_t nb_pages = 1;
-
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
     if(first_page!=UINT32_MAX){
         buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + first_page;
-        cls_ctx->nb_segs++;
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
                             start_page_in_slab,nb_pages,
                             _item_share_load_complete_cb_fn,cls_ctx);
@@ -289,7 +290,6 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
         // is not be loaded.
         buf = &desc->chunk_mem->data[last_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + last_page;
-        cls_ctx->nb_segs++;
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
                     start_page_in_slab,nb_pages,
                     _item_share_load_complete_cb_fn,cls_ctx);
