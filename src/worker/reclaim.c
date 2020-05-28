@@ -160,6 +160,11 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
     struct worker_context *wctx = mig->rctx.wctx;
     struct slab* slab = mig->slab;
     
+    pool_release(wctx->kv_request_internal_pool,mig);
+    mig->rctx.desc->flag &=~ CHUNK_PIN;
+    mig->new_desc->flag &=~ CHUNK_PIN;
+    mig->entry->writing = 0;
+
     if(kverrno){
         //Error hits when store data into disk
         //I have to free the allocated slot
@@ -167,15 +172,11 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
     }
     else{
         //Wonderful! Now evrything is ok!
+        slab_free_slot_async(wctx->rmgr,slab,mig->slot_idx,NULL,NULL);
+
         mig->entry->chunk_desc = mig->new_desc;
         mig->entry->slot_idx = mig->new_slot;
-        mig->entry->writing = 0;
-        slab_free_slot_async(wctx->rmgr,slab,mig->slot_idx,NULL,NULL);
     }
-    
-    pool_release(wctx->kv_request_internal_pool,mig);
-    mig->rctx.desc->flag &=~ CHUNK_PIN;
-    mig->new_desc->flag &=~ CHUNK_PIN;
 
     mig->io_cb_fn(mig->ctx,kverrno ? -KV_EIO : -KV_ESUCCESS );
 }

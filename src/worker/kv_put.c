@@ -20,30 +20,32 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
     struct index_entry* new_entry   = &pctx->new_entry;
     struct chunk_desc *desc = new_entry->chunk_desc;
 
+    entry->chunk_desc->flag &=~ CHUNK_PIN;
+    new_entry->chunk_desc->flag &=~ CHUNK_PIN;
+    pool_release(wctx->kv_request_internal_pool,req);
+    entry->writing = 0;
+
     if(kverrno){
         //Store data error, which may be caused by IO error.
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
     }
     else{
-        //Wonderful! Everthing is OK!
-        entry->chunk_desc = new_entry->chunk_desc;
-        entry->slot_idx = new_entry->slot_idx;
         //Now I have to reclaim the old slot index. But it is posted to 
         //background stage
         if(pctx->old_slab){
             //I just release the slot index in the old data in such case.
             slab_free_slot_async(wctx->rmgr,pctx->old_slab,entry->slot_idx,NULL,NULL);
+            //Wonderful! Everthing is OK!
         }
         else{
-        //The item is put in the same slab
+            //The item is put in the same slab
             slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
         }
+        
+        //Update the entry info with new_entry.
+        entry->chunk_desc = new_entry->chunk_desc;
+        entry->slot_idx = new_entry->slot_idx;
     }
-    pool_release(wctx->kv_request_internal_pool,req);
-
-    new_entry->chunk_desc->flag &=~ CHUNK_PIN;
-    entry->chunk_desc->flag &=~ CHUNK_PIN;
-    entry->writing = 0;
 
     req->cb_fn(req->ctx,NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
@@ -152,6 +154,8 @@ _process_put_case1(struct kv_request_internal *req, bool slab_changed){
         struct slab* new_slab = &wctx->shards[shard_idx].slab_set[new_slab_idx];
         pctx->old_slab = pctx->slab;
         pctx->slab = new_slab;
+
+        SPDK_NOTICELOG("slab changed, ori_slab:%u, new_slab:%u\n",pctx->old_slab->slab_size, pctx->slab->slab_size);
     }
 
     slab_request_slot_async(wctx->imgr,pctx->slab,
