@@ -9,7 +9,7 @@ _process_delete_cb(void*ctx ,int kverrno){
 
     if(kverrno){
         //Delete failed because of IO error
-        req->cb_fn(req->ctx,NULL,KV_EIO);
+        req->cb_fn(req->ctx,NULL,-KV_EIO);
         req->pctx.entry->deleting = 0;
     }
     else{

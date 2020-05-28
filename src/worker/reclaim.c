@@ -25,7 +25,7 @@ _process_one_pending_delete_store_data_cb(void* ctx, int kverrno){
     pool_release(wctx->rmgr->pending_delete_pool,del);
     desc->flag &=~ CHUNK_PIN;
     if(del->io_cb_fn){
-        del->io_cb_fn(del->ctx, (!kverrno)?-KV_EIO:-KV_ESUCCESS);
+        del->io_cb_fn(del->ctx, kverrno ? -KV_EIO : -KV_ESUCCESS);
     }
 }
 
