@@ -454,8 +454,6 @@ void worker_process_put(struct kv_request_internal *req){
     assert(desc!=NULL);
     desc->flag |= CHUNK_PIN;
 
-    SPDK_NOTICELOG("update item, item->key:%d\n",*(int*)req->item->data);
-
     if(pagechunk_is_cross_page(desc,entry->slot_idx)){
         //The item is stored into multi page, so I needn't
         //load it and I do not pay attention to page chunk evicting.
