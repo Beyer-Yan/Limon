@@ -127,7 +127,7 @@ _start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
 static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
-    _start_batch_test(10,300000);
+    _start_batch_test(10,1,300000);
 }
 
 static void
