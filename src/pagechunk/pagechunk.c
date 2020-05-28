@@ -235,6 +235,8 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
                            void* ctx){
     uint32_t first_page, last_page;
     struct slab *slab = desc->slab;
+
+    //No more than 2 shared pages for an slot.
     uint32_t nb_segs = 2;
 
     _get_page_position(desc,slot_idx,&first_page,&last_page);
