@@ -109,6 +109,8 @@ pagechunk_put_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     uint32_t first_page, last_page;
     uint64_t addr_offset;
     uint64_t tsc;
+
+    assert(slab_is_valid_size(desc->slab_size,item_packed_size(item)));
     
     addr_offset = _get_page_position(desc,slot_idx,&first_page,&last_page);
     tsc = _calc_tsc();
