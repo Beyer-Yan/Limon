@@ -73,6 +73,8 @@ _batch_test(struct batch_context *bctx){
             case 2:
                 kv_put_async(item,_batch_op_complete,item);
                 break;
+            case 3:
+                kv_delete_async(item,_batch_op_complete,item);
             default:
                 break;
         }
@@ -116,6 +118,11 @@ _batch_test_start(void* ctx){
     printf("Testing update slab changed\n");
     bctx->op = 2;
     bctx->vsize = 2000;
+    _batch_test(bctx);
+
+    //Test delete
+    printf("Testing update slab changed\n");
+    bctx->op = 3;
     _batch_test(bctx);
 
     
