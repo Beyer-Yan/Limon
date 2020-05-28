@@ -40,7 +40,7 @@ _batch_op_complete(void*ctx, struct kv_item* item,  int kverrno){
     }
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
-    if(cnt%10000==0){
+    if(cnt%100000==0){
         printf("Op success, count:%d\n",cnt);
     }
     free(ctx);
@@ -127,7 +127,7 @@ _start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
 static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
-    _start_batch_test(10,1,1000000);
+    _start_batch_test(10,300000);
 }
 
 static void
