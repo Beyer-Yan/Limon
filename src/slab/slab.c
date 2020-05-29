@@ -274,6 +274,7 @@ _slab_blob_resize_common_cb(void*ctx){
         uint32_t i=0;
         for(;i<nb_nodes;i++){
             slab->reclaim.nb_total_slots += nodes[i]->nb_free_slots;
+            slab->reclaim.nb_free_slots += nodes[i]->nb_free_slots;
             slab->reclaim.nb_reclaim_nodes++;
             rbtree_insert(slab->reclaim.total_tree,nodes[i]->id,nodes[i],NULL);
             rbtree_insert(slab->reclaim.free_node_tree,nodes[i]->id,nodes[i],NULL);
@@ -295,7 +296,7 @@ _slab_blob_resize_common_cb(void*ctx){
     //index of the node that have free slots.
     uint32_t i = 0;
     struct resize_ctx* req,*tmp = NULL;
-    
+
     TAILQ_FOREACH_SAFE(req,&rctx->ctx_head,link,tmp){
         TAILQ_REMOVE(&rctx->ctx_head,req,link);
         if(rctx->kverrno){
