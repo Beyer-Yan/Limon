@@ -109,6 +109,7 @@ _batch_test_start(void* ctx){
     //idel running. Just flush the queue and wait the completion of rebuilding.
     struct kv_item *item  = malloc(sizeof(struct item_meta) + 4 + 0  );
     for(int i = 0; i<1000; i++){
+        item->meta.ksize = 1;
         kv_get_async(item, _idel_running_cb, NULL);
     }
 

@@ -70,6 +70,8 @@ struct iomgr{
     //When I resize blob, I shall send such operation to the 
     //the thread that initializing the blobstore.
     struct spdk_thread *meta_thread;
+    struct spdk_blob_store *target;
+    
     uint32_t max_pending_io; 
     uint32_t nb_pending_io;
     struct pending_io_hash read_hash;

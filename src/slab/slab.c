@@ -309,6 +309,8 @@ void slab_request_slot_async(struct iomgr* imgr,
         assert(0);
     }
 
+    if(spdk_bs_free_cluster_count(imgr->))
+
     //The slab is fully utilized. It should be resized.
     //Since it seldom happens, I use malloc here, which does not cost much.
     struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));

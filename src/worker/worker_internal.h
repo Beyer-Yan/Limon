@@ -100,7 +100,6 @@ struct worker_context{
     struct iomgr         *imgr;
 
     struct spdk_thread* thread;
-    struct spdk_blob_store *target;
     
 } __attribute__(( aligned(CACHE_LINE_LENGTH) ));
 

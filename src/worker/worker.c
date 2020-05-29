@@ -336,6 +336,7 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
     uint64_t size;
 
     imgr->meta_thread = opts->meta_thread;
+    imgr->target = opts->target;
     imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;
     imgr->nb_pending_io = 0;
     imgr->read_hash.cache_hash = NULL;
@@ -414,7 +415,6 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     snprintf(thread_name,sizeof(thread_name),"worker_%u",opts->core_id);
 
     wctx->core_id = opts->core_id;
-    wctx->target = opts->target;
     wctx->thread = spdk_thread_create(thread_name,&cpumask);
     //wctx->thread = spdk_thread_create(thread_name,NULL);
     assert(wctx->thread!=NULL);
@@ -519,7 +519,7 @@ _do_worker_start(void*ctx){
     struct worker_context* wctx = ctx;
 
     //I should get a io channel for the io manager.
-    wctx->imgr->channel = spdk_bs_alloc_io_channel(wctx->target);
+    wctx->imgr->channel = spdk_bs_alloc_io_channel(wctx->imgr->target);
     assert( wctx->imgr->channel!=NULL);
 
     //Perform recovering for all slab file.
