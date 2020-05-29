@@ -399,6 +399,8 @@ kvs_start_loop(struct kvs_start_opts *opts){
     assert(opts->spdk_opts->reactor_mask!=NULL);
     assert(opts->startup_fn!=NULL);
 
+
+
     assert(!atomic_load(&g_started));
     atomic_store(&g_started,1);
     

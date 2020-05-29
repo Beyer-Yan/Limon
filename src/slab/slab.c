@@ -106,8 +106,10 @@ slab_create_async(struct iomgr* imgr,
 struct resize_ctx{
     struct slab* slab;
     uint64_t new_size; //chunks
-    struct spdk_thread *thread;
+    uint32_t nb_nodes;
     int kverrno;
+
+    struct spdk_thread *thread;
 
     //Callback when the blob is resized. The ctx is the resize_ctx self.
     void (*resize_cb)(void*ctx);
@@ -248,43 +250,63 @@ _slab_blob_resize_common_cb(void*ctx){
     struct resize_ctx* rctx = ctx;
     struct slab* slab = rctx->slab;
 
-    struct reclaim_node *node = NULL;
+    uint32_t nb_nodes = rctx->nb_nodes;
+    struct reclaim_node *nodes[nb_nodes];
 
     if(!rctx->kverrno){
-        node = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+1);
-        if(!node){
-            rctx->kverrno = -KV_EMEM;
+        uint32_t i=0;
+        for(;i<nb_nodes;i++){
+            nodes[i] = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+i+1);
+            if(!nodes[i]){
+                break;
+            }
         }
-        else{
-            slab->reclaim.nb_free_slots += node->nb_free_slots;
-            slab->reclaim.nb_total_slots += node->nb_free_slots;
-            slab->reclaim.nb_reclaim_nodes++;
-
-            rbtree_insert(slab->reclaim.total_tree,node->id,node,NULL);
-            rbtree_insert(slab->reclaim.free_node_tree,node->id,node,NULL);
+        if(i!=nb_nodes){
+            //Fail to allocate enough nodes memory.
+            rctx->kverrno = -KV_EMEM;
+            for(;i>0;i--){
+                free(nodes[i-1]);
+            }
         }
     }
 
+    if(!rctx->kverrno){
+        uint32_t i=0;
+        for(;i<nb_nodes;i++){
+            slab->reclaim.nb_total_slots += nodes[i]->nb_free_slots;
+            slab->reclaim.nb_reclaim_nodes++;
+            rbtree_insert(slab->reclaim.total_tree,nodes[i]->id,nodes[i],NULL);
+            rbtree_insert(slab->reclaim.free_node_tree,nodes[i]->id,nodes[i],NULL);
+        }
+    }
+
+    //Process the list head.
     if(rctx->kverrno){
         rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,rctx->kverrno);
     }
     else{
-        uint64_t slot = _get_one_slot_from_free_slab(slab,node);
+        //Just get one slot from node[0], since node[0] must have free slot.
+        uint64_t slot = _get_one_slot_from_free_slab(slab,nodes[0]);
         rctx->user_slot_cb(slot,rctx->user_ctx,-KV_ESUCCESS);
     }
+
+    //process the linked slot request if there are linked requests.
     
-    //Process the linked request.
-    struct resize_ctx* i,*tmp = NULL;
-    TAILQ_FOREACH_SAFE(i,&rctx->ctx_head,link,tmp){
-        TAILQ_REMOVE(&rctx->ctx_head,i,link);
+    //index of the node that have free slots.
+    uint32_t i = 0;
+    struct resize_ctx* req,*tmp = NULL;
+    
+    TAILQ_FOREACH_SAFE(req,&rctx->ctx_head,link,tmp){
+        TAILQ_REMOVE(&rctx->ctx_head,req,link);
         if(rctx->kverrno){
-            i->user_slot_cb(UINT64_MAX,i->user_ctx,rctx->kverrno);
+            req->user_slot_cb(UINT64_MAX,req->user_ctx,rctx->kverrno);
         }
         else{
-            uint64_t slot = _get_one_slot_from_free_slab(slab,node);
-            i->user_slot_cb(slot,i->user_ctx,-KV_ESUCCESS);
+            i =  nodes[i]->nb_free_slots ? i : i+1;
+            uint64_t slot = _get_one_slot_from_free_slab(slab,nodes[i]);
+            req->user_slot_cb(slot,req->user_ctx,-KV_ESUCCESS);
         }
-        free(i);
+        free(req);
     }
     HASH_DEL(_g_resize_ctx_hash,rctx);
     free(rctx);
@@ -302,6 +324,8 @@ void slab_request_slot_async(struct iomgr* imgr,
         cb(slot,ctx,-KV_ESUCCESS);
         return;
     }
+
+    //Not free slot in the slab, now resize it.
     
     if(slab->flag&SLAB_FLAG_RECLAIMING){
         //The slab is fully utilized, but it is in reclaiming state. I am really overwhelmed.
@@ -309,9 +333,19 @@ void slab_request_slot_async(struct iomgr* imgr,
         assert(0);
     }
 
-    if(spdk_bs_free_cluster_count(imgr->))
+    uint32_t nb_slots_per_node = slab->reclaim.nb_slots_per_chunk * 
+                                 slab->reclaim.nb_chunks_per_node;
 
-    //The slab is fully utilized. It should be resized.
+    //The nodes number that should be resized.
+    uint32_t nb_nodes = imgr->max_pending_io/nb_slots_per_node + 
+                        !!(imgr->max_pending_io%nb_slots_per_node);
+
+    if(spdk_bs_free_cluster_count(imgr->target) < nb_nodes){
+        //No enough space for the disk.
+        cb(UINT64_MAX,ctx,-KV_EFULL);
+        return;
+    }
+
     //Since it seldom happens, I use malloc here, which does not cost much.
     struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));
     if(!rctx){
@@ -320,7 +354,9 @@ void slab_request_slot_async(struct iomgr* imgr,
     }
 
     rctx->slab = slab;
-    rctx->new_size = (slab->reclaim.nb_reclaim_nodes+1) * slab->reclaim.nb_chunks_per_node;
+    rctx->new_size = (slab->reclaim.nb_reclaim_nodes+1) * 
+                      slab->reclaim.nb_chunks_per_node * nb_nodes;
+    rctx->nb_nodes = nb_nodes;
     rctx->thread = spdk_get_thread();
     rctx->user_slot_cb = cb;
     rctx->user_ctx = ctx;
