@@ -118,12 +118,8 @@ struct resize_ctx{
     void (*user_truncate_cb)(void* ctx, int kverrno);
     void* user_ctx;
 
-    TAILQ_HEAD(,resize_ctx) ctx_head;
     TAILQ_ENTRY(resize_ctx) link;
-    UT_hash_handle hh;
 };
-
-static struct resize_ctx* _g_resize_ctx_hash = NULL; 
 
 static void _slab_blob_resize_common_cb(void*ctx);
 
@@ -281,25 +277,13 @@ _slab_blob_resize_common_cb(void*ctx){
             rbtree_insert(slab->reclaim.free_node_tree,nodes[i]->id,nodes[i],NULL);
         }
     }
-
-    //Process the list head.
-    if(rctx->kverrno){
-        rctx->user_slot_cb(UINT64_MAX,rctx->user_ctx,rctx->kverrno);
-    }
-    else{
-        //Just get one slot from node[0], since node[0] must have free slot.
-        uint64_t slot = _get_one_slot_from_free_slab(slab,nodes[0]);
-        rctx->user_slot_cb(slot,rctx->user_ctx,-KV_ESUCCESS);
-    }
-
-    //process the linked slot request if there are linked requests.
     
     //index of the node that have free slots.
     uint32_t i = 0;
     struct resize_ctx* req,*tmp = NULL;
 
-    TAILQ_FOREACH_SAFE(req,&rctx->ctx_head,link,tmp){
-        TAILQ_REMOVE(&rctx->ctx_head,req,link);
+    TAILQ_FOREACH_SAFE(req,&slab->resize_head,link,tmp){
+        TAILQ_REMOVE(&slab->resize_head,req,link);
         if(rctx->kverrno){
             req->user_slot_cb(UINT64_MAX,req->user_ctx,rctx->kverrno);
         }
@@ -310,8 +294,6 @@ _slab_blob_resize_common_cb(void*ctx){
         }
         free(req);
     }
-    HASH_DEL(_g_resize_ctx_hash,rctx);
-    free(rctx);
 }
 
 void slab_request_slot_async(struct iomgr* imgr,
@@ -364,22 +346,18 @@ void slab_request_slot_async(struct iomgr* imgr,
     rctx->user_ctx = ctx;
     rctx->kverrno = 0;
 
-    struct resize_ctx *tmp = NULL;
-    HASH_FIND_PTR(_g_resize_ctx_hash,&slab,tmp);
-    if(tmp!=NULL){
-        rctx->resize_cb = NULL;
+    if(!TAILQ_EMPTY(&slab->resize_head)){
         //Other request is resizing the slab;
-        TAILQ_INSERT_TAIL(&tmp->ctx_head,rctx,link);
+        rctx->resize_cb = NULL;
+        TAILQ_INSERT_TAIL(&slab->resize_head,rctx,link);
     }
     else{
         //This is the first resizing request.
-        TAILQ_INIT(&rctx->ctx_head);
-        HASH_ADD_PTR(_g_resize_ctx_hash,slab,rctx);
         rctx->resize_cb = _slab_blob_resize_common_cb;
+        TAILQ_INSERT_TAIL(&slab->resize_head,rctx,link);
         spdk_thread_send_msg(imgr->meta_thread,_slab_blob_resize,rctx);
     }
 }
-
 
 void slab_free_slot_async(struct reclaim_mgr* rmgr,
                           struct slab* slab, 

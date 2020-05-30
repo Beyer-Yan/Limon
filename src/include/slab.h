@@ -76,11 +76,15 @@ struct slab_reclaim{
     rbtree free_node_tree;
 };
 
+//Used when the slab is resized.
+struct resize_ctx;
+
 struct slab {
     uint32_t slab_size;
     struct spdk_blob *blob;
     uint32_t flag;
     struct slab_reclaim reclaim;
+    TAILQ_HEAD(,resize_ctx) resize_head;
 };
 
 struct slab_shard{

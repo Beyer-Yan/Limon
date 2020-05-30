@@ -176,7 +176,10 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
         slab_base[i].reclaim.nb_total_slots = slab_base[i].reclaim.nb_slots_per_chunk * slab_chunks;
         slab_base[i].reclaim.total_tree = rbtree_create();
         slab_base[i].reclaim.free_node_tree = rbtree_create();
+
+        TAILQ_INIT(&slab_base[i].resize_head);
     }
+    
     kctx->kvs = kvs;
     _kvs_worker_init(kctx);
 }
