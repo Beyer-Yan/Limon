@@ -36,7 +36,7 @@ _kvs_bench_start(void*ctx,int kverrno){
 
 	struct workload w = {
 		.api = &YCSB,
-		.nb_items_in_db = 100000LU,
+		.nb_items_in_db = 1000000LU,
 		.nb_load_injectors = 1,
 		.start_core = 10,
 	};
@@ -48,19 +48,19 @@ _kvs_bench_start(void*ctx,int kverrno){
 	//Pre-fill the data into the database.
 	repopulate_db(&w);
 	   /* Launch benchs */
-	bench_t workload, workloads[] = {
+	bench_t workloads[] = {
 		ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,
 		ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,
 		//ycsb_e_uniform, ycsb_e_zipfian, // Scans
 	};
 	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
-		if(workload == ycsb_e_uniform || workload == ycsb_e_zipfian) {
+		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 2000000LU; 
 		} else {
-			w.nb_requests = 100000000LU;
+			w.nb_requests = 100000LU;
 		}
-		run_workload(&w, workload);
+		run_workload(&w, workloads[i]);
 	}
 }
 
