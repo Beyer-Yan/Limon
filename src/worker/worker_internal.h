@@ -64,6 +64,7 @@ struct kv_request_internal{
 
 
 struct worker_context{
+    volatile bool ready;
     struct mem_index *mem_index;
     
     //The shards filed points to the shards field of kvs structure.

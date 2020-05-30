@@ -120,6 +120,12 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     void *startup_ctx  = kctx->opts->startup_ctx;
     free(kctx);
 
+    //wait the recoverying
+    for(i=0;i<kctx->opts->nb_works;i++){
+        while(!worker_is_ready(kvs->workers[i]));
+        SPDK_NOTICELOG("Woker:%u ready\n",i);
+    }
+    //All workers are ready
     startup_fn(startup_ctx,-KV_ESUCCESS);
 }
 

@@ -376,6 +376,7 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
 
     uint32_t nb_max_reqs = opts->max_request_queue_size_per_worker;
 
+    wctx->ready = false;
     wctx->mem_index = mem_index_init();
     wctx->shards = opts->shard;
     wctx->nb_shards = opts->nb_shards;
@@ -515,8 +516,9 @@ _rebuild_complete(void*ctx, int kverrno){
     poller = SPDK_POLLER_REGISTER(_worker_business_processor_poll,wctx,0);
     assert(poller!=NULL);
     wctx->business_poller = poller;
-}
 
+    wctx->ready = true;
+}
 
 static void
 _do_worker_start(void*ctx){
@@ -536,6 +538,10 @@ _do_worker_start(void*ctx){
 void worker_start(struct worker_context* wctx){
     assert(wctx!=NULL);
     spdk_thread_send_msg(wctx->thread,_do_worker_start,wctx);
+}
+
+bool worker_is_ready(struct worker_context* wctx){
+    return wctx->ready;
 }
 
 static void

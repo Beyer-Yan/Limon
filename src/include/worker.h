@@ -32,6 +32,11 @@ struct worker_context* worker_alloc(struct worker_init_opts* opts);
 void worker_start(struct worker_context* wctx);
 void worker_destroy(struct worker_context* wctx);
 
+/**
+ * @brief When in recovering state, the work is not ready.
+ */
+bool worker_is_ready(struct worker_context* wctx);
+
 //The item in kv_cb function is allocated temporarily. If you want to do something else, please copy it out 
 //in kv_cb function
 

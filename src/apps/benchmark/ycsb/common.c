@@ -5,6 +5,7 @@
 #include "item.h"
 #include "kvutil.h"
 #include "kvs.h"
+#include "kverrno.h"
 
 static void 
 pin_me_on(int core) {
@@ -94,6 +95,10 @@ static volatile int ok = 0;
 static void
 _check_db_cb(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *workload_item = ctx;
+   if(kverrno==-KV_EITEM_NOT_EXIST){
+      printf("Running a benchmark on a pre-populated DB, but couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
+      ok = 0;
+   }
    if(!kverrno){
       if(!memcpy(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
          ok = 1;
