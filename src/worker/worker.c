@@ -194,6 +194,10 @@ static inline void
 _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *item, 
                        worker_cb cb_fn,void* ctx,
                        enum op_code op){
+    
+    //For debug only
+    *(uint64_t*)item->meta.cdt = spdk_get_ticks();
+
     req->cb_fn = cb_fn;
     req->ctx = ctx;
     req->item = item;

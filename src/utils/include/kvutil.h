@@ -7,7 +7,7 @@
 //The align parameeter must be a number of power of two
 #define KV_ALIGN(size,align)	(((size)+(align)-1)&~((align)-1))
 
-#define NOP10() asm("nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;")
+uint64_t kv_cycles_to_us(uint64_t cycles);
 
 //For x86 only
 #define rdtscll(val) {                                           \
@@ -29,7 +29,7 @@
       rdtscll(__last); \
       __nb_count++; \
       if(cycles_to_us(__last - __start) > ((period)*1000LU)) { \
-         printf("(%s,%d) [%3lus] [%7lu ops/s] " msg "\n", __FUNCTION__ , __LINE__, cycles_to_us(__last - __real_start)/1000000LU, __nb_count*1000000LU/cycles_to_us(__last - __start), ##args); \
+         printf("(%s,%d) [%3lus] [%7lu ops/s] " msg "\n", __FUNCTION__ , __LINE__, kv_cycles_to_us(__last - __real_start)/1000000LU, __nb_count*1000000LU/kv_cycles_to_us(__last - __start), ##args); \
          __nb_count = 0; \
          __start = __last; \
       } \
@@ -37,7 +37,6 @@
 
 
 uint32_t kv_hash(const uint8_t* key, uint32_t key_len, uint32_t num_buckets);
-uint64_t kv_cycles_to_us(uint64_t cycles);
 void     kv_shuffle(uint64_t *array, uint64_t n);
 
 #endif
