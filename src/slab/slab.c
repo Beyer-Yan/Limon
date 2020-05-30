@@ -240,6 +240,7 @@ _get_one_slot_from_free_slab(struct slab*slab, struct reclaim_node* node) {
             uint64_t base = node->id*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk + 
                             i*slab->reclaim.nb_slots_per_chunk;
             slot_idx = offset + base;
+            break;
         }
     }
     return slot_idx;
