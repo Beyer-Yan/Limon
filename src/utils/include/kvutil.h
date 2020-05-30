@@ -28,7 +28,7 @@ uint64_t kv_cycles_to_us(uint64_t cycles);
    do { \
       rdtscll(__last); \
       __nb_count++; \
-      if(cycles_to_us(__last - __start) > ((period)*1000LU)) { \
+      if(kv_cycles_to_us(__last - __start) > ((period)*1000LU)) { \
          printf("(%s,%d) [%3lus] [%7lu ops/s] " msg "\n", __FUNCTION__ , __LINE__, kv_cycles_to_us(__last - __real_start)/1000000LU, __nb_count*1000000LU/kv_cycles_to_us(__last - __start), ##args); \
          __nb_count = 0; \
          __start = __last; \

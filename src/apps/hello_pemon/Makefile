@@ -7,6 +7,7 @@ CFLAGS += -I$(KVS_ROOT_DIR)/include
 CFLAGS += -I$(KVS_ROOT_DIR)/indexes/include
 CFLAGS += -I$(KVS_ROOT_DIR)/utils/include
 LDFLAGS += -ltcmalloc
+LDFLAGS += -lm
 #LDFLAGS += -Wl,--gc-sections
 
 APP = hello

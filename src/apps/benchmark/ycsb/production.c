@@ -55,7 +55,7 @@ static void launch_prod(struct workload *w, bench_t b) {
       } else {
 
 
-         struct kv_item* item = _create_unique_item_ycsb(rand_next());
+         struct kv_item* item = create_unique_item_prod(rand_next(),w->nb_items_in_db);
          uint32_t scan_length = uniform_next()%99+1;
 
          if(!kv_iterator_seek(it,item)){
