@@ -122,8 +122,8 @@ long uniform_next(void) {
 }
 
 //atomic operation may not neccesary
-//static atomic_long _g_counter = 0;
-static volatile long _g_counter = 0;
+//static atomic_long _g_counter = 1;
+static volatile long _g_counter = 1;
 
 long latest_next(int write) {
    if(write){
@@ -133,7 +133,7 @@ long latest_next(int write) {
    }
    else{
       long cnt = _g_counter;
-      return cnt - next_long(cnt);
+      return cnt ? cnt - next_long(cnt) : 0;
    }
 }
 
