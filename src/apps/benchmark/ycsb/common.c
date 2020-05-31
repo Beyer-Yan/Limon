@@ -56,7 +56,7 @@ struct kv_item *create_workload_item(struct workload *w) {
 
 
 struct rebuild_pdata {
-   uint64_t id;
+   int id;
    uint64_t *pos;
    uint64_t start;
    uint64_t end;
