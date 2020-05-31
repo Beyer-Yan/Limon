@@ -55,7 +55,7 @@ _do_start_benchmark(void*ctx){
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 2000000LU; 
 		} else {
-			w.nb_requests = 1000000LU;
+			w.nb_requests = 8000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		run_workload(&w, workloads[i]);
