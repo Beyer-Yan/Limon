@@ -56,7 +56,7 @@ struct kv_item *create_workload_item(struct workload *w) {
 
 
 struct rebuild_pdata {
-   int id;
+   uint64_t id;
    uint64_t *pos;
    uint64_t start;
    uint64_t end;
@@ -191,7 +191,7 @@ void repopulate_db(struct workload *w) {
    pthread_t *threads = malloc(w->nb_load_injectors*sizeof(*threads));
 
    for(int i = 0; i < w->nb_load_injectors; i++) {
-      struct rebuild_pdata *pdata = malloc(sizeof(*pdata));
+      struct rebuild_pdata *pdata = calloc(1,sizeof(*pdata));
       pdata->id = w->start_core + i;
       pdata->start = (w->nb_items_in_db / w->nb_load_injectors)*i;
       pdata->end = (w->nb_items_in_db / w->nb_load_injectors)*(i+1);
@@ -203,7 +203,7 @@ void repopulate_db(struct workload *w) {
    }
 
    //wait the finishing of db repopulating.
-   for(int i = 1; i < w->nb_load_injectors; i++){
+   for(int i = 0; i < w->nb_load_injectors; i++){
       pthread_join(threads[i], NULL);
    }
    free(threads);
@@ -261,7 +261,7 @@ void run_workload(struct workload *w, bench_t b) {
       pthread_create(&threads[i], NULL, do_workload_thread, &pdata[i]);
    }
    
-   for(int i = 1; i < w->nb_load_injectors; i++){
+   for(int i = 0; i < w->nb_load_injectors; i++){
       pthread_join(threads[i], NULL);
    }
       
