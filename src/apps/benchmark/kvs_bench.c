@@ -33,7 +33,7 @@ _do_start_benchmark(void*ctx){
 	struct workload w = {
 		.api = &YCSB,
 		.nb_items_in_db = 30000000LU,
-		.nb_load_injectors = 1,
+		.nb_load_injectors = 4,
 		.start_core = 10,
 	};
 
@@ -64,7 +64,6 @@ _do_start_benchmark(void*ctx){
 		}
 		printf("Benchmark starts, %s\n",bench_name[i]);
 		run_workload(&w, workloads[i]);
-		printf("Benchmark completes, %s\n",bench_name[i]);
 	}
 	printf("ALl workloads complete\n");
 	kvs_shutdown();
@@ -88,10 +87,10 @@ static void
 _kvs_opts_init(struct kvs_start_opts *opts){
     opts->devname = "Nvme0n1";
     opts->kvs_name = "kvs_bench";
-    opts->max_cache_chunks = 20000;
+    opts->max_cache_chunks = 30000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
-    opts->nb_works = 1;
+    opts->nb_works = 4;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = _kvs_bench_start;
