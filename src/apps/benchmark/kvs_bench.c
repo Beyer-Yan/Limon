@@ -66,6 +66,8 @@ _do_start_benchmark(void*ctx){
 		run_workload(&w, workloads[i]);
 		printf("Benchmark completes, %s\n",bench_name[i]);
 	}
+	printf("ALl workloads complete\n");
+	kvs_shutdown();
 }
 
 static void
