@@ -47,11 +47,11 @@ _ycsb_get_complete(void*ctx, struct kv_item* item, int kverrno){
    if(kverrno){
       printf("Get error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
    }
-   uint32_t ksize = ori_item->meta.ksize;
-   uint32_t vsize = ori_item->meta.vsize;
-   if(!memcpy(ori_item->data+ksize, item->data+ksize, vsize)){
-      printf("Value mismatch, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
-   }
+   //uint32_t ksize = ori_item->meta.ksize;
+   //uint32_t vsize = ori_item->meta.vsize;
+   //if(!memcpy(ori_item->data+ksize, item->data+ksize, vsize)){
+   //   printf("Value mismatch, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
+   //}
    free(ori_item);
 }
 
