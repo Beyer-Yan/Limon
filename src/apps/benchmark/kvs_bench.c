@@ -78,7 +78,7 @@ static void
 _kvs_opts_init(struct kvs_start_opts *opts){
     opts->devname = "Nvme0n1";
     opts->kvs_name = "kvs_bench";
-    opts->max_cache_chunks = 40960;
+    opts->max_cache_chunks = 20000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
     opts->nb_works = 1;
