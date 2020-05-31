@@ -85,7 +85,7 @@ void *repopulate_db_worker(void *pdata) {
       kv_put_async(item,_repopulate_item_add_cb,item);
       periodic_count(1000, "Repopulating database, w:%lu, (%lu%%)", data->id ,100LU-(end-i)*100LU/(end - start));
    }
-
+   free(data);
    return NULL;
 }
 
@@ -186,19 +186,20 @@ void repopulate_db(struct workload *w) {
    // To be fair to other systems, we shuffle items in the DB so that the DB is not fully sorted by luck
    printf("Start shuffling\n");
    kv_shuffle(pos, nb_inserts);
+   printf("Shuffle  completes\n");
 
-   struct rebuild_pdata *pdata = malloc(w->nb_load_injectors*sizeof(*pdata));
    pthread_t *threads = malloc(w->nb_load_injectors*sizeof(*threads));
 
    for(int i = 0; i < w->nb_load_injectors; i++) {
-      pdata[i].id = w->start_core + i;
-      pdata[i].start = (w->nb_items_in_db / w->nb_load_injectors)*i;
-      pdata[i].end = (w->nb_items_in_db / w->nb_load_injectors)*(i+1);
+      struct rebuild_pdata *pdata = malloc(sizeof(*pdata));
+      pdata->id = w->start_core + i;
+      pdata->start = (w->nb_items_in_db / w->nb_load_injectors)*i;
+      pdata->end = (w->nb_items_in_db / w->nb_load_injectors)*(i+1);
       if(i == w->nb_load_injectors - 1)
-         pdata[i].end = w->nb_items_in_db;
-      pdata[i].w = w;
-      pdata[i].pos = pos;
-      pthread_create(&threads[i], NULL, repopulate_db_worker, &pdata[i]);
+         pdata->end = w->nb_items_in_db;
+      pdata->w = w;
+      pdata->pos = pos;
+      pthread_create(&threads[i], NULL, repopulate_db_worker, pdata);
    }
 
    //wait the finishing of db repopulating.
@@ -206,7 +207,6 @@ void repopulate_db(struct workload *w) {
       pthread_join(threads[i], NULL);
    }
    free(threads);
-   free(pdata);
    free(pos);
 }
 
