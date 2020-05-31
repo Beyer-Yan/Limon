@@ -127,6 +127,7 @@ _add_db_flag_complete(void*ctx, struct kv_item* item, int kverrno){
       printf("Error in put item:%lu, err:%d\n", *(uint64_t*)workload_item->data,kverrno);
    }
    free(workload_item);
+   ok = 1;
    finished = 1;
 }
 
