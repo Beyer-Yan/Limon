@@ -31,12 +31,6 @@ _prod_put_complete(void*ctx, struct kv_item* item, int kverrn){
 
 }
 
-static void
-_prod_scan_get_complete(void*ctx, struct kv_item* item, int kverrn){
-
-}
-
-
 static void launch_prod(struct workload *w, bench_t b, int id) {
    declare_periodic_count;
    random_gen_t rand_next = (b==prod1)?(production_random1):(production_random2);
@@ -54,7 +48,6 @@ static void launch_prod(struct workload *w, bench_t b, int id) {
          kv_get_async(item,_prod_get_complete,item);
       } else {
 
-
          struct kv_item* item = create_unique_item_prod(rand_next(),w->nb_items_in_db);
          uint32_t scan_length = uniform_next()%99+1;
 
@@ -66,7 +59,7 @@ static void launch_prod(struct workload *w, bench_t b, int id) {
          for(uint64_t i = 0; i < scan_length; i++) {
             if(kv_iterator_next(it)){
                item = kv_iterator_item(it);
-               kv_get_async(item, _prod_scan_get_complete, (void*)i);
+               kv_get_async(item, _prod_get_complete, (void*)i);
             }
          }
       }
