@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include "kvs.h"
 #include "slab.h"
 #include "kvutil.h"
@@ -26,13 +27,8 @@ _kvs_usage(void){
 
 }
 
-static void
-_kvs_bench_start(void*ctx,int kverrno){
-	if(kverrno){
-		printf("Startup error\n");
-		kvs_shutdown();
-		return;
-	}
+static void*
+_do_start_benchmark(void*ctx){
 
 	struct workload w = {
 		.api = &YCSB,
@@ -58,10 +54,24 @@ _kvs_bench_start(void*ctx,int kverrno){
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 2000000LU; 
 		} else {
-			w.nb_requests = 100000LU;
+			w.nb_requests = 5000000LU;
 		}
 		run_workload(&w, workloads[i]);
 	}
+}
+
+static void
+_kvs_bench_start(void*ctx,int kverrno){
+	if(kverrno){
+		printf("Startup error\n");
+		kvs_shutdown();
+		return;
+	}
+
+	//Create a thread to prevent blobcking the master core.
+	pthread_t *thread = malloc(sizeof(pthread_t));
+	assert(thread!=NULL);
+	pthread_create(thread,NULL,_do_start_benchmark,thread);
 }
 
 static void

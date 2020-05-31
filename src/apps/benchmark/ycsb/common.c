@@ -93,11 +93,10 @@ static volatile int finished = 0;
 static volatile int ok = 0;
 
 static void
-_check_db_cb(void*ctx, struct kv_item* item, int kverrno){
+_check_db_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *workload_item = ctx;
    if(kverrno==-KV_EITEM_NOT_EXIST){
       printf("Running a benchmark on a pre-populated DB, but couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
-      ok = 0;
    }
    if(!kverrno){
       if(!memcpy(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
@@ -113,7 +112,7 @@ _check_db(struct workload *w){
    struct kv_item *workload_item = create_workload_item(w);
    finished = 0;
    ok = 0;
-   kv_get_async(workload_item,_check_db_cb,workload_item);
+   kv_get_async(workload_item,_check_db_complete,workload_item);
    while(!finished);
    if(!ok){
       printf("Can not resolve the workload type, please format the kvs\n");
@@ -122,11 +121,21 @@ _check_db(struct workload *w){
 }
 
 static void
+_add_db_flag_complete(void*ctx, struct kv_item* item, int kverrno){
+   struct kv_item *workload_item = ctx;
+   if(kverrno){
+      printf("Error in put item:%lu, err:%d\n", *(uint64_t*)workload_item->data,kverrno);
+   }
+   free(workload_item);
+   finished = 1;
+}
+
+static void
 _add_db_flag(struct workload *w){
    struct kv_item *workload_item = create_workload_item(w);
    finished = 0;
    ok = 0;
-   kv_put_async(workload_item,_check_db_cb,workload_item);
+   kv_put_async(workload_item,_add_db_flag_complete,workload_item);
    while(!finished);
    if(!ok){
       printf("Failed to add workload flag\n");
