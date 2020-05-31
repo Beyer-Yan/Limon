@@ -120,11 +120,15 @@ long uniform_next(void) {
    return rand_r(&seed) % items;
 }
 
-static long _g_counter = 0;
+//atomic operation may not neccesary
+//static atomic_long _g_counter = 0;
+static volatile long _g_counter = 0;
 
 long latest_next(int write) {
    if(write){
-      return __sync_fetch_and_add(&_g_counter,(_g_counter+1)%items );
+      long val = _g_counter;
+      _g_counter = (val+1)%items;
+      return val;
    }
    else{
       long cnt = _g_counter;
