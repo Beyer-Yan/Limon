@@ -6,7 +6,7 @@
 #include "item.h"
 
 typedef enum available_bench {
-   ycsb_a_uniform,
+   ycsb_a_uniform = 0,
    ycsb_b_uniform,
    ycsb_c_uniform,
    ycsb_d_uniform,
