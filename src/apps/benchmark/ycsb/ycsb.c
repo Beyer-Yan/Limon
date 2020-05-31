@@ -92,7 +92,7 @@ _ycsb_scan_get_complete(void*ctx, struct kv_item* item, int kverrno){
 }
 
 /* YCSB E */
-static void _launch_ycsb_e(int test, int nb_requests, int zipfian) {
+static void _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
    declare_periodic_count;
    random_gen_t rand_next = zipfian?zipf_next:uniform_next;
    struct kv_iterator *it = kv_iterator_alloc();
@@ -120,7 +120,7 @@ static void _launch_ycsb_e(int test, int nb_requests, int zipfian) {
             }
          }
       }
-      periodic_count(1000, "YCSB Load Injector (scans) (%lu%%)", i*100LU/nb_requests);
+      periodic_count(1000, "YCSB Load Injector (scans):%d, (%lu%%)", id, i*100LU/nb_requests);
    }
 }
 
