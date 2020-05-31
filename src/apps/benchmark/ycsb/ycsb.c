@@ -55,7 +55,7 @@ _ycsb_get_complete(void*ctx, struct kv_item* item, int kverrno){
    free(ori_item);
 }
 
-static void _launch_ycsb(int test, int nb_requests, int zipfian) {
+static void _launch_ycsb(int test, int nb_requests, int zipfian, int id) {
    declare_periodic_count;
    for(int i = 0; i < nb_requests; i++) {
       struct kv_item *item;
@@ -70,7 +70,7 @@ static void _launch_ycsb(int test, int nb_requests, int zipfian) {
       } else { // or we read
          kv_get_async(item,_ycsb_get_complete,item);
       }
-      periodic_count(1000, "YCSB Load Injector (%lu%%)", i*100LU/nb_requests);
+      periodic_count(1000, "YCSB Load Injector:%02d, (%lu%%)", id, i*100LU/nb_requests);
    }
 }
 
@@ -125,24 +125,24 @@ static void _launch_ycsb_e(int test, int nb_requests, int zipfian) {
 }
 
 /* Generic interface */
-static void launch_ycsb(struct workload *w, bench_t b) {
+static void launch_ycsb(struct workload *w, bench_t b, int id) {
    switch(b) {
       case ycsb_a_uniform:
-         return _launch_ycsb(0, w->nb_requests_per_thread, 0);
+         return _launch_ycsb(0, w->nb_requests_per_thread, 0, id);
       case ycsb_b_uniform:
-         return _launch_ycsb(1, w->nb_requests_per_thread, 0);
+         return _launch_ycsb(1, w->nb_requests_per_thread, 0, id);
       case ycsb_c_uniform:
-         return _launch_ycsb(2, w->nb_requests_per_thread, 0);
+         return _launch_ycsb(2, w->nb_requests_per_thread, 0, id);
       case ycsb_e_uniform:
-         return _launch_ycsb_e(3, w->nb_requests_per_thread, 0);
+         return _launch_ycsb_e(3, w->nb_requests_per_thread, 0, id);
       case ycsb_a_zipfian:
-         return _launch_ycsb(0, w->nb_requests_per_thread, 1);
+         return _launch_ycsb(0, w->nb_requests_per_thread, 1, id);
       case ycsb_b_zipfian:
-         return _launch_ycsb(1, w->nb_requests_per_thread, 1);
+         return _launch_ycsb(1, w->nb_requests_per_thread, 1, id);
       case ycsb_c_zipfian:
-         return _launch_ycsb(2, w->nb_requests_per_thread, 1);
+         return _launch_ycsb(2, w->nb_requests_per_thread, 1, id);
       case ycsb_e_zipfian:
-         return _launch_ycsb_e(3, w->nb_requests_per_thread, 1);
+         return _launch_ycsb_e(3, w->nb_requests_per_thread, 1, id);
       default:
          printf("Unsupported workload\n");
          exit(-1);

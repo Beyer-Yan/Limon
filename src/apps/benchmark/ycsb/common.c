@@ -236,7 +236,7 @@ void* do_workload_thread(void *pdata) {
    pin_me_on(data->id);
    pthread_barrier_wait(&barrier);
 
-   data->workload->api->launch(data->workload, data->benchmark);
+   data->workload->api->launch(data->workload, data->benchmark, data->id);
 
    return NULL;
 }

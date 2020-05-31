@@ -37,7 +37,7 @@ _prod_scan_get_complete(void*ctx, struct kv_item* item, int kverrn){
 }
 
 
-static void launch_prod(struct workload *w, bench_t b) {
+static void launch_prod(struct workload *w, bench_t b, int id) {
    declare_periodic_count;
    random_gen_t rand_next = (b==prod1)?(production_random1):(production_random2);
    uint64_t nb_requests = w->nb_requests_per_thread;
@@ -70,7 +70,7 @@ static void launch_prod(struct workload *w, bench_t b) {
             }
          }
       }
-      periodic_count(1000, "Production Load Injector,(%lu%%)",i*100UL/nb_requests);
+      periodic_count(1000, "Production Load Injector:%02d, (%lu%%)", id ,i*100UL/nb_requests);
    }
 }
 
