@@ -18,7 +18,7 @@ pin_me_on(int core) {
 
    int s = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
    if (s != 0){
-       printf("pin failed\n");
+       printf("core:%d,pin failed\n",core);
        exit(-1);
    }
 }
