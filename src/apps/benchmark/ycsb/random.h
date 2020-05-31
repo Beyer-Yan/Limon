@@ -19,6 +19,9 @@ long uniform_next(void);
  // returns something between 1 and 1000
 long bogus_rand(void);
 
+// get the latest one according "write(1)" or "read(0)"
+long latest_next(int write);
+
 // production workload simulator
 long production_random1(void); 
 

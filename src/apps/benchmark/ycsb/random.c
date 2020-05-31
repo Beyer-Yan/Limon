@@ -111,17 +111,29 @@ long next_long(long itemcount){
 	return ret;
 }
 
-long zipf_next() {
+long zipf_next(void) {
 	return next_long(items);
 }
 
 /* Uniform */
-long uniform_next() {
+long uniform_next(void) {
    return rand_r(&seed) % items;
 }
 
+static long _g_counter = 0;
+
+long latest_next(int write) {
+   if(write){
+      return __sync_fetch_and_add(&_g_counter,(_g_counter+1)%items );
+   }
+   else{
+      long cnt = _g_counter;
+      return cnt - next_long(cnt);
+   }
+}
+
 /* bogus rand */
-long bogus_rand() {
+long bogus_rand(void) {
    return rand_r(&seed) % 1000;
 }
 

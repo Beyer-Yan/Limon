@@ -45,14 +45,9 @@ _do_start_benchmark(void*ctx){
 	repopulate_db(&w);
 	   /* Launch benchs */
 	bench_t workloads[] = {
-		ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,
-		ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,
+		ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
+		ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
 		//ycsb_e_uniform, ycsb_e_zipfian, // Scans
-	};
-
-	char* bench_name[] = {
-		"ycsb_a_uniform","ycsb_b_uniform","ycsb_c_uniform",
-		"ycsb_a_zipfian","ycsb_b_zipfian","ycsb_c_zipfian"
 	};
 
 	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
@@ -60,9 +55,9 @@ _do_start_benchmark(void*ctx){
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 2000000LU; 
 		} else {
-			w.nb_requests = 5000000LU;
+			w.nb_requests = 1000000LU;
 		}
-		printf("Benchmark starts, %s\n",bench_name[i]);
+		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		run_workload(&w, workloads[i]);
 	}
 	printf("ALl workloads complete\n");
