@@ -62,8 +62,8 @@ _default_page_io_complete_cb(void*ctx, int kverrno){
     pio->imgr->nb_pending_io--;
 
     //process the header
-    pool_release(pio->imgr->page_io_pool,pio);
     _process_cache_io(pio->cache_io,kverrno);
+    pool_release(pio->imgr->page_io_pool,pio);
     if(io_link!=NULL){
         _process_io_link(io_link,kverrno);
     }
