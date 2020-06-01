@@ -84,8 +84,8 @@ struct iomgr{
 static inline void 
 _make_cache_key128(uint64_t base_key, uint64_t n, uint64_t *key_out){
 
-    key_out[1] = base_key;
-    key_out[0] = n;
+    key_out[0] = base_key;
+    key_out[1] = n;
 }
 
 static inline uint64_t 

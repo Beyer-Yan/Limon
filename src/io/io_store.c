@@ -22,8 +22,8 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 
     if(cio->cnt==cio->nb_segments){
         //All the segments completes.
-        cio->cb(cio->ctx,cio->kverrno);
         pool_release(cio->imgr->cache_io_pool,cio);
+        cio->cb(cio->ctx,cio->kverrno);
         
         struct cache_io *i=NULL, *tmp=NULL;
         TAILQ_FOREACH_SAFE(i,&cio->cio_head,link,tmp){
@@ -95,7 +95,7 @@ _store_pages_complete_cb(void*ctx, int kverrno){
     }
     
     HASH_FIND_64(pio->imgr->write_hash.page_hash,&pio->key,tmp);
-    if(!tmp){
+    if(tmp){
         if(tmp->len==pio->len){
             //The page io is the longest io covering all other page IOs.
             HASH_DEL(pio->imgr->write_hash.page_hash,pio);
