@@ -48,9 +48,9 @@ _process_cache_io(struct cache_io *cio,int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
-        printf("cache hash counter:%d, cio:%p,  before del\n",HASH_COUNT(cio->imgr->write_hash.cache_hash),cio);
+        _hash_print(cio->imgr->write_hash.cache_hash);
         HASH_DEL(cio->imgr->write_hash.cache_hash,cio); 
-        printf("cache hash counter:%d, cio:%p, after del\n",HASH_COUNT(cio->imgr->write_hash.cache_hash),cio);
+        _hash_print(cio->imgr->write_hash.cache_hash);
     }
 }
 
