@@ -6,6 +6,16 @@
 
 
 static void
+_hash_print(struct cache_io* cio){
+    struct cache_io *i,*tmp;
+    printf("count:%d  ",HASH_COUNT(cio));
+    HASH_ITER(hh,cio,i,tmp){
+        printf("%p, ", i);
+    }
+    printf("\n");
+}
+
+static void
 _bummy_blob_write(struct spdk_blob *blob, struct spdk_io_channel *channel,
 		   void *payload, uint64_t offset, uint64_t length,
 		   spdk_blob_op_complete cb_fn, void *cb_arg){
@@ -214,9 +224,9 @@ iomgr_store_pages_async(struct iomgr* imgr,
     }
     cio->cnt = 0;
     TAILQ_INIT(&cio->cio_head);
-    printf("cache hash counter:%d, cio:%p, before put\n",HASH_COUNT(imgr->write_hash.page_hash),cio);
+    _hash_print(imgr->write_hash.page_hash);
     HASH_ADD(hh,imgr->write_hash.cache_hash,key,sizeof(cio->key),cio);
-    printf("cache hash counter:%d, cio:%p, after put\n",HASH_COUNT(imgr->write_hash.page_hash),cio);
+    _hash_print(imgr->write_hash.page_hash);
 
     if(nb_pages==1){
         cio->nb_segments = 1;
