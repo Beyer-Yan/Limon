@@ -3,6 +3,15 @@
 #include "slab.h"
 #include "kverrno.h"
 
+
+//For debug only
+static void 
+_dummy_blob_read(struct spdk_blob *blob, struct spdk_io_channel *channel,
+		       void *payload, uint64_t offset, uint64_t length,
+		       spdk_blob_op_complete cb_fn, void *cb_arg){
+    cb_fn(cb_arg,0);
+}
+
 static void
 _process_cache_io(struct cache_io *cio, int kverrno){
     cio->cnt++;
@@ -10,28 +19,37 @@ _process_cache_io(struct cache_io *cio, int kverrno){
 
     if(cio->cnt==cio->nb_segments){
         //All the segments completes.
+        //process the header
+        pool_release(cio->imgr->cache_io_pool,cio);
+        cio->cb(cio->ctx,cio->kverrno);
+
+        //process the link requests
         struct cache_io *i=NULL, *tmp=NULL;
         TAILQ_FOREACH_SAFE(i,&cio->cio_head,link,tmp){
             TAILQ_REMOVE(&cio->cio_head,i,link);
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
-        pool_release(cio->imgr->cache_io_pool,cio);
-        cio->cb(cio->ctx,cio->kverrno);
+        //this cache io is finished, now remove it from cache read_hash
         HASH_DEL(cio->imgr->read_hash.cache_hash,cio); 
     }
 }
 
 static void
 _process_io_link(struct page_io *pio, int kverrno){
+    //process the header
+    pool_release(pio->imgr->page_io_pool,pio);
+    _process_cache_io(pio->cache_io,kverrno);
+    
+    //process the linked requests.
     struct page_io *i=NULL, *tmp=NULL;
     TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
         TAILQ_REMOVE(&pio->pio_head,i,link);
-        _process_cache_io(i->cache_io,kverrno);
         pool_release(pio->imgr->page_io_pool,i);
+        _process_cache_io(i->cache_io,kverrno);
     }
-    _process_cache_io(pio->cache_io,kverrno);
-    pool_release(pio->imgr->page_io_pool,pio);
+
+    //This page io is finished, now remove it from the read_hash
     HASH_DEL(pio->imgr->read_hash.page_hash,pio);
 }
 
@@ -42,19 +60,22 @@ _default_page_io_complete_cb(void*ctx, int kverrno){
 
     pio->imgr->nb_pending_io--;
 
-    struct page_io *i=NULL, *tmp=NULL;
-    TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
-        TAILQ_REMOVE(&pio->pio_head,i,link);
-        _process_cache_io(i->cache_io,kverrno);
-        pool_release(pio->imgr->page_io_pool,i);
-    }
-    _process_cache_io(pio->cache_io,kverrno);
+    //process the header
     pool_release(pio->imgr->page_io_pool,pio);
-    HASH_DEL(pio->imgr->read_hash.page_hash,pio);
-
+    _process_cache_io(pio->cache_io,kverrno);
     if(io_link!=NULL){
         _process_io_link(io_link,kverrno);
     }
+    //process the linked page io requests
+    struct page_io *i=NULL, *tmp=NULL;
+    TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
+        TAILQ_REMOVE(&pio->pio_head,i,link);
+        pool_release(pio->imgr->page_io_pool,i);
+        _process_cache_io(i->cache_io,kverrno);
+    }
+
+    //This page io is finished, now remove it from the read_hash
+    HASH_DEL(pio->imgr->read_hash.page_hash,pio);
 }
 
 static void
@@ -101,7 +122,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             //I need load page 2 to n-1
             cio->nb_segments++;
             imgr->nb_pending_io++;
-            spdk_blob_io_read(blob,imgr->channel,
+            _dummy_blob_read(blob,imgr->channel,
                               buf+KVS_PAGE_SIZE,start_page+1,nb_pages-2,
                               _default_cache_io_complete_cb,cio);
         }
@@ -116,7 +137,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         HASH_ADD_64(imgr->read_hash.page_hash,key,pio_n);
 
         imgr->nb_pending_io++;
-        spdk_blob_io_read(blob,imgr->channel,
+        _dummy_blob_read(blob,imgr->channel,
                           buf,start_page,nb_pages,
                           _default_page_io_complete_cb,cio);
     }
@@ -134,7 +155,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             HASH_ADD_64(imgr->read_hash.page_hash,key,pio_1);   
         }
         imgr->nb_pending_io++;
-        spdk_blob_io_read(blob,imgr->channel,
+        _dummy_blob_read(blob,imgr->channel,
                           buf,start_page,nb_pages-1,
                           _default_page_io_complete_cb,cio);
     }
@@ -149,6 +170,7 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
 
     pio = pool_get(imgr->page_io_pool);
     assert(pio!=NULL);
+
     pio->cache_io = cio;
     pio->key = key_prefix;
     pio->imgr = imgr;
@@ -164,7 +186,7 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
         HASH_ADD_64(imgr->read_hash.page_hash,key,pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        spdk_blob_io_read(blob,imgr->channel,
+        _dummy_blob_read(blob,imgr->channel,
                           buf,start_page,1,
                           _default_page_io_complete_cb,pio);
     }
@@ -180,10 +202,6 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
 
     struct cache_io *cio = NULL, *tmp = NULL;
 
-    //for debug
-    cb(ctx, KV_ESUCCESS);
-    return;
-
     cio = pool_get(imgr->cache_io_pool);
     assert(cio!=NULL);
     cio->cb = cb;
@@ -191,7 +209,7 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
     cio->imgr = imgr;
     _make_cache_key128(key_prefix,nb_pages,cio->key);
 
-    HASH_FIND(hh,imgr->read_hash.cache_hash,cio->key,sizeof(cio->key),tmp);
+    HASH_FIND(hh,imgr->read_hash.cache_hash,&cio->key,sizeof(cio->key),tmp);
     if(tmp!=NULL){
         //Other IOs are already prefetching the same pages!
         TAILQ_INSERT_TAIL(&tmp->cio_head,cio,link);

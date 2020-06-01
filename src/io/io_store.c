@@ -4,6 +4,15 @@
 #include "slab.h"
 #include "kverrno.h"
 
+
+static void
+_bummy_blob_write(struct spdk_blob *blob, struct spdk_io_channel *channel,
+		   void *payload, uint64_t offset, uint64_t length,
+		   spdk_blob_op_complete cb_fn, void *cb_arg){
+
+    cb_fn(cb_arg,0);
+}
+
 static void _store_pages_complete_cb(void*ctx, int kverrno);
 
 static void
@@ -13,6 +22,9 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 
     if(cio->cnt==cio->nb_segments){
         //All the segments completes.
+        cio->cb(cio->ctx,cio->kverrno);
+        pool_release(cio->imgr->cache_io_pool,cio);
+        
         struct cache_io *i=NULL, *tmp=NULL;
         TAILQ_FOREACH_SAFE(i,&cio->cio_head,link,tmp){
             TAILQ_REMOVE(&cio->cio_head,i,link);
@@ -26,8 +38,6 @@ _process_cache_io(struct cache_io *cio,int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
-        pool_release(cio->imgr->cache_io_pool,cio);
-        cio->cb(cio->ctx,cio->kverrno);
         HASH_DEL(cio->imgr->write_hash.cache_hash,cio); 
     }
 }
@@ -50,9 +60,9 @@ _store_pages_multipages_phase2(struct page_io *pio){
     else{
         TAILQ_INIT(&pio->pio_head);
         HASH_ADD_64(pio->imgr->write_hash.page_hash,key,pio);
-        //Now issue a blob IO command for pio_1_pages;
+        //Now issue a blob IO command for pio_n_pages;
         pio->imgr->nb_pending_io++;
-        spdk_blob_io_write(blob,pio->imgr->channel,
+        _bummy_blob_write(blob,pio->imgr->channel,
                            buf,start_page,1,
                            _store_pages_complete_cb,pio);
     }
@@ -63,6 +73,14 @@ _store_pages_complete_cb(void*ctx, int kverrno){
     struct page_io *pio = ctx;
 
     pio->imgr->nb_pending_io--;
+
+    _process_cache_io(pio->cache_io,kverrno);
+    if(pio->io_link){
+        _store_pages_multipages_phase2(pio);
+    }
+    else{
+         pool_release(pio->imgr->page_io_pool,pio);
+    } 
 
     struct page_io *i, *tmp=NULL;
     TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
@@ -75,8 +93,7 @@ _store_pages_complete_cb(void*ctx, int kverrno){
             pool_release(pio->imgr->page_io_pool,i);
         }
     }
-
-    _process_cache_io(pio->cache_io,kverrno);
+    
     HASH_FIND_64(pio->imgr->write_hash.page_hash,&pio->key,tmp);
     if(!tmp){
         if(tmp->len==pio->len){
@@ -84,12 +101,6 @@ _store_pages_complete_cb(void*ctx, int kverrno){
             HASH_DEL(pio->imgr->write_hash.page_hash,pio);
         }
     }
-    if(pio->io_link){
-        _store_pages_multipages_phase2(pio);
-     }
-     else{
-         pool_release(pio->imgr->page_io_pool,pio);
-     } 
 }
 
 static void
@@ -101,8 +112,10 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
     //Perform two-phase writing.          
     struct page_io* pio = NULL;
     struct page_io* tmp = NULL;
+
     pio = pool_get(imgr->page_io_pool);
     assert(pio!=NULL);
+
     pio->cache_io = cio;
     pio->key = key_prefix;
     pio->imgr = imgr;
@@ -129,7 +142,7 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         TAILQ_INIT(&pio->pio_head);
         HASH_ADD_64(imgr->write_hash.page_hash,key,pio);
         imgr->nb_pending_io++;
-        spdk_blob_io_write(blob,imgr->channel,buf,start_page,pio->len,
+        _bummy_blob_write(blob,imgr->channel,buf,start_page,pio->len,
                            _store_pages_complete_cb,pio);
     }
 }
@@ -158,7 +171,7 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
         HASH_ADD_64(imgr->write_hash.page_hash,key,pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        spdk_blob_io_write(blob,imgr->channel,buf,start_page,1,
+        _bummy_blob_write(blob,imgr->channel,buf,start_page,1,
                            _store_pages_complete_cb,pio);
     }
 }
@@ -173,10 +186,6 @@ iomgr_store_pages_async(struct iomgr* imgr,
                             void* ctx){
 
     assert( ((uint64_t)buf) % KVS_PAGE_SIZE==0 );
-
-    //for debug
-    cb(ctx, KV_ESUCCESS);
-    return;
 
     struct cache_io *cio = NULL, *tmp = NULL;
 
@@ -195,7 +204,7 @@ iomgr_store_pages_async(struct iomgr* imgr,
 
     _make_cache_key128(key_prefix,nb_pages,cio->key);
 
-    HASH_FIND(hh,imgr->write_hash.cache_hash,cio->key,sizeof(cio->key),tmp);
+    HASH_FIND(hh,imgr->write_hash.cache_hash,&cio->key,sizeof(cio->key),tmp);
     if(tmp!=NULL){
         //Other IOs are already storing the same pages!
         TAILQ_INSERT_TAIL(&tmp->cio_head,cio,link);

@@ -19,8 +19,8 @@ struct page_io{
      * @brief When performing the loading, the io_link is used to link the last
      * page io of a multi-pages loading if the last page is not in loading state. 
      * 
-     * When performing the storing, the io_link is used to indicate whther current
-     * page IO needs to do phase-2 writing. If it is NULL, I needn't do phawe-2
+     * When performing the storing, the io_link is used to indicate whether current
+     * page IO needs to do phase-2 writing. If it is NULL, I needn't do phase-2
      * writing. Ortherwise, the phase-2 writing need performing.
      */
     struct page_io *io_link;
@@ -40,7 +40,8 @@ struct cache_io{
     uint64_t key[2];
     struct iomgr *imgr;
 
-    //For loading only
+    //For loading only,
+    //cnt means how many page_ios for the cache_io
     uint32_t cnt;
     uint32_t nb_segments;
 
