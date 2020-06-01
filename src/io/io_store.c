@@ -38,7 +38,9 @@ _process_cache_io(struct cache_io *cio,int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
+        printf("cache hash counter:%d, before del\n",HASH_COUNT(cio->imgr->write_hash.cache_hash));
         HASH_DEL(cio->imgr->write_hash.cache_hash,cio); 
+        printf("cache hash counter:%d, after del\n",HASH_COUNT(cio->imgr->write_hash.cache_hash));
     }
 }
 
@@ -212,7 +214,9 @@ iomgr_store_pages_async(struct iomgr* imgr,
     }
     cio->cnt = 0;
     TAILQ_INIT(&cio->cio_head);
+    printf("cache hash counter:%d, before put\n",HASH_COUNT(imgr->write_hash.page_hash));
     HASH_ADD(hh,imgr->write_hash.cache_hash,key,sizeof(cio->key),cio);
+    printf("cache hash counter:%d, after put\n",HASH_COUNT(imgr->write_hash.page_hash));
 
     if(nb_pages==1){
         cio->nb_segments = 1;
