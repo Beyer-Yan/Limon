@@ -147,7 +147,7 @@ static unsigned long crc32_tab[] = {
 
 /* Return a 32-bit CRC of the contents of the buffer. */
 
-unsigned long crc32(const unsigned char *s, unsigned int len)
+static unsigned long crc32(const unsigned char *s, unsigned int len)
 {
   unsigned int i;
   unsigned long crc32val;
@@ -163,7 +163,7 @@ unsigned long crc32(const unsigned char *s, unsigned int len)
 /*
  * Hashing function for a string
  */
-unsigned int hashmap_hash_int(hashmap_map * m, uint8_t* key, int key_len){
+static unsigned int hashmap_hash_int(hashmap_map * m, uint8_t* key, int key_len){
 
     unsigned long key_code = crc32((key), strlen(key));
 
@@ -187,7 +187,7 @@ unsigned int hashmap_hash_int(hashmap_map * m, uint8_t* key, int key_len){
  * Return the integer of the location in data
  * to store the point to the item, or MAP_FULL.
  */
-int hashmap_hash(map_t in, uint8_t* key, int key_len){
+static int hashmap_hash(map_t in, uint8_t* key, int key_len){
 	int curr;
 	int i;
 
@@ -217,7 +217,7 @@ int hashmap_hash(map_t in, uint8_t* key, int key_len){
 /*
  * Doubles the size of the hashmap, and rehashes all the elements
  */
-int hashmap_rehash(map_t in){
+static int hashmap_rehash(map_t in){
 	int i;
 	int old_size;
 	hashmap_element* curr;
