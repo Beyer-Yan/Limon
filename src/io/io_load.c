@@ -2,6 +2,7 @@
 #include "io.h"
 #include "slab.h"
 #include "kverrno.h"
+#include "hashmap.h"
 
 
 //For debug only
@@ -103,7 +104,6 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
     pio_1->key = page_1_key;
     pio_1->imgr = imgr;
     pio_1->io_link = NULL;
-    HASH_FIND_64(imgr->read_hash.page_hash,&page_1_key,tmp_1);
 
     pio_n = pool_get(imgr->page_io_pool);
     assert(pio_n!=NULL);
@@ -111,7 +111,9 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
     pio_n->key = page_n_key;
     pio_n->imgr = imgr;
     pio_n->io_link = NULL;
-    HASH_FIND_64(imgr->read_hash.page_hash,&page_n_key,tmp_n);
+    
+    hashmap_get(imgr->read_hash.page_hash,&page_1_key, sizeof(page_1_key),&tmp_1);
+    hashmap_get(imgr->read_hash.page_hash,&page_n_key, sizeof(page_n_key),&tmp_n);
 
     //Both ends pages are being laoded.
     if(tmp_1!=NULL && tmp_n!=NULL){
@@ -133,8 +135,8 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
 
         pio_1->io_link = pio_n;
 
-        HASH_ADD_64(imgr->read_hash.page_hash,key,pio_1);
-        HASH_ADD_64(imgr->read_hash.page_hash,key,pio_n);
+        hashmap_put(imgr->read_hash.page_hash,&page_1_key, sizeof(page_1_key),pio_1);
+        hashmap_put(imgr->read_hash.page_hash,&page_n_key, sizeof(page_n_key),pio_n);
 
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
@@ -147,12 +149,12 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             buf = buf + KVS_PAGE_SIZE;
             TAILQ_INSERT_TAIL(&tmp_1->pio_head,pio_1,link);
             TAILQ_INIT(&pio_n->pio_head);
-            HASH_ADD_64(imgr->read_hash.page_hash,key,pio_n);
+            hashmap_put(imgr->read_hash.page_hash,&page_n_key, sizeof(page_n_key),pio_n);
         }
         else{
             TAILQ_INSERT_TAIL(&tmp_n->pio_head,pio_n,link);
             TAILQ_INIT(&pio_1->pio_head);
-            HASH_ADD_64(imgr->read_hash.page_hash,key,pio_1);   
+            hashmap_put(imgr->read_hash.page_hash,&page_1_key, sizeof(page_1_key),pio_1); 
         }
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
@@ -175,15 +177,15 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
     pio->key = key_prefix;
     pio->imgr = imgr;
     pio->io_link = NULL;
-    HASH_FIND_64(imgr->read_hash.page_hash,&key_prefix,tmp);
 
+    hashmap_get(imgr->read_hash.page_hash,&key_prefix,sizeof(key_prefix),&tmp);
     if(tmp!=NULL){
         //Someone else is already loading this page.
         TAILQ_INSERT_TAIL(&tmp->pio_head,pio,link);
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        HASH_ADD_64(imgr->read_hash.page_hash,key,pio);
+        hashmap_put(imgr->read_hash.page_hash,&key_prefix,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
@@ -209,7 +211,7 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
     cio->imgr = imgr;
     _make_cache_key128(key_prefix,nb_pages,cio->key);
 
-    HASH_FIND(hh,imgr->read_hash.cache_hash,&cio->key,sizeof(cio->key),tmp);
+    hashmap_get(imgr->read_hash.cache_hash,&cio->key,sizeof(cio->key),&tmp);
     if(tmp!=NULL){
         //Other IOs are already prefetching the same pages!
         TAILQ_INSERT_TAIL(&tmp->cio_head,cio,link);
@@ -217,7 +219,7 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
     }
     cio->cnt = 0;
     TAILQ_INIT(&cio->cio_head);
-    HASH_ADD(hh,imgr->read_hash.cache_hash,key,sizeof(cio->key),cio);
+    hashmap_put(imgr->read_hash.cache_hash,&cio->key,sizeof(cio->key),cio);
 
     if(nb_pages==1){
         cio->nb_segments = 1;

@@ -3,6 +3,7 @@
 #include "slab.h"
 #include "rbtree_uint.h"
 #include "kvutil.h"
+#include "hashmap.h"
 
 #include "spdk/log.h"
 
@@ -343,10 +344,15 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
     imgr->target = opts->target;
     imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;
     imgr->nb_pending_io = 0;
-    imgr->read_hash.cache_hash = NULL;
-    imgr->read_hash.page_hash = NULL;
-    imgr->write_hash.cache_hash = NULL;
-    imgr->write_hash.page_hash = NULL;
+    imgr->read_hash.cache_hash = hashmap_new();
+    imgr->read_hash.page_hash = hashmap_new();
+    imgr->write_hash.cache_hash = hashmap_new();
+    imgr->write_hash.page_hash = hashmap_new();
+    assert(imgr->read_hash.cache_hash);
+    assert(imgr->read_hash.page_hash);
+    assert(imgr->write_hash.cache_hash);
+    assert(imgr->write_hash.page_hash);
+
 
     imgr->cache_io_pool = (struct object_cache_pool*)(imgr+1);
     uint8_t* cahe_pool_data = (uint8_t*)imgr->cache_io_pool + cio_header_size;

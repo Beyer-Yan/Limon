@@ -5,6 +5,7 @@
 #include "spdk/queue.h"
 #include "uthash.h"
 #include "pool.h"
+#include "hashmap.h"
 
 #include "spdk/blob.h"
 
@@ -33,7 +34,6 @@ struct page_io{
 
     TAILQ_HEAD(, page_io) pio_head;
     TAILQ_ENTRY(page_io) link;
-    UT_hash_handle hh;
 };
 
 struct cache_io{
@@ -58,12 +58,11 @@ struct cache_io{
 
     TAILQ_HEAD(, cache_io) cio_head;
     TAILQ_ENTRY(cache_io) link;
-    UT_hash_handle hh;
 };
 
 struct pending_io_hash{
-    struct page_io *page_hash;
-    struct cache_io* cache_hash;
+    map_t page_hash;
+    map_t cache_hash;
 };
 
 struct iomgr{

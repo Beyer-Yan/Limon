@@ -3,17 +3,7 @@
 #include "io.h"
 #include "slab.h"
 #include "kverrno.h"
-
-
-static void
-_hash_print(struct cache_io* cio){
-    struct cache_io *i,*tmp;
-    printf("count:%d  ",HASH_COUNT(cio));
-    HASH_ITER(hh,cio,i,tmp){
-        printf("%p, ", i);
-    }
-    printf("\n");
-}
+#include "hashmap.h"
 
 static void
 _bummy_blob_write(struct spdk_blob *blob, struct spdk_io_channel *channel,
@@ -48,9 +38,7 @@ _process_cache_io(struct cache_io *cio,int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
-        _hash_print(cio->imgr->write_hash.cache_hash);
-        HASH_DEL(cio->imgr->write_hash.cache_hash,cio); 
-        _hash_print(cio->imgr->write_hash.cache_hash);
+        hashmap_remove(cio->imgr->write_hash.cache_hash,cio->key,sizeof(cio->key));
     }
 }
 
@@ -64,14 +52,15 @@ _store_pages_multipages_phase2(struct page_io *pio){
     pio->io_link = NULL;
     pio->key = pio->cache_io->key_prefix + pio->len;
     pio->len = 1;
-    HASH_FIND_64(pio->imgr->write_hash.page_hash,&pio->key,tmp);
+
+    hashmap_get(pio->imgr->write_hash.page_hash,&pio->key,sizeof(pio->key),&tmp);
     if(tmp!=NULL){
         //Someone else is already storing this page.
         TAILQ_INSERT_TAIL(&tmp->pio_head,pio,link);
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        HASH_ADD_64(pio->imgr->write_hash.page_hash,key,pio);
+        hashmap_put(pio->imgr->write_hash.page_hash,&pio->key,sizeof(pio->key),pio);
         //Now issue a blob IO command for pio_n_pages;
         pio->imgr->nb_pending_io++;
         _bummy_blob_write(blob,pio->imgr->channel,
@@ -106,11 +95,11 @@ _store_pages_complete_cb(void*ctx, int kverrno){
         }
     }
     
-    HASH_FIND_64(pio->imgr->write_hash.page_hash,&pio->key,tmp);
+    hashmap_get(pio->imgr->write_hash.page_hash,&pio->key,sizeof(pio->key),&tmp);
     if(tmp){
         if(tmp->len==pio->len){
             //The page io is the longest io covering all other page IOs.
-            HASH_DEL(pio->imgr->write_hash.page_hash,pio);
+            hashmap_remove(pio->imgr->write_hash.page_hash,&pio->key,sizeof(pio->key));
         }
     }
 }
@@ -136,7 +125,7 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
     //Perform phase 2 writing still for this page io
     pio->io_link = pio;
 
-    HASH_FIND_64(imgr->write_hash.page_hash,&key_prefix,tmp);
+    hashmap_get(imgr->write_hash.page_hash,&key_prefix,sizeof(key_prefix),&tmp);
     if(tmp!=NULL){
         //Someone else is storing pages. But it may store less pages than this time.
         //I should check it.
@@ -147,12 +136,12 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         else{
             //The commited io is covered by the io of this time.
             //Just replace it.
-            HASH_REPLACE_64(imgr->write_hash.page_hash,key,pio,tmp);
+            hashmap_replace(imgr->write_hash.page_hash,&key_prefix,sizeof(key_prefix),tmp,pio);
         }
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        HASH_ADD_64(imgr->write_hash.page_hash,key,pio);
+        hashmap_put(imgr->write_hash.page_hash,&key_prefix,sizeof(key_prefix),pio);
         imgr->nb_pending_io++;
         _bummy_blob_write(blob,imgr->channel,buf,start_page,pio->len,
                            _store_pages_complete_cb,pio);
@@ -172,7 +161,7 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
     pio->key = key_prefix;
     pio->imgr = imgr;
     pio->io_link = NULL;
-    HASH_FIND_64(imgr->write_hash.page_hash,&key_prefix,tmp);
+    hashmap_get(imgr->write_hash.page_hash,&key_prefix,sizeof(key_prefix),&tmp);
 
     if(tmp!=NULL){
         //Someone else is already storing this page.
@@ -180,7 +169,7 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        HASH_ADD_64(imgr->write_hash.page_hash,key,pio);
+        hashmap_put(imgr->write_hash.page_hash,&key_prefix,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
         _bummy_blob_write(blob,imgr->channel,buf,start_page,1,
@@ -216,7 +205,7 @@ iomgr_store_pages_async(struct iomgr* imgr,
 
     _make_cache_key128(key_prefix,nb_pages,cio->key);
 
-    HASH_FIND(hh,imgr->write_hash.cache_hash,&cio->key,sizeof(cio->key),tmp);
+    hashmap_get(imgr->write_hash.cache_hash,cio->key,sizeof(cio->key),&tmp);
     if(tmp!=NULL){
         //Other IOs are already storing the same pages!
         TAILQ_INSERT_TAIL(&tmp->cio_head,cio,link);
@@ -224,9 +213,7 @@ iomgr_store_pages_async(struct iomgr* imgr,
     }
     cio->cnt = 0;
     TAILQ_INIT(&cio->cio_head);
-    _hash_print(imgr->write_hash.page_hash);
-    HASH_ADD(hh,imgr->write_hash.cache_hash,key,sizeof(cio->key),cio);
-    _hash_print(imgr->write_hash.page_hash);
+    hashmap_put(imgr->write_hash.cache_hash,cio->key, sizeof(cio->key), cio);
 
     if(nb_pages==1){
         cio->nb_segments = 1;
