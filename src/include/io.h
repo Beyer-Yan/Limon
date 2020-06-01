@@ -29,8 +29,11 @@ struct page_io{
     struct cache_io *cache_io;
     struct iomgr *imgr;
 
-    //For two-phase writing only.
-    uint32_t len;
+    //For phase2 writing only.
+    uint64_t start_page;
+    uint64_t len;
+    struct spdk_blob* blob;
+    uint8_t *buf;
 
     TAILQ_HEAD(, page_io) pio_head;
     TAILQ_ENTRY(page_io) link;
@@ -48,13 +51,6 @@ struct cache_io{
     int kverrno;
     void(*cb)(void*ctx, int kverrno);
     void* ctx;
-
-    //For two-phase writing only.
-    uint64_t start_page;
-    uint64_t nb_pages;
-    struct spdk_blob* blob;
-    uint64_t key_prefix;
-    uint8_t *buf;
 
     TAILQ_HEAD(, cache_io) cio_head;
     TAILQ_ENTRY(cache_io) link;

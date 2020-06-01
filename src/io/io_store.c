@@ -6,7 +6,7 @@
 #include "hashmap.h"
 
 static void
-_bummy_blob_write(struct spdk_blob *blob, struct spdk_io_channel *channel,
+_dummy_blob_write(struct spdk_blob *blob, struct spdk_io_channel *channel,
 		   void *payload, uint64_t offset, uint64_t length,
 		   spdk_blob_op_complete cb_fn, void *cb_arg){
 
@@ -45,13 +45,6 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 static void
 _store_pages_multipages_phase2(struct page_io *pio){
     struct page_io *tmp=NULL;
-    uint64_t start_page = pio->cache_io->start_page + pio->len;
-    uint8_t *buf = pio->cache_io->buf + KVS_PAGE_SIZE * pio->len;
-    struct spdk_blob* blob = pio->cache_io->blob;
-    
-    pio->io_link = NULL;
-    pio->key = pio->cache_io->key_prefix + pio->len;
-    pio->len = 1;
 
     hashmap_get(pio->imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(pio->key),&tmp);
     if(tmp!=NULL){
@@ -63,8 +56,8 @@ _store_pages_multipages_phase2(struct page_io *pio){
         hashmap_put(pio->imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(pio->key),pio);
         //Now issue a blob IO command for pio_n_pages;
         pio->imgr->nb_pending_io++;
-        _bummy_blob_write(blob,pio->imgr->channel,
-                           buf,start_page,1,
+        _dummy_blob_write(pio->blob,pio->imgr->channel,
+                           pio->blob,pio->start_page,1,
                            _store_pages_complete_cb,pio);
     }
 }
@@ -76,22 +69,18 @@ _store_pages_complete_cb(void*ctx, int kverrno){
     pio->imgr->nb_pending_io--;
 
     _process_cache_io(pio->cache_io,kverrno);
+    pool_release(pio->imgr->page_io_pool,pio);
     if(pio->io_link){
         _store_pages_multipages_phase2(pio);
     }
-    else{
-         pool_release(pio->imgr->page_io_pool,pio);
-    } 
 
     struct page_io *i, *tmp=NULL;
     TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
         TAILQ_REMOVE(&pio->pio_head,i,link);
         _process_cache_io(i->cache_io,kverrno);
+        pool_release(pio->imgr->page_io_pool,i);
         if(i->io_link) {
             _store_pages_multipages_phase2(i);
-        } 
-        else { 
-            pool_release(pio->imgr->page_io_pool,i);
         }
     }
     
@@ -111,44 +100,54 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
     
     //Split pages into page(0,n-2) and page(n-1).
     //Perform two-phase writing.          
-    struct page_io* pio = NULL;
+    struct page_io* pio_phase1 = pool_get(imgr->page_io_pool);
+    assert(pio_phase1!=NULL);
+
+    pio_phase1->cache_io = cio;
+    pio_phase1->key = key_prefix;
+    pio_phase1->imgr = imgr;
+    pio_phase1->len = nb_pages - 1;
+
+    struct page_io* pio_phase2 = pool_get(imgr->page_io_pool);
+    assert(pio_phase2!=NULL);
+
+    pio_phase2->cache_io = cio;
+    pio_phase2->key = key_prefix + nb_pages - 1;
+    pio_phase2->imgr = imgr;
+    pio_phase2->blob = blob;
+    pio_phase2->start_page = start_page + nb_pages - 1;
+    pio_phase2->len = 1;
+    pio_phase2->buf = buf + KVS_PAGE_SIZE * (nb_pages - 1);
+    pio_phase2->io_link = NULL;
+
+    pio_phase1->io_link = pio_phase2;
+
+    //Perform phase1 writing.
     struct page_io* tmp = NULL;
-
-    pio = pool_get(imgr->page_io_pool);
-    assert(pio!=NULL);
-
-    pio->cache_io = cio;
-    pio->key = key_prefix;
-    pio->imgr = imgr;
-    pio->len = nb_pages - 1;
-
-    //Perform phase 2 writing still for this page io
-    pio->io_link = pio;
-
     hashmap_get(imgr->write_hash.page_hash,(uint8_t*)&key_prefix,sizeof(key_prefix),&tmp);
     if(tmp!=NULL){
         //Someone else is storing pages. But it may store less pages than this time.
         //I should check it.
-        if(tmp->len>=pio->len){
+        if(tmp->len>=pio_phase1->len){
             //Wonderful! It is covered.
-            TAILQ_INSERT_TAIL(&tmp->pio_head,pio,link);
+            TAILQ_INSERT_TAIL(&tmp->pio_head,pio_phase1,link);
             return;
         }
         else{
             //The commited io is covered by the io of this time.
             //Just replace it.
-            TAILQ_INIT(&pio->pio_head);
-            hashmap_replace(imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),tmp,pio);
+            TAILQ_INIT(&pio_phase1->pio_head);
+            hashmap_replace(imgr->write_hash.page_hash,(uint8_t*)&pio_phase1->key,sizeof(key_prefix),tmp,pio_phase1);
         }
     }
     else{
-        TAILQ_INIT(&pio->pio_head);
-        hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
+        TAILQ_INIT(&pio_phase1->pio_head);
+        hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&pio_phase1->key,sizeof(key_prefix),pio_phase1);
     }
 
     imgr->nb_pending_io++;
-    _bummy_blob_write(blob,imgr->channel,buf,start_page,pio->len,
-                        _store_pages_complete_cb,pio);
+    _dummy_blob_write(blob,imgr->channel,buf,start_page,pio_phase1->len,
+                        _store_pages_complete_cb,pio_phase1);
 }
 
 static void 
@@ -175,10 +174,11 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        _bummy_blob_write(blob,imgr->channel,buf,start_page,1,
+        _dummy_blob_write(blob,imgr->channel,buf,start_page,1,
                            _store_pages_complete_cb,pio);
     }
 }
+
 void 
 iomgr_store_pages_async(struct iomgr* imgr,
                             struct spdk_blob* blob, 
@@ -199,12 +199,6 @@ iomgr_store_pages_async(struct iomgr* imgr,
     cio->ctx = ctx;
     cio->imgr = imgr;
     cio->cnt=0;
-
-    cio->start_page = start_page;
-    cio->nb_pages = nb_pages;
-    cio->key_prefix = key_prefix;
-    cio->blob = blob;
-    cio->buf = buf;
 
     _make_cache_key128(key_prefix,nb_pages,cio->key);
 

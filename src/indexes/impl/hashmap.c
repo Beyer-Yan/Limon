@@ -283,9 +283,6 @@ int hashmap_put(map_t in, uint8_t* key, int key_len ,any_t value){
 	return MAP_OK;
 }
 
-/*
- * Get your pointer out of the hashmap with a key
- */
 int hashmap_get(map_t in, uint8_t* key, int key_len, any_t *arg){
 	int curr;
 	int i;
@@ -303,6 +300,7 @@ int hashmap_get(map_t in, uint8_t* key, int key_len, any_t *arg){
         int in_use = m->data[curr].in_use;
         if (in_use == 1){
             if ( m->data[curr].key_len==key_len &&  memcmp(m->data[curr].key,key,key_len)==0){
+                m->data[curr].key = key;
                 *arg = (m->data[curr].data);
                 return MAP_OK;
             }
