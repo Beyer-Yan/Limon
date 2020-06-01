@@ -135,8 +135,8 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
 
         pio_1->io_link = pio_n;
 
-        hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&page_1_key, sizeof(page_1_key),pio_1);
-        hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&page_n_key, sizeof(page_n_key),pio_n);
+        hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_1->key, sizeof(page_1_key),pio_1);
+        hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_n->key, sizeof(page_n_key),pio_n);
 
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
@@ -149,12 +149,12 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             buf = buf + KVS_PAGE_SIZE;
             TAILQ_INSERT_TAIL(&tmp_1->pio_head,pio_1,link);
             TAILQ_INIT(&pio_n->pio_head);
-            hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&page_n_key, sizeof(page_n_key),pio_n);
+            hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_n->key, sizeof(page_n_key),pio_n);
         }
         else{
             TAILQ_INSERT_TAIL(&tmp_n->pio_head,pio_n,link);
             TAILQ_INIT(&pio_1->pio_head);
-            hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&page_1_key, sizeof(page_1_key),pio_1); 
+            hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_1->key, sizeof(page_1_key),pio_1); 
         }
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
@@ -185,7 +185,7 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&key_prefix,sizeof(key_prefix),pio);
+        hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,

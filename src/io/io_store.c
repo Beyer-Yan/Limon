@@ -132,20 +132,23 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         if(tmp->len>=pio->len){
             //Wonderful! It is covered.
             TAILQ_INSERT_TAIL(&tmp->pio_head,pio,link);
+            return;
         }
         else{
             //The commited io is covered by the io of this time.
             //Just replace it.
-            hashmap_replace(imgr->write_hash.page_hash,(uint8_t*)&key_prefix,sizeof(key_prefix),tmp,pio);
+            TAILQ_INIT(&pio->pio_head);
+            hashmap_replace(imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),tmp,pio);
         }
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&key_prefix,sizeof(key_prefix),pio);
-        imgr->nb_pending_io++;
-        _bummy_blob_write(blob,imgr->channel,buf,start_page,pio->len,
-                           _store_pages_complete_cb,pio);
+        hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
     }
+
+    imgr->nb_pending_io++;
+    _bummy_blob_write(blob,imgr->channel,buf,start_page,pio->len,
+                        _store_pages_complete_cb,pio);
 }
 
 static void 
@@ -169,7 +172,7 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
     }
     else{
         TAILQ_INIT(&pio->pio_head);
-        hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&key_prefix,sizeof(key_prefix),pio);
+        hashmap_put(imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
         _bummy_blob_write(blob,imgr->channel,buf,start_page,1,
