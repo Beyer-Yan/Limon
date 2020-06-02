@@ -99,7 +99,7 @@ _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
       printf("Running a benchmark on a pre-populated DB, but couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
    }
    if(!kverrno){
-      if(!memcpy(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
+      if(!memcmp(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
          ok = 1;
       }
    }
