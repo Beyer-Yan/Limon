@@ -16,12 +16,17 @@
 static uint64_t 
 _calc_tsc(void){
     //44 bits second, 20 bits microsecond
-    uint64_t tsc = 0;;
+    struct tsc {
+        uint64_t usec:20; //20 low bits
+        uint64_t sec:44;  //44 high bits
+    }t;
+
     struct timespec time;
-    clock_gettime(CLOCK_MONOTONIC,&time);
-    tsc = (uint64_t)time.tv_sec<<20;
-    tsc = tsc | ((time.tv_nsec/1000)>>44);
-    return tsc;
+    clock_gettime(CLOCK_REALTIME,&time);
+    t.sec = time.tv_sec;
+    t.usec = (time.tv_nsec/1000);
+    
+    return *(uint64_t*)&t;
 }
 
 static uint64_t
