@@ -102,6 +102,9 @@ _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
       if(!memcmp(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
          ok = 1;
       }
+      else{
+         printf("Wrong workload name, name in db:%s, yours:%s!\n",item->data + 8,workload_item->data);
+      }
    }
    free(workload_item);
    finished = 1;
