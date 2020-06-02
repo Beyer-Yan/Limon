@@ -6,14 +6,24 @@
 
 #include "spdk/thread.h"
 
+static void 
+_dummy_blob_process_async(void*ctx){
+    void **data = ctx;
+    spdk_blob_op_complete cb_fn = data[0];
+    void *cb_arg = data[1];
+    free(data);
+    cb_fn(cb_arg,0);
+}
 
 //For debug only
 static void 
 _dummy_blob_read(struct spdk_blob *blob, struct spdk_io_channel *channel,
 		       void *payload, uint64_t offset, uint64_t length,
 		       spdk_blob_op_complete cb_fn, void *cb_arg){
-    spdk_thread_send_msg(spdk_get_thread(),cb_fn,cb_arg);
-    cb_fn(cb_arg,0);
+    void **data = malloc(sizeof(void*)*2);
+    data[0] = (void*)cb_fn;
+    data[1] = cb_arg;
+    spdk_thread_send_msg(spdk_get_thread(),_dummy_blob_process_async,data);
 }
 
 static void
