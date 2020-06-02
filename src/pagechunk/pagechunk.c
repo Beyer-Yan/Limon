@@ -416,6 +416,7 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     cls_ctx->pmgr = pmgr;
     cls_ctx->desc = desc;
     cls_ctx->first_page = first_page;
+    cls_ctx->last_page = last_page;
     cls_ctx->slot_idx = slot_idx;
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
