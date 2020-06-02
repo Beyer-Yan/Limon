@@ -148,25 +148,28 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
                           buf,start_page,nb_pages,
-                          _default_page_io_complete_cb,cio);
+                          _default_page_io_complete_cb,pio_1);
     }
     else{
+        struct page_io* _pio;
         if(tmp_1!=NULL){
             start_page++;
             buf = buf + KVS_PAGE_SIZE;
             TAILQ_INSERT_TAIL(&tmp_1->pio_head,pio_1,link);
             TAILQ_INIT(&pio_n->pio_head);
             hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_n->key, sizeof(page_n_key),pio_n);
+            _pio = pio_n;
         }
         else{
             TAILQ_INSERT_TAIL(&tmp_n->pio_head,pio_n,link);
             TAILQ_INIT(&pio_1->pio_head);
             hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_1->key, sizeof(page_1_key),pio_1); 
+            _pio = pio_1;
         }
         imgr->nb_pending_io++;
         _dummy_blob_read(blob,imgr->channel,
                           buf,start_page,nb_pages-1,
-                          _default_page_io_complete_cb,cio);
+                          _default_page_io_complete_cb,_pio);
     }
 }
 
