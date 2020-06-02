@@ -119,8 +119,9 @@ bitmap_get_first_clear_bit(struct bitmap *map){
         }
     }
     if(i==num_ll-1){
-         //Process The last word the last bit is in.
-        word =  map->data[i] & UINT64_MAX;
+        //Process The last word the last bit is in.
+        uint64_t mask = ~(((uint64_t)1 << (map->length%64))-1);
+        word =  map->data[i] | mask;
     }
 
     uint32_t in_word_idx = (uint32_t)__builtin_ffsll(~word);

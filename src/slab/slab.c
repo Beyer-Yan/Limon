@@ -221,6 +221,8 @@ _get_one_slot_from_free_slab(struct slab*slab, struct reclaim_node* node) {
         if(node->desc_array[i]->nb_free_slots){
             desc = node->desc_array[i];
             uint32_t offset = bitmap_get_first_clear_bit(desc->bitmap);
+            
+            assert(offset!=UINT32_MAX);
             bitmap_set_bit(desc->bitmap,offset);
 
             desc->nb_free_slots--;
