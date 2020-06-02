@@ -5,6 +5,8 @@
 #include "kverrno.h"
 #include "hashmap.h"
 
+#include "spdk/thread.h"
+
 static void 
 _dummy_blob_process_async(void*ctx){
     void **data = ctx;
