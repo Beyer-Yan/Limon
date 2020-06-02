@@ -14,13 +14,19 @@ _assert_parameters(struct kv_item *item, kv_cb cb_fn){
     assert(item->meta.ksize<=g_kvs->max_key_length);
 }
 
+static uint32_t
+_hash_shard_to_worker(uint32_t shard_id){
+    uint32_t nb_shards_per_worker = g_kvs->nb_shards/g_kvs->nb_workers;
+    return shard_id/nb_shards_per_worker;
+}
+
 // The key field of item  shall be filed
 void 
 kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     _assert_parameters(item,cb_fn);
 
     uint32_t shard_id = _hash_item_to_shard(item);
-    uint32_t worker_id = shard_id % g_kvs->nb_workers;
+    uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_get(g_kvs->workers[worker_id],shard_id,item,cb_fn,ctx);
 }
 
@@ -30,7 +36,7 @@ kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     _assert_parameters(item,cb_fn);
 
     uint32_t shard_id = _hash_item_to_shard(item);
-    uint32_t worker_id = shard_id % g_kvs->nb_workers;
+    uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_put(g_kvs->workers[worker_id],shard_id,item,cb_fn,ctx);
 }
 
@@ -40,7 +46,7 @@ kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     _assert_parameters(item,cb_fn);
 
     uint32_t shard_id = _hash_item_to_shard(item);
-    uint32_t worker_id = shard_id % g_kvs->nb_workers;
+    uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_delete(g_kvs->workers[worker_id],shard_id,item,cb_fn,ctx);
 }
 
@@ -106,7 +112,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
     
     it->completed = false;
     uint32_t shard_id = _hash_item_to_shard(item);
-    uint32_t worker_id = shard_id % g_kvs->nb_workers;
+    uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_seek(g_kvs->workers[worker_id],shard_id,item,_seek_cb_fn,it);
     while(!it->completed);
     return it->item_idx==UINT32_MAX ? false : true;
