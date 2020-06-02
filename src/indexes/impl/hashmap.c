@@ -300,7 +300,6 @@ int hashmap_get(map_t in, uint8_t* key, int key_len, any_t *arg){
         int in_use = m->data[curr].in_use;
         if (in_use == 1){
             if ( m->data[curr].key_len==key_len &&  memcmp(m->data[curr].key,key,key_len)==0){
-                m->data[curr].key = key;
                 *arg = (m->data[curr].data);
                 return MAP_OK;
             }
@@ -331,7 +330,11 @@ int hashmap_replace(map_t in, uint8_t* key, int key_len, any_t old_value,any_t n
 
         int in_use = m->data[curr].in_use;
         if (in_use == 1){
-            if ( m->data[curr].key_len==key_len &&  memcmp(m->data[curr].key,key,key_len)==0){
+            if ( m->data[curr].key_len==key_len && 
+                 memcmp(m->data[curr].key,key,key_len)==0 && 
+                 m->data[curr].data==old_value){
+                     
+                m->data[curr].key = key;
                 m->data[curr].data = new_value;
                 return MAP_OK;
             }

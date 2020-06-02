@@ -22,7 +22,6 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 
     if(cio->cnt==cio->nb_segments){
         //All the segments completes.
-        pool_release(cio->imgr->cache_io_pool,cio);
         cio->cb(cio->ctx,cio->kverrno);
         
         struct cache_io *i=NULL, *tmp=NULL;
@@ -38,6 +37,8 @@ _process_cache_io(struct cache_io *cio,int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
+        //this cio shall be lastly released!!
+        pool_release(cio->imgr->cache_io_pool,cio);
         hashmap_remove(cio->imgr->write_hash.cache_hash,(uint8_t*)cio->key,sizeof(cio->key));
     }
 }
@@ -68,23 +69,28 @@ _store_pages_complete_cb(void*ctx, int kverrno){
 
     pio->imgr->nb_pending_io--;
 
-    pool_release(pio->imgr->page_io_pool,pio);
     _process_cache_io(pio->cache_io,kverrno);
     if(pio->io_link){
         _store_pages_multipages_phase2(pio->io_link);
     }
 
-    struct page_io *i, *tmp=NULL;
+    struct page_io *i, *tmp=NULL, *io_link=NULL;
     TAILQ_FOREACH_SAFE(i,&pio->pio_head,link,tmp){
         TAILQ_REMOVE(&pio->pio_head,i,link);
+
+        //After proccessing the cache io,the i may be reused, since I releae the i firstly. 
+        //So I  have to record the io_link, which will be used the the proccessing of
+        //phase2 writing.
+        io_link = i->io_link;
         pool_release(pio->imgr->page_io_pool,i);
         _process_cache_io(i->cache_io,kverrno);
-        
-        if(i->io_link) {
-            _store_pages_multipages_phase2(i->io_link);
+
+        if(io_link) {
+            _store_pages_multipages_phase2(io_link);
         }
     }
-    
+
+    pool_release(pio->imgr->page_io_pool,pio);
     hashmap_get(pio->imgr->write_hash.page_hash,(uint8_t*)&pio->key,sizeof(pio->key),&tmp);
     if(tmp){
         if(tmp->len==pio->len){

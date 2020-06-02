@@ -400,6 +400,17 @@ _get_cpu_mask(uint32_t nb_works){
     return mask;
 }
 
+static void
+_parameter_check(struct kvs_start_opts *opts){
+    uint32_t num = opts->max_io_pending_queue_size_per_worker;
+    assert( (num&(num-1))==0 );
+
+    num = opts->max_request_queue_size_per_worker;
+    assert( (num&(num-1))==0 );
+
+    assert(opts->startup_fn!=NULL);
+}
+
 void 
 kvs_start_loop(struct kvs_start_opts *opts){
 
@@ -408,7 +419,7 @@ kvs_start_loop(struct kvs_start_opts *opts){
     assert(opts->spdk_opts->reactor_mask!=NULL);
     assert(opts->startup_fn!=NULL);
 
-
+    _parameter_check(opts);
 
     assert(!atomic_load(&g_started));
     atomic_store(&g_started,1);

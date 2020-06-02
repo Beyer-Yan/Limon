@@ -4,12 +4,15 @@
 #include "kverrno.h"
 #include "hashmap.h"
 
+#include "spdk/thread.h"
+
 
 //For debug only
 static void 
 _dummy_blob_read(struct spdk_blob *blob, struct spdk_io_channel *channel,
 		       void *payload, uint64_t offset, uint64_t length,
 		       spdk_blob_op_complete cb_fn, void *cb_arg){
+    spdk_thread_send_msg(spdk_get_thread(),cb_fn,cb_arg);
     cb_fn(cb_arg,0);
 }
 
@@ -21,7 +24,6 @@ _process_cache_io(struct cache_io *cio, int kverrno){
     if(cio->cnt==cio->nb_segments){
         //All the segments completes.
         //process the header
-        pool_release(cio->imgr->cache_io_pool,cio);
         cio->cb(cio->ctx,cio->kverrno);
 
         //process the link requests
@@ -31,7 +33,9 @@ _process_cache_io(struct cache_io *cio, int kverrno){
             pool_release(cio->imgr->cache_io_pool,i);
             i->cb(i->ctx,cio->kverrno);
         }
+        //This cio shall be lasted released!!
         //this cache io is finished, now remove it from cache read_hash
+        pool_release(cio->imgr->cache_io_pool,cio);
         hashmap_remove(cio->imgr->read_hash.cache_hash,(uint8_t*)cio->key, sizeof(cio->key));
     }
 }
@@ -39,7 +43,7 @@ _process_cache_io(struct cache_io *cio, int kverrno){
 static void
 _process_io_link(struct page_io *pio, int kverrno){
     //process the header
-    pool_release(pio->imgr->page_io_pool,pio);
+    
     _process_cache_io(pio->cache_io,kverrno);
     
     //process the linked requests.
@@ -51,6 +55,7 @@ _process_io_link(struct page_io *pio, int kverrno){
     }
 
     //This page io is finished, now remove it from the read_hash
+    pool_release(pio->imgr->page_io_pool,pio);
     hashmap_remove(pio->imgr->read_hash.page_hash,(uint8_t*)&pio->key,sizeof(pio->key));
 }
 
@@ -63,7 +68,7 @@ _default_page_io_complete_cb(void*ctx, int kverrno){
 
     //process the header
     _process_cache_io(pio->cache_io,kverrno);
-    pool_release(pio->imgr->page_io_pool,pio);
+    
     if(io_link!=NULL){
         _process_io_link(io_link,kverrno);
     }
@@ -76,6 +81,7 @@ _default_page_io_complete_cb(void*ctx, int kverrno){
     }
 
     //This page io is finished, now remove it from the read_hash
+    pool_release(pio->imgr->page_io_pool,pio);
     hashmap_remove(pio->imgr->read_hash.page_hash,(uint8_t*)&pio->key, sizeof(pio->key));
 }
 

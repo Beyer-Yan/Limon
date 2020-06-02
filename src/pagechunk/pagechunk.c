@@ -49,6 +49,28 @@ _get_page_position(struct chunk_desc *desc, uint64_t slot_idx,
     }
 }
 
+
+static bool
+_is_shared_page(struct chunk_desc *desc, uint64_t slot_idx, bool first){
+    uint32_t slab_size = desc->slab_size;
+    uint32_t offset = slot_idx%desc->nb_slots;
+    if(slab_size<MULTI_PAGE_SLAB_SIZE){
+        //The slot must be in a shared page.
+        return true;
+    }
+    else{
+        bool share_first  = (offset * slab_size % KVS_PAGE_SIZE) != 0;
+        bool share_last   = (((offset+1) * slab_size) % KVS_PAGE_SIZE) != 0;
+
+        if(slab_size<=KVS_PAGE_SIZE){
+            return share_first|share_last;
+        }
+        else{
+            return first ? share_first : share_last;
+        }
+    }
+}
+
 bool 
 pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx){
     assert(desc->chunk_mem!=NULL);
@@ -241,15 +263,15 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
 
     _get_page_position(desc,slot_idx,&first_page,&last_page);
 
-    //If the first page is not shared page, it will be in un-cached state.
+    //If the first page is not shared page, I need not load it.
     //If the fitst page is a shared page, then I should check the cached state.
-    //In a word, I just check the cached state, and needn't check whether the page
-    //is a shared page.
-    if(bitmap_get_bit(desc->chunk_mem->bitmap,first_page)){
+    if( !_is_shared_page(desc,slot_idx,true) || 
+        bitmap_get_bit(desc->chunk_mem->bitmap,first_page)){
         first_page=UINT32_MAX;
         nb_segs--;
     }
-    if(bitmap_get_bit(desc->chunk_mem->bitmap,last_page)){
+    if( !_is_shared_page(desc,slot_idx,false) || 
+        bitmap_get_bit(desc->chunk_mem->bitmap,last_page)){
         last_page=UINT32_MAX;
         nb_segs--;
     }
