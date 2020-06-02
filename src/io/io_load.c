@@ -121,7 +121,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
     hashmap_get(imgr->read_hash.page_hash,(uint8_t*)&page_1_key, sizeof(page_1_key),&tmp_1);
     hashmap_get(imgr->read_hash.page_hash,(uint8_t*)&page_n_key, sizeof(page_n_key),&tmp_n);
 
-    //Both ends pages are being laoded.
+    //Both ends pages are being loaded.
     if(tmp_1!=NULL && tmp_n!=NULL){
         //All end pages are loading.
         TAILQ_INSERT_TAIL(&tmp_1->pio_head,pio_1,link);
@@ -136,6 +136,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         }
     }
     else if(tmp_1==NULL && tmp_n==NULL){
+        //Both two pages are not loaded
         TAILQ_INIT(&pio_1->pio_head);
         TAILQ_INIT(&pio_n->pio_head);
 
