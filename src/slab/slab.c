@@ -253,7 +253,7 @@ _slab_blob_resize_common_cb(void*ctx){
     if(!rctx->kverrno){
         uint32_t i=0;
         for(;i<nb_nodes;i++){
-            nodes[i] = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+i+1);
+            nodes[i] = slab_reclaim_alloc_one_node(slab,slab->reclaim.nb_reclaim_nodes+i);
             if(!nodes[i]){
                 break;
             }
