@@ -241,7 +241,7 @@ _item_share_load_complete_cb_fn(void* ctx, int kverrno){
             last_page !=UINT32_MAX ?  bitmap_set_bit(desc->chunk_mem->bitmap,last_page) : (void)0;
         }
         else{
-            SPDK_ERRLOG("Error in loading,slab:%u, slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
+            SPDK_ERRLOG("Error in loading,slab:%u, slot:%lu,fpage:%lu, lpage:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,first_page,last_page,kverrno);
         }
         pool_release(pmgr->load_store_ctx_pool,cls_ctx);
         cls_ctx->user_cb(cls_ctx->user_ctx,cls_ctx->kverrno);
