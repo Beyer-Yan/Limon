@@ -24,11 +24,14 @@ _chunk_mem_init(uint64_t nb_chunks){
     uint32_t chunk_mem_size = mem_hdr_size + chunk_data_size;
 
     uint64_t pool_hdr_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);
+    uint64_t total_bytes = pool_hdr_size + chunk_mem_size*nb_chunks;
 
-    uint8_t* data = spdk_malloc(pool_hdr_size + chunk_mem_size*nb_chunks,
-						0x1000, NULL, SPDK_ENV_LCORE_ID_ANY,
+    uint8_t* data = spdk_malloc(total_bytes,0x1000, NULL, SPDK_ENV_LCORE_ID_ANY,
 						SPDK_MALLOC_DMA);
-    assert(data!=NULL);
+    if(!data){
+        SPDK_ERRLOG("Faild to allocate memory, chunks:%u, bytes:%lu\n",nb_chunks,total_bytes);
+        asser(0);
+    }
     
     _g_mem_pool = (struct object_cache_pool*)data;
     data += pool_hdr_size;
