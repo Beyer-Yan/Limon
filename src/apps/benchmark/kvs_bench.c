@@ -32,7 +32,7 @@ _do_start_benchmark(void*ctx){
 
 	struct workload w = {
 		.api = &YCSB,
-		.nb_items_in_db = 30000000LU,
+		.nb_items_in_db = 400000000LU,
 		.nb_load_injectors = 4,
 		.start_core = 10,
 	};
