@@ -17,7 +17,6 @@ struct mem_node{
 
 struct chunk_mem_pool{
     LIST_HEAD(,mem_node) free_head;
-    LIST_HEAD(,mem_node) used_head;
     struct object_cache_pool *mem_node_pool;
 };
 
@@ -49,6 +48,8 @@ _chunk_mem_init(uint64_t nb_chunks){
     pool_data += pool_hdr_size;
     pool_header_init(_g_mem_pool.mem_node_pool,nb_chunks,
                     sizeof(struct mem_node),pool_hdr_size,pool_data);
+
+    LIST_INIT(&_g_mem_pool.free_head);
 
     uint64_t i = 0;
     for(;i<nb_chunks;i++){
