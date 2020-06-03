@@ -30,7 +30,7 @@ _chunk_mem_init(uint64_t nb_chunks){
 						SPDK_MALLOC_DMA);
     if(!data){
         SPDK_ERRLOG("Faild to allocate memory, chunks:%u, bytes:%lu\n",nb_chunks,total_bytes);
-        assert(0);
+        exit(-1);
     }
     
     _g_mem_pool = (struct object_cache_pool*)data;

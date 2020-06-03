@@ -60,8 +60,7 @@ _do_start_benchmark(void*ctx){
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		run_workload(&w, workloads[i]);
 	}
-	printf("ALl workloads complete\n");
-	kvs_shutdown();
+	printf("All workloads complete, ctrl+c to stop the program\n");
 }
 
 static void
