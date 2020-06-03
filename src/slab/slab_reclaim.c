@@ -35,6 +35,7 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
         desc->nb_slots       = slab->reclaim.nb_slots_per_chunk;
         desc->slab           = slab;
         desc->slab_size      = slab->slab_size;
+        desc->nb_pendings    = 0;
         desc->bitmap[0].length = slab->reclaim.nb_slots_per_chunk;
         TAILQ_INIT(&desc->chunk_miss_callback_head);
         

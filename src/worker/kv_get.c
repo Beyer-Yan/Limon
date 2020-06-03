@@ -12,7 +12,7 @@ _process_get_load_data_cb(void* ctx, int kverrno){
     struct chunk_desc *desc         = entry->chunk_desc;
 
     pool_release(wctx->kv_request_internal_pool,req);
-    desc->flag &=~ CHUNK_PIN;
+    pagechunk_mem_lower(desc);
 
     if(kverrno){
         //Error hits when load data from disk
@@ -66,7 +66,7 @@ void worker_process_get(struct kv_request_internal *req){
 
     assert(desc!=NULL);
 
-    desc->flag |= CHUNK_PIN;
+    pagechunk_mem_lift(desc);
     
     if(!desc->chunk_mem){
         //Page chunk is evicted , Now request a new page chunk memory

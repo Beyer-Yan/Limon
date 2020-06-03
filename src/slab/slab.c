@@ -221,7 +221,7 @@ _get_one_slot_from_free_slab(struct slab*slab, struct reclaim_node* node) {
         if(node->desc_array[i]->nb_free_slots){
             desc = node->desc_array[i];
             uint32_t offset = bitmap_get_first_clear_bit(desc->bitmap);
-            
+
             assert(offset!=UINT32_MAX);
             bitmap_set_bit(desc->bitmap,offset);
 
@@ -366,25 +366,7 @@ void slab_free_slot_async(struct reclaim_mgr* rmgr,
                           uint64_t slot_idx,
                           void (*cb)(void* ctx, int kverrno),
                           void* ctx){
-    struct reclaim_node *node;
-    struct chunk_desc *desc;
-
-    uint64_t slot_offset;
-
-    pagechunk_get_hints(slab,slot_idx,&node,&desc,&slot_offset);
-    uint32_t node_id = slot_idx/slab->reclaim.nb_slots_per_chunk/slab->reclaim.nb_chunks_per_node;
-    bitmap_clear_bit(desc->bitmap,slot_offset);
-    
-    if(!node->nb_free_slots){
-        //This node is full node. But now, there is a empty slot for it. So I should put it
-        //in free_node treemap;
-        rbtree_insert(slab->reclaim.free_node_tree,node_id,node,NULL);
-    }
-
-    desc->nb_free_slots++;
-    node->nb_free_slots++;
-    slab->reclaim.nb_free_slots++;
-
+                              
     //Ok. Just post the deleting to background reclaiming thread.
     slab_reclaim_post_delete(rmgr,slab,slot_idx,cb,ctx);
 }

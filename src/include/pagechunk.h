@@ -35,7 +35,7 @@ struct chunk_desc {
     uint32_t nb_free_slots;
 
     struct chunk_mem *chunk_mem;
-    uint32_t freq;
+    uint32_t nb_pendings;
     uint32_t flag;
     
     struct bitmap bitmap[0];
@@ -80,6 +80,29 @@ static inline struct chunk_desc* pagechunk_get_desc(struct slab* slab, uint64_t 
     assert(node!=NULL);
 
     return desc;
+}
+
+/**
+ * @brief Occupy the desc, says that the desc mem shall not be evicted.
+ * 
+ * @param desc   the pagechunk description
+ */
+static inline void pagechunk_mem_lift(struct chunk_desc* desc){
+    desc->flag |= CHUNK_PIN;
+    desc->nb_pendings++;
+}
+
+/**
+ * @brief Release the occupation
+ * 
+ * @param desc   the pagechunk description
+ */
+static inline void pagechunk_mem_lower(struct chunk_desc* desc){
+    assert(desc->nb_pendings>0);
+    desc->nb_pendings--;
+    if(desc->nb_pendings==0){
+        desc->flag &=~ CHUNK_PIN;
+    }
 }
 
 /**

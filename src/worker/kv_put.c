@@ -18,9 +18,9 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
     struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
     struct index_entry* new_entry   = &pctx->new_entry;
-
-    entry->chunk_desc->flag &=~ CHUNK_PIN;
-    new_entry->chunk_desc->flag &=~ CHUNK_PIN;
+    
+    pagechunk_mem_lower(entry->chunk_desc);
+    pagechunk_mem_lower(new_entry->chunk_desc);
     pool_release(wctx->kv_request_internal_pool,req);
     entry->writing = 0;
 
@@ -61,8 +61,8 @@ _process_put_case1_load_data_cb(void*ctx, int kverrno){
     if(kverrno){
         //Load data error, which may be caused by IO error.
         pool_release( wctx->kv_request_internal_pool,req);
-        new_entry->chunk_desc->flag &=~ CHUNK_PIN;
-        entry->chunk_desc->flag &=~ CHUNK_PIN;
+        pagechunk_mem_lower(new_entry->chunk_desc);
+        pagechunk_mem_lower(entry->chunk_desc);
         entry->writing = 0;
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
@@ -108,14 +108,14 @@ _process_put_case1_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
         //Slot request failed. This may be caused by out-of-disk-space.
         pool_release(wctx->kv_request_internal_pool,req);
         entry->writing = 0;
-        entry->chunk_desc->flag &=~ CHUNK_PIN;
+        pagechunk_mem_lower(entry->chunk_desc);
         req->cb_fn(req->ctx,NULL,-KV_EFULL);
         return;
     }
     struct chunk_desc* new_desc = pagechunk_get_desc(pctx->slab,slot_idx);
 
     assert(new_desc!=NULL);
-    new_desc->flag |= CHUNK_PIN;
+    pagechunk_mem_lift(new_desc);
     pctx->new_entry.slot_idx = slot_idx;
     pctx->new_entry.chunk_desc = new_desc;
 
@@ -175,7 +175,7 @@ _process_put_case2_store_data_cb(void* ctx, int kverrno){
 
     pool_release(wctx->kv_request_internal_pool,req);
     entry->writing = 0;
-    desc->flag &=~ CHUNK_PIN;
+    pagechunk_mem_lower(desc);
 
     req->cb_fn(req->ctx, NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
@@ -212,7 +212,7 @@ _process_put_case2_load_data_cb(void* ctx, int kverrno){
         //Error hits when load data from disk
         pool_release(wctx->kv_request_internal_pool,req);
         entry->writing = 0;
-        desc->flag &=~ CHUNK_PIN;
+        pagechunk_mem_lower(desc);
         
         req->cb_fn(req->ctx,NULL,-KV_EIO);
         return;
@@ -283,7 +283,7 @@ _process_put_case3_store_data_cb(void*ctx, int kverrno){
     }
 
     pool_release(wctx->kv_request_internal_pool,req);
-    desc->flag &=~ CHUNK_PIN;
+    pagechunk_mem_lower(desc);
 
     req->cb_fn(req->ctx,NULL,kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
@@ -299,7 +299,7 @@ _process_put_case3_load_data_cb(void*ctx, int kverrno){
     if(kverrno){
         //Load data error, which may be caused by IO error.
         pool_release(wctx->kv_request_internal_pool,req);
-        entry->chunk_desc->flag &=~ CHUNK_PIN;
+        pagechunk_mem_lower(entry->chunk_desc);
         //I have to free the allocated slot in background
         slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
         mem_index_delete(wctx->mem_index,req->item); 
@@ -356,7 +356,7 @@ _process_put_case3_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     struct chunk_desc* desc = pagechunk_get_desc(pctx->slab,slot_idx);
 
     assert(desc!=NULL);
-    desc->flag |= CHUNK_PIN;
+    pagechunk_mem_lift(desc);
     entry->chunk_desc = desc;
     entry->slot_idx = slot_idx;
 
@@ -455,7 +455,7 @@ void worker_process_put(struct kv_request_internal *req){
     entry->writing = 1;
 
     assert(desc!=NULL);
-    desc->flag |= CHUNK_PIN;
+    pagechunk_mem_lift(desc);
 
     if(pagechunk_is_cross_page(desc,entry->slot_idx)){
         //The item is stored into multi page, so I needn't
