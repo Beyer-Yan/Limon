@@ -41,7 +41,7 @@ _chunk_mem_init(uint64_t nb_chunks){
 
     //It always fails to allocate large continious dma memory, so I no choice other than
     //splitting the memory allocating into every chunk memory.
-    uint64_t pool_hdr_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);
+    uint64_t pool_hdr_size = pool_header_size(nb_chunks);
     uint8_t* pool_data = malloc(pool_hdr_size + sizeof(struct mem_node));
     assert(pool_data!=NULL);
 
