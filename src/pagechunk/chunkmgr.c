@@ -51,6 +51,12 @@ _chunk_mem_init(uint64_t nb_chunks){
 
     LIST_INIT(&_g_mem_pool.free_head);
 
+    uint8_t* test = spdk_memzone_reserve_aligned("chunk_cache",nb_chunks*chunk_mem_size,SPDK_ENV_SOCKET_ID_ANY,SPDK_MEMZONE_NO_IOVA_CONTIG,0x1000);
+    if(!test){
+        printf("mem reserving failds, bytes:%lu\n",nb_chunks*chunk_mem_size);
+    }
+    eixt(-1);
+
     uint64_t i = 0;
     for(;i<nb_chunks;i++){
         struct chunk_mem* mem = spdk_malloc(chunk_mem_size,0x1000,NULL,
