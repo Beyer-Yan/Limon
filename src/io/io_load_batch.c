@@ -194,7 +194,6 @@ _load_pages_multipages(map_t pmap, struct cache_io *cio, struct iomgr *imgr, str
         submitted_pio = pio_1;
     }
     else{
-        struct page_io* submitted_pio;
         if(tmp_1!=NULL){
             TAILQ_INSERT_TAIL(&tmp_1->pio_head,pio_1,link);
             TAILQ_INIT(&pio_n->pio_head);
