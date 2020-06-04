@@ -29,7 +29,6 @@ struct page_io{
     struct cache_io *cache_io;
     struct iomgr *imgr;
 
-    //For phase2 writing only.
     uint64_t start_page;
     uint64_t len;
     struct spdk_blob* blob;
@@ -43,10 +42,13 @@ struct cache_io{
     uint64_t key[2];
     struct iomgr *imgr;
 
-    //For loading only,
     //cnt means how many page_ios for the cache_io
     uint32_t cnt;
     uint32_t nb_segments;
+    uint32_t nb_pages;
+    uint64_t start_page;
+    uint8_t* buf;
+    struct spdk_blob *blob;
 
     int kverrno;
     void(*cb)(void*ctx, int kverrno);
@@ -70,8 +72,10 @@ struct iomgr{
     
     uint32_t max_pending_io; 
     uint32_t nb_pending_io;
-    struct pending_io_hash read_hash;
-    struct pending_io_hash write_hash;
+    
+    TAILQ_HEAD(,cache_io) pending_read_head;
+    TAILQ_HEAD(,cache_io) pending_write_head;
+
     struct object_cache_pool *cache_io_pool;
     struct object_cache_pool *page_io_pool;
 };
@@ -129,4 +133,35 @@ void iomgr_store_pages_async(struct iomgr* imgr,
                             uint64_t nb_pages,                             
                             void(*cb)(void*ctx, int kverrno), 
                             void* ctx);
+
+/**
+ * @brief Poll the pending read requests.
+ * 
+ * @param imgr  The iomgr
+ * @return int  The number of requests processed.
+ */
+int iomgr_io_read_poll(struct iomgr* imgr);
+
+/**
+ * @brief Poll the pending write requests.
+ * 
+ * @param imgr  The iomgr
+ * @return int  The number of requests processed.
+ */
+int iomgr_io_write_poll(struct iomgr* imgr);
+
+/**
+ * @brief Poll all the pending requests.
+ * 
+ * @param imgr  The iomgr
+ * @return int  The number of requests processed.
+ */
+static inline int iomgr_io_poll(struct iomgr* imgr){
+    int events = 0;
+    events += iomgr_io_read_poll(imgr);
+    events += iomgr_io_write_poll(imgr);
+
+    return events;
+}
+
 #endif

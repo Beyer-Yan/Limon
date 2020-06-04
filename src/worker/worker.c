@@ -119,6 +119,14 @@ _worker_business_processor_poll(void*ctx){
 }
 
 static int
+_worker_io_poll(void* ctx){
+    struct worker_context *wctx = ctx;
+    int events = 0;
+    events += iomgr_io_poll(wctx->imgr);
+    return events;
+}
+
+static int
 _worker_reclaim_poll(void* ctx){
     struct worker_context *wctx = ctx;
     int events = 0;
@@ -344,15 +352,9 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
     imgr->target = opts->target;
     imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;
     imgr->nb_pending_io = 0;
-    imgr->read_hash.cache_hash = hashmap_new();
-    imgr->read_hash.page_hash = hashmap_new();
-    imgr->write_hash.cache_hash = hashmap_new();
-    imgr->write_hash.page_hash = hashmap_new();
-    assert(imgr->read_hash.cache_hash);
-    assert(imgr->read_hash.page_hash);
-    assert(imgr->write_hash.cache_hash);
-    assert(imgr->write_hash.page_hash);
-
+    
+    TAILQ_INIT(&imgr->pending_read_head);
+    TAILQ_INIT(&imgr->pending_write_head);
 
     imgr->cache_io_pool = (struct object_cache_pool*)(imgr+1);
     uint8_t* cahe_pool_data = (uint8_t*)imgr->cache_io_pool + cio_header_size;
@@ -523,6 +525,10 @@ _rebuild_complete(void*ctx, int kverrno){
     assert(poller!=NULL);
     wctx->business_poller = poller;
 
+    poller = SPDK_POLLER_REGISTER(_worker_io_poll,wctx,0);
+    assert(poller!=NULL);
+    wctx->io_poller = poller;
+
     wctx->ready = true;
 }
 
@@ -579,6 +585,7 @@ _do_worker_destroy(void*ctx){
     spdk_poller_unregister(&wctx->business_poller);
     spdk_poller_unregister(&wctx->reclaim_poller);
     spdk_poller_unregister(&wctx->slab_evaluation_poller);
+    spdk_poller_unregister(&wctx->io_poller);
 
     spdk_put_io_channel(wctx->imgr->channel);
 
