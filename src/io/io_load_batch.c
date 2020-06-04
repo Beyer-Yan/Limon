@@ -112,7 +112,8 @@ _load_pages_one_page(map_t pmap, struct cache_io *cio, struct iomgr *imgr, struc
     pio_1->imgr = imgr;
     pio_1->io_link = NULL;
 
-    if(hashmap_get(pmap,&pio_1->key,sizeof(pio_1->key),&pval_1)){
+    hashmap_get(pmap,&pio_1->key,sizeof(pio_1->key),&pval_1);
+    if(pval_1){
         TAILQ_INSERT_TAIL(phead,pio_1,link);
     }
     else{
