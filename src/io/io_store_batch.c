@@ -95,15 +95,15 @@ int iomgr_io_write_poll(struct iomgr* imgr){
     struct cache_io *cio, *ctmp=NULL;
     TAILQ_FOREACH_SAFE(cio,&imgr->pending_write_head,link,ctmp){
         struct cache_io *val;
-        hashmap_get(cmap,&cio->key, sizeof(cio->key),&val);
+        hashmap_get(cmap,(uint8_t*)cio->key, sizeof(cio->key),&val);
         if(val){
             //They are writing the same pages, just link them.
-            TAILQ_INSERT_TAIL(&val->cio_head,cio,link);
             TAILQ_REMOVE(&imgr->pending_write_head,cio,link);
+            TAILQ_INSERT_TAIL(&val->cio_head,cio,link);
         }
         else{
             TAILQ_INIT(&cio->cio_head);
-            hashmap_put(cmap,&cio->key,sizeof(cio->key),cio);
+            hashmap_put(cmap,(uint8_t*)cio->key,sizeof(cio->key),cio);
         }
     }
     hashmap_free(cmap);
