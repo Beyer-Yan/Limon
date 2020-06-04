@@ -114,7 +114,7 @@ _load_pages_one_page(map_t pmap, struct cache_io *cio, struct iomgr *imgr, struc
 
     hashmap_get(pmap,&pio_1->key,sizeof(pio_1->key),&pval_1);
     if(pval_1){
-        TAILQ_INSERT_TAIL(phead,pio_1,link);
+        TAILQ_INSERT_TAIL(&pval_1->pio_head,pio_1,link);
     }
     else{
         TAILQ_INIT(&pio_1->pio_head);
@@ -123,6 +123,7 @@ _load_pages_one_page(map_t pmap, struct cache_io *cio, struct iomgr *imgr, struc
         pio_1->start_page = cio->start_page;
         pio_1->len = 1;
         hashmap_put(pmap,&pio_1->key,sizeof(pio_1->key),pio_1);
+        TAILQ_INSERT_TAIL(phead,pio_1,link);
     }
 }
 
