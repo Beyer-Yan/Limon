@@ -7,23 +7,6 @@
 
 #include "spdk/thread.h"
 
-static void 
-_dummy_blob_process_async(void*ctx){
-    void **data = ctx;
-    spdk_blob_op_complete cb_fn = data[0];
-    void *cb_arg = data[1];
-    free(data);
-    cb_fn(cb_arg,0);
-}
-
-static void
-_dummy_blob_write(struct spdk_blob *blob, struct spdk_io_channel *channel,
-		   void *payload, uint64_t offset, uint64_t length,
-		   spdk_blob_op_complete cb_fn, void *cb_arg){
-
-    spdk_blob_io_write(blob,channel,payload,offset,length,cb_fn,cb_arg);
-}
-
 static void _store_pages_complete_cb(void*ctx, int kverrno);
 
 static void
@@ -43,7 +26,7 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 static void
 _store_pages_multipages_phase2(struct page_io *pio){
 
-    _dummy_blob_write(pio->blob,pio->imgr->channel,
+    spdk_blob_io_write(pio->blob,pio->imgr->channel,
                         pio->buf,pio->start_page,1,
                         _store_pages_complete_cb,pio);
 }
@@ -93,7 +76,7 @@ _store_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
 
     //Perform phase1 writing.
     imgr->nb_pending_io++;
-    _dummy_blob_write(blob,imgr->channel,buf,start_page,pio_phase1->len,
+    spdk_blob_io_write(blob,imgr->channel,buf,start_page,pio_phase1->len,
                         _store_pages_complete_cb,pio_phase1);
 }
 
@@ -112,7 +95,7 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
 
     //Now issue a blob IO command for pio_1_pages;
     imgr->nb_pending_io++;
-    _dummy_blob_write(blob,imgr->channel,buf,start_page,1,
+    spdk_blob_io_write(blob,imgr->channel,buf,start_page,1,
                         _store_pages_complete_cb,pio);
 }
 

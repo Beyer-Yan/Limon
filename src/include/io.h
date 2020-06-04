@@ -77,7 +77,7 @@ struct iomgr{
     TAILQ_HEAD(,cache_io) pending_write_head;
 
     struct pending_io_hash read_hash;
-
+    struct pending_io_hash write_hash;
 
     struct object_cache_pool *cache_io_pool;
     struct object_cache_pool *page_io_pool;

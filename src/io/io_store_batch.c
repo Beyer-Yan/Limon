@@ -91,7 +91,7 @@ iomgr_store_pages_async(struct iomgr* imgr,
 int iomgr_io_write_poll(struct iomgr* imgr){
     int events = 0;
     //Process the requests that covering the same pages
-    map_t cmap = hashmap_new();
+    map_t cmap = imgr->write_hash.cache_hash;
     struct cache_io *cio, *ctmp=NULL;
     TAILQ_FOREACH_SAFE(cio,&imgr->pending_write_head,link,ctmp){
         struct cache_io *val;
@@ -106,7 +106,6 @@ int iomgr_io_write_poll(struct iomgr* imgr){
             hashmap_put(cmap,(uint8_t*)cio->key,sizeof(cio->key),cio);
         }
     }
-    hashmap_free(cmap);
 
     TAILQ_HEAD(,page_io) pio_head;
     TAILQ_INIT(&pio_head);
@@ -114,6 +113,7 @@ int iomgr_io_write_poll(struct iomgr* imgr){
     //Process the requests that have interleaved pages
     TAILQ_FOREACH_SAFE(cio,&imgr->pending_write_head,link,ctmp){
         TAILQ_REMOVE(&imgr->pending_write_head,cio,link);
+        hashmap_remove(cmap,(uint8_t*)cio->key,sizeof(cio->key));
 
         struct page_io *pio1 = pool_get(imgr->page_io_pool);
         assert(pio1!=NULL);

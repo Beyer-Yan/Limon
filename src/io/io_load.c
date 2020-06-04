@@ -6,23 +6,6 @@
 
 #include "spdk/thread.h"
 
-static void 
-_dummy_blob_process_async(void*ctx){
-    void **data = ctx;
-    spdk_blob_op_complete cb_fn = data[0];
-    void *cb_arg = data[1];
-    free(data);
-    cb_fn(cb_arg,0);
-}
-
-//For debug only
-static void 
-_dummy_blob_read(struct spdk_blob *blob, struct spdk_io_channel *channel,
-		       void *payload, uint64_t offset, uint64_t length,
-		       spdk_blob_op_complete cb_fn, void *cb_arg){
-    spdk_blob_io_read(blob,channel,payload,offset,length,cb_fn,cb_arg);
-}
-
 static void
 _process_cache_io(struct cache_io *cio, int kverrno){
     cio->cnt++;
@@ -137,7 +120,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             //I need load page 2 to n-1
             cio->nb_segments++;
             imgr->nb_pending_io++;
-            _dummy_blob_read(blob,imgr->channel,
+            spdk_blob_io_read(blob,imgr->channel,
                               buf+KVS_PAGE_SIZE,start_page+1,nb_pages-2,
                               _default_cache_io_complete_cb,cio);
         }
@@ -153,7 +136,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_n->key, sizeof(page_n_key),pio_n);
 
         imgr->nb_pending_io++;
-        _dummy_blob_read(blob,imgr->channel,
+        spdk_blob_io_read(blob,imgr->channel,
                           buf,start_page,nb_pages,
                           _default_page_io_complete_cb,pio_1);
     }
@@ -174,7 +157,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             _pio = pio_1;
         }
         imgr->nb_pending_io++;
-        _dummy_blob_read(blob,imgr->channel,
+        spdk_blob_io_read(blob,imgr->channel,
                           buf,start_page,nb_pages-1,
                           _default_page_io_complete_cb,_pio);
     }
@@ -205,7 +188,7 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        _dummy_blob_read(blob,imgr->channel,
+        spdk_blob_io_read(blob,imgr->channel,
                           buf,start_page,1,
                           _default_page_io_complete_cb,pio);
     }
