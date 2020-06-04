@@ -25,7 +25,7 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 
 static void
 _store_pages_multipages_phase2(struct page_io *pio){
-
+    pio->imgr->nb_pending_io--;
     spdk_blob_io_write(pio->blob,pio->imgr->channel,
                         pio->buf,pio->start_page,1,
                         _store_pages_complete_cb,pio);

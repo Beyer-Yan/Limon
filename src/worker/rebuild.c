@@ -90,7 +90,7 @@ _node_read_complete(void* ctx, int bserrno){
                 //The chunk_desc field is used as the timestamp field for reducing memory usage.
                 uint64_t tsmp = (uint64_t)entry_slab->chunk_desc;
                 if(tsmp<tsc0){
-                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slot:%lu, ori_tsc:%lu",
+                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slot:%lu, ori_tsc:%lu\n",
                                     slab->slab_size,idx+slot_base,tsc0,entry_worker->slot_idx,tsmp);
                     //This item is newer.
                     bitmap_clear_bit(entry_worker->chunk_desc->bitmap,
