@@ -90,20 +90,27 @@ _node_read_complete(void* ctx, int bserrno){
                 //The chunk_desc field is used as the timestamp field for reducing memory usage.
                 uint64_t tsmp = (uint64_t)entry_slab->chunk_desc;
                 if(tsmp<tsc0){
+                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slot:%lu, ori_tsc:%lu",
+                                    slab->slab_size,idx+slot_base,tsc0,entry_worker->slot_idx,tsmp);
                     //This item is newer.
                     bitmap_clear_bit(entry_worker->chunk_desc->bitmap,
                                      entry_worker->slot_idx%entry_worker->chunk_desc->nb_slots);
                     bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
 
-                    struct reclaim_node* ori_node = slab_get_node(slab,idx);
-                    if(ori_node->nb_free_slots==0){
-                        rbtree_insert(slab->reclaim.free_node_tree,ori_node->id,ori_node,NULL);
+                    uint32_t ori_node_id = entry_worker->slot_idx/nb_slots_per_node;
+                    uint32_t cur_node_id = node->id;
+                    if(ori_node_id!=cur_node_id){
+                        //They are in the different nodes
+                        struct reclaim_node* ori_node = rbtree_lookup(slab->reclaim.total_tree,ori_node_id);
+                        if(ori_node->nb_free_slots==0){
+                            rbtree_insert(slab->reclaim.free_node_tree,ori_node->id,ori_node,NULL);
+                        }
+                        ori_node->nb_free_slots++;
+                        node->nb_free_slots--;
                     }
+                    
                     entry_worker->chunk_desc->nb_free_slots++;
-                    ori_node->nb_free_slots++;
-
                     desc->nb_free_slots--;
-                    node->nb_free_slots--;
 
                     entry_slab->chunk_desc = (struct chunk_desc *)tsc0;
                     entry_worker->slot_idx = slot_base + idx;
