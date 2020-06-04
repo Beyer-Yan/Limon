@@ -72,9 +72,12 @@ struct iomgr{
     
     uint32_t max_pending_io; 
     uint32_t nb_pending_io;
-    
+
     TAILQ_HEAD(,cache_io) pending_read_head;
     TAILQ_HEAD(,cache_io) pending_write_head;
+
+    struct pending_io_hash read_hash;
+
 
     struct object_cache_pool *cache_io_pool;
     struct object_cache_pool *page_io_pool;

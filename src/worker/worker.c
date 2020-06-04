@@ -352,6 +352,9 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
     imgr->target = opts->target;
     imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;
     imgr->nb_pending_io = 0;
+
+    imgr->read_hash.cache_hash = hashmap_new();
+    imgr->read_hash.page_hash = hashmap_new();
     
     TAILQ_INIT(&imgr->pending_read_head);
     TAILQ_INIT(&imgr->pending_write_head);
