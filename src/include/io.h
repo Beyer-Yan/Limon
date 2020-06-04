@@ -161,7 +161,7 @@ int iomgr_io_write_poll(struct iomgr* imgr);
  */
 static inline int iomgr_io_poll(struct iomgr* imgr){
     int events = 0;
-    events += iomgr_io_read_poll(imgr);
+    //events += iomgr_io_read_poll(imgr);
     events += iomgr_io_write_poll(imgr);
 
     return events;
