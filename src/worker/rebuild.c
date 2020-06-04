@@ -95,6 +95,16 @@ _node_read_complete(void* ctx, int bserrno){
                                      entry_worker->slot_idx%entry_worker->chunk_desc->nb_slots);
                     bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
 
+                    struct reclaim_node* ori_node = slab_get_node(slab,idx);
+                    if(ori_node->nb_free_slots==0){
+                        rbtree_insert(slab->reclaim.free_node_tree,ori_node->id,ori_node,NULL);
+                    }
+                    entry_worker->chunk_desc->nb_free_slots++;
+                    ori_node->nb_free_slots++;
+
+                    desc->nb_free_slots--;
+                    node->nb_free_slots--;
+
                     entry_slab->chunk_desc = (struct chunk_desc *)tsc0;
                     entry_worker->slot_idx = slot_base + idx;
                     entry_worker->chunk_desc = desc;

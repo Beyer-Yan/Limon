@@ -116,6 +116,12 @@ static inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
     }
 }
 
+static inline struct reclaim_node* slab_get_node(struct slab*slab, uint64_t slot_idx){
+    uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
+    uint32_t node_idx = slot_idx/nb_slots_per_node;
+    return rbtree_lookup(slab->reclaim.total_tree,node_idx);
+}
+
 /**
  * @brief  Calculate how many slots for the given number of pages and slab size.
  * 
