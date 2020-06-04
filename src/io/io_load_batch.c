@@ -81,7 +81,7 @@ iomgr_load_pages_async(struct iomgr* imgr,struct spdk_blob* blob,uint64_t key_pr
 
     assert( ((uint64_t)buf) % KVS_PAGE_SIZE==0 );
 
-    struct cache_io *cio = NULL, *tmp = NULL;
+    struct cache_io *cio = NULL;
 
     cio = pool_get(imgr->cache_io_pool);
     assert(cio!=NULL);
