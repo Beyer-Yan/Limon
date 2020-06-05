@@ -523,9 +523,10 @@ _rebuild_complete(void*ctx, int kverrno){
     //All initialization jobs complete.
     //Register pollers to start the service.
     struct spdk_poller *poller;
-    poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
+
+    poller = SPDK_POLLER_REGISTER(_worker_io_poll,wctx,0);
     assert(poller!=NULL);
-    wctx->slab_evaluation_poller = poller;
+    wctx->io_poller = poller;
 
     poller = SPDK_POLLER_REGISTER(_worker_reclaim_poll,wctx,0);
     assert(poller!=NULL);
@@ -534,10 +535,10 @@ _rebuild_complete(void*ctx, int kverrno){
     poller = SPDK_POLLER_REGISTER(_worker_business_processor_poll,wctx,0);
     assert(poller!=NULL);
     wctx->business_poller = poller;
-
-    poller = SPDK_POLLER_REGISTER(_worker_io_poll,wctx,0);
+    
+    poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
     assert(poller!=NULL);
-    wctx->io_poller = poller;
+    wctx->slab_evaluation_poller = poller;
 
     wctx->ready = true;
 }
