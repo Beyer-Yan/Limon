@@ -138,14 +138,6 @@ void iomgr_store_pages_async(struct iomgr* imgr,
                             void* ctx);
 
 /**
- * @brief Poll the pending read requests.
- * 
- * @param imgr  The iomgr
- * @return int  The number of requests processed.
- */
-int iomgr_io_read_poll(struct iomgr* imgr);
-
-/**
  * @brief Poll the pending write requests.
  * 
  * @param imgr  The iomgr
@@ -161,8 +153,6 @@ int iomgr_io_write_poll(struct iomgr* imgr);
  */
 static inline int iomgr_io_poll(struct iomgr* imgr){
     int events = 0;
-    //Batch io process for read request is unneccesary
-    //events += iomgr_io_read_poll(imgr);
     events += iomgr_io_write_poll(imgr);
 
     return events;

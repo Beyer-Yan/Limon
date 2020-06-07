@@ -308,11 +308,12 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     uint8_t *buf;
     uint64_t start_page_in_slab;
     uint64_t nb_pages = 1;
-    uint64_t key_prefix = (uint64_t)desc + first_page;
+    uint64_t key_prefix;
 
     if(first_page!=UINT32_MAX){
         buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + first_page;
+        key_prefix = (uint64_t)desc + first_page;
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
                             start_page_in_slab,nb_pages,
                             _item_share_load_complete_cb_fn,cls_ctx);
@@ -322,6 +323,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
         // is not be loaded.
         buf = &desc->chunk_mem->data[last_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + last_page;
+        key_prefix = (uint64_t)desc + last_page;
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
                     start_page_in_slab,nb_pages,
                     _item_share_load_complete_cb_fn,cls_ctx);
@@ -359,8 +361,10 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
     _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //The noval slab placement makes it possible that only one page does the
-    //meta data stay in.
-    if(bitmap_get_bit(desc->chunk_mem->bitmap,first_page)){
+    //meta data stay in. And if the meta page is not a shared page, it is
+    // unneccesary to be loaded.
+    if(!_is_shared_page(desc,slot_idx,true) ||
+        bitmap_get_bit(desc->chunk_mem->bitmap,first_page)){
         cb(ctx,-KV_ESUCCESS);
         return;
     }

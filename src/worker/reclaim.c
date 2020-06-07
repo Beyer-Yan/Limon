@@ -90,7 +90,7 @@ _process_one_pending_delete(struct pending_item_delete *del){
     struct slab* slab = del->slab;
     uint64_t slot_idx = del->slot_idx;
     struct chunk_desc* desc = pagechunk_get_desc(slab,slot_idx);
-
+    
     assert(desc!=NULL);
     pagechunk_mem_lift(desc);
 

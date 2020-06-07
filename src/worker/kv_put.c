@@ -457,17 +457,17 @@ void worker_process_put(struct kv_request_internal *req){
     assert(desc!=NULL);
     pagechunk_mem_lift(desc);
 
-    if(pagechunk_is_cross_page(desc,entry->slot_idx)){
-        //The item is stored into multi page, so I needn't
-        //load it and I do not pay attention to page chunk evicting.
-        //Just add the item into other place.
-        _process_put_case1(req,false);
-    }
-    else if(slab_is_slab_changed(desc->slab_size,item_packed_size(req->item))){
+    if(slab_is_slab_changed(desc->slab_size,item_packed_size(req->item))){
         //The updated item is not situable for the slab, I have to write it
         //into other slab. So I needn't load it and I do not pay 
         //attention to page chunk evicting. Just add the item into other place.
         _process_put_case1(req,true);
+    }
+    else if(pagechunk_is_cross_page(desc,entry->slot_idx)){
+        //The item is stored into multi page, so I needn't
+        //load it and I do not pay attention to page chunk evicting.
+        //Just add the item into other place.
+        _process_put_case1(req,false);
     }
     else{
         _process_put_case2(req);

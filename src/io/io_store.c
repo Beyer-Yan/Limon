@@ -35,7 +35,7 @@ static void
 _store_pages_complete_cb(void*ctx, int kverrno){
     struct page_io *pio = ctx;
 
-    pio->imgr->nb_pending_io--;
+    pio->imgr->nb_pending_io++;
 
     _process_cache_io(pio->cache_io,kverrno);
     if(pio->io_link){

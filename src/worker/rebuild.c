@@ -67,7 +67,7 @@ _node_read_complete(void* ctx, int bserrno){
         if(item->meta.ksize!=0){
             //It may be a valid item.
             if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) || (tsc0==0) ){
-                //The item is crashed, which may be caused by a system crash when the item is been storing.
+                //The item is crashed, which may be caused by a system crash when the item is being stored.
                 //User may format a disk by 1 or 0. 
                 continue;
             }
