@@ -19,9 +19,9 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
     struct index_entry* entry       = pctx->entry;
     struct index_entry* new_entry   = &pctx->new_entry;
     
+    pool_release(wctx->kv_request_internal_pool,req);
     pagechunk_mem_lower(entry->chunk_desc);
     pagechunk_mem_lower(new_entry->chunk_desc);
-    pool_release(wctx->kv_request_internal_pool,req);
     entry->writing = 0;
 
     if(kverrno){
@@ -438,7 +438,6 @@ void worker_process_put(struct kv_request_internal *req){
 
     if(!entry){
         //item does not exist. It a new item!
-        //SPDK_NOTICELOG("put new item, item->key:%d\n",*(int*)req->item->data);
         _process_put_case3(req);
         return;
     }
@@ -452,18 +451,42 @@ void worker_process_put(struct kv_request_internal *req){
         return;
     }
     struct chunk_desc *desc = entry->chunk_desc;
-    entry->writing = 1;
-
     assert(desc!=NULL);
+    
+    bool slab_changed = slab_is_slab_changed(desc->slab_size,item_packed_size(req->item));
+    bool is_cross_page = pagechunk_is_cross_page(desc,entry->slot_idx);
+
+    if(entry->getting){
+        if(slab_changed|is_cross_page){
+            //There is a pending getting request, but the puting will be performed
+            //not-in-place, that is, I will not load the item data and store the item
+            //directly into other place and change the index entry. If the pending
+            //getting request is not finished before I change the index entry, the 
+            //getting request will encounter race trouble.
+            //e.g. get: issue         load data              load ok          finished
+            //     put         issue             change entry        (race here)      
+
+            //If the item is stored in-place, then it will be loaded brfore I perform
+            //writing. That is, Other flying getting request will be finished before
+            //I perform writing. In a word, in such case, it is unneccesary to care the 
+            //getting flag. That is an opimization measure to speed up the putting and 
+            //getting for small items.
+            req->pctx.no_lookup = true;
+            TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);  
+            return;
+        }
+    }
+
+    entry->writing = 1;
     pagechunk_mem_lift(desc);
 
-    if(slab_is_slab_changed(desc->slab_size,item_packed_size(req->item))){
+    if(slab_changed){
         //The updated item is not situable for the slab, I have to write it
         //into other slab. So I needn't load it and I do not pay 
         //attention to page chunk evicting. Just add the item into other place.
         _process_put_case1(req,true);
     }
-    else if(pagechunk_is_cross_page(desc,entry->slot_idx)){
+    else if(is_cross_page){
         //The item is stored into multi page, so I needn't
         //load it and I do not pay attention to page chunk evicting.
         //Just add the item into other place.

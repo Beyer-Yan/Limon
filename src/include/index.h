@@ -18,19 +18,21 @@
  * Operation Compatibility table 
  * 
  *             Get    Put    Delete
- *  Get        Y      Y      Y     
+ *  Get        Y      A      Y     
  *  Put        N      N      N     
  *  Delete     N      N      N     
  * 
  * When 'N' compatibility is detected, the request will be resubmited
- * until the previous operation finishes.
+ * until the previous operation finishes. A means the compatibility is
+ * checked accordingly.
  * 
  * The scan is a sychronized operation, and it will skip the entry marked as Deleting. 
  */ 
 struct index_entry {
+    uint64_t getting :1;
     uint64_t writing :1;
     uint64_t deleting:1;
-    uint64_t slot_idx:62;
+    uint64_t slot_idx:61;
     struct chunk_desc * chunk_desc;
 };
 

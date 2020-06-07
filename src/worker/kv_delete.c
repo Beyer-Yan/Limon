@@ -30,12 +30,12 @@ void worker_process_delete(struct kv_request_internal *req){
         pool_release(wctx->kv_request_internal_pool,req);
         return;
     }
-    else if(entry->writing | entry->deleting){
-        //There is already a modifying operation for this item.
+    else if(entry->writing | entry->deleting | entry->getting){
+        //There is already a getting or modifying operation for this item.
         //It should be resubmited.
         //For the entry in deleting state, it has to be re-lookuped, since its
         //entry may be deleted.
-        (entry->writing) ? req->pctx.no_lookup = true : 0;
+        (entry->writing|entry->getting) ? req->pctx.no_lookup = true : 0;
         
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
         return;

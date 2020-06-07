@@ -290,6 +290,10 @@ _process_one_pending_migrate_load_data_cb(void* ctx, int kverrno){
         mig->io_cb_fn(mig->ctx,-KV_ESUCCESS);
         return;
     }
+    //I do not care the getting flag, since when I migrate a item, I have to load the
+    //item data. So if a getting request is issued before the migrating, then the getting
+    //request will finish the data loading before the data loading of migrating request.
+    //That is, the getting request will finish before I change the index entry.
     _process_one_pending_migrate_cached(mig);
 }
 

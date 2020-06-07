@@ -13,6 +13,7 @@ _process_get_load_data_cb(void* ctx, int kverrno){
 
     pool_release(wctx->kv_request_internal_pool,req);
     pagechunk_mem_lower(desc);
+    entry->getting =  0;
 
     if(kverrno){
         //Error hits when load data from disk
@@ -66,6 +67,7 @@ void worker_process_get(struct kv_request_internal *req){
 
     assert(desc!=NULL);
 
+    entry->getting = 1;
     pagechunk_mem_lift(desc);
     
     if(!desc->chunk_mem){

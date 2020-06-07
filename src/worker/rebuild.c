@@ -69,6 +69,10 @@ _node_read_complete(void* ctx, int bserrno){
             if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) || (tsc0==0) ){
                 //The item is crashed, which may be caused by a system crash when the item is being stored.
                 //User may format a disk by 1 or 0. 
+                if(tsc0!=tsc1){
+                    SPDK_NOTICELOG("Find broken item, drop it. slab:%u,slot:%lu, tsc0:%lu, tsc1:%lu\n",
+                                    slab->slab_size,idx+slot_base,tsc0,tsc1);
+                }
                 continue;
             }
             uint32_t actual_item_size = item_get_size(item) + 16;
