@@ -118,7 +118,7 @@ bitmap_get_first_clear_bit(struct bitmap *map){
             break;
         }
     }
-    if(i==num_ll-1){
+    if(i==num_ll-1 && (map->length%64)!=0 ){
         //Process The last word the last bit is in.
         uint64_t mask = ~(((uint64_t)1 << (map->length%64))-1);
         word =  map->data[i] | mask;
