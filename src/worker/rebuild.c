@@ -14,9 +14,9 @@ struct list_slab{
 struct rebuild_ctx{
     struct worker_context *wctx;
 
-    //A temporary mem index for slab recovery. When the slab is rebuilt, the mem index
+    //A temporary mem index for shard recovery. When the shard is rebuilt, the mem index
     //will be destroyed.
-    struct mem_index *index_for_one_slab;
+    struct mem_index *index_for_one_shard;
 
     LIST_HEAD(,list_slab) slab_head;
     struct list_slab* cur;
@@ -84,7 +84,7 @@ _node_read_complete(void* ctx, int bserrno){
             }
 
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
-            struct index_entry* entry_slab   = mem_index_lookup(rctx->index_for_one_slab,item);
+            struct index_entry* entry_slab   = mem_index_lookup(rctx->index_for_one_shard,item);
             struct index_entry* entry_worker = mem_index_lookup(wctx->mem_index,item);
             if(entry_slab){
                 assert(entry_worker!=NULL);
@@ -94,24 +94,28 @@ _node_read_complete(void* ctx, int bserrno){
                 //The chunk_desc field is used as the timestamp field for reducing memory usage.
                 uint64_t tsmp = (uint64_t)entry_slab->chunk_desc;
                 if(tsmp<tsc0){
-                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slot:%lu, ori_tsc:%lu\n",
-                                    slab->slab_size,idx+slot_base,tsc0,entry_worker->slot_idx,tsmp);
-                    //This item is newer.
-                    bitmap_clear_bit(entry_worker->chunk_desc->bitmap,
-                                     entry_worker->slot_idx%entry_worker->chunk_desc->nb_slots);
-                    bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
-
                     uint32_t ori_node_id = entry_worker->slot_idx/nb_slots_per_node;
                     uint32_t cur_node_id = node->id;
-                    if(ori_node_id!=cur_node_id){
-                        //They are in the different nodes
-                        struct reclaim_node* ori_node = rbtree_lookup(slab->reclaim.total_tree,ori_node_id);
+                    struct slab* ori_slab = entry_worker->chunk_desc->slab;
+                    struct slab* cur_slab = slab;
+
+                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slab:%u,ori_slot:%lu, ori_tsc:%lu\n",
+                                    slab->slab_size,idx+slot_base,tsc0,ori_slab->slab_size,entry_worker->slot_idx,tsmp);
+
+                    if(ori_slab!=cur_slab || ori_node_id!=cur_node_id){
+                        //Ether the are in different slabs or different nodes of the same slab.
+                        struct reclaim_node* ori_node = rbtree_lookup(ori_slab->reclaim.total_tree,ori_node_id);
                         if(ori_node->nb_free_slots==0){
                             rbtree_insert(slab->reclaim.free_node_tree,ori_node->id,ori_node,NULL);
                         }
                         ori_node->nb_free_slots++;
                         node->nb_free_slots--;
                     }
+
+                    //This item is newer.
+                    bitmap_clear_bit(entry_worker->chunk_desc->bitmap,
+                                     entry_worker->slot_idx%entry_worker->chunk_desc->nb_slots);
+                    bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
                     
                     entry_worker->chunk_desc->nb_free_slots++;
                     desc->nb_free_slots--;
@@ -130,7 +134,7 @@ _node_read_complete(void* ctx, int bserrno){
                 mem_index_add(wctx->mem_index,item,&entry);
 
                 entry.chunk_desc = (struct chunk_desc *)tsc0;
-                mem_index_add(rctx->index_for_one_slab,item,&entry);
+                mem_index_add(rctx->index_for_one_shard,item,&entry);
                 
                 bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
                 desc->nb_free_slots--;
@@ -173,8 +177,8 @@ _rebuild_exit(struct rebuild_ctx* rctx,int kverrno){
     if(rctx->recovery_node_buffer){
         spdk_free(rctx->recovery_node_buffer);
     }
-    if(rctx->index_for_one_slab){
-        mem_index_destroy(rctx->index_for_one_slab);
+    if(rctx->index_for_one_shard){
+        mem_index_destroy(rctx->index_for_one_shard);
     }
 
     struct list_slab* s,*tmp;
@@ -204,8 +208,8 @@ _slab_rebuild_complete(struct rebuild_ctx* rctx,int kverrno){
         //I am going to rebuld the next shard.
         //And now, I should destroy the mem index for reducing memory usage.
         //As the item will never be stored across shard.
-        mem_index_destroy(rctx->index_for_one_slab);
-        rctx->index_for_one_slab = mem_index_init();
+        mem_index_destroy(rctx->index_for_one_shard);
+        rctx->index_for_one_shard = mem_index_init();
     }
     rctx->cur = s;
     _rebuild_one_slab(rctx);
@@ -236,7 +240,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     rctx->ctx = ctx;
     rctx->nb_buffer_pages=0;
     rctx->wctx = wctx;
-    rctx->index_for_one_slab = NULL;
+    rctx->index_for_one_shard = NULL;
     rctx->recovery_node_buffer = NULL;
     rctx->slab_rebuild_complete = _slab_rebuild_complete;
     LIST_INIT(&rctx->slab_head);
@@ -266,7 +270,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     }
 
     rctx->cur = LIST_FIRST(&rctx->slab_head);
-    rctx->index_for_one_slab = mem_index_init();
+    rctx->index_for_one_shard = mem_index_init();
     rctx->nb_buffer_pages = rctx->cur->slab->reclaim.nb_chunks_per_node * 
                             rctx->cur->slab->reclaim.nb_pages_per_chunk;
 
@@ -274,7 +278,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     rctx->recovery_node_buffer = spdk_malloc(rctx->nb_buffer_pages*KVS_PAGE_SIZE,0x1000,NULL,socket_id,SPDK_MALLOC_DMA);
     
     assert(rctx->recovery_node_buffer!=NULL);
-    assert(rctx->index_for_one_slab);
+    assert(rctx->index_for_one_shard);
     
     _rebuild_one_slab(rctx);
 }
