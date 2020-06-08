@@ -91,12 +91,16 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     struct worker_init_opts worker_opts;
     
     worker_opts.chunkmgr_worker = kctx->kvs->chunkmgr_worker;
+    worker_opts.chunk_cache_water_mark = kctx->opts->max_cache_chunks/kctx->opts->nb_works;
+
     worker_opts.max_io_pending_queue_size_per_worker = kvs->max_io_pending_queue_size_per_worker;
     worker_opts.max_request_queue_size_per_worker = kvs->max_request_queue_size_per_worker;
+
     worker_opts.nb_reclaim_shards = kvs->nb_shards/kvs->nb_workers;
     worker_opts.nb_shards = kvs->nb_shards;
     worker_opts.reclaim_batch_size = kvs->reclaim_batch_size;
     worker_opts.reclaim_percentage_threshold = kvs->reclaim_percentage_threshold;
+    
     worker_opts.shard = kvs->shards;
     worker_opts.target = kctx->bs;
     worker_opts.meta_thread = spdk_get_thread();

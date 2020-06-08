@@ -139,7 +139,13 @@ struct chunkmgr_worker_context{
 struct pagechunk_mgr{
     TAILQ_HEAD(,chunk_desc) global_chunks; 
     uint64_t nb_used_chunks;
+
+    //suggested mem chunks that I can use. Normally, I shoud not 
+    //request mem chunks larger than the water_mark. But If the
+    //work is busy enough, I should try to apply more mem chunks from 
+    //chunk manager.
     uint64_t water_mark;
+
     uint64_t hit_times;
     uint64_t miss_times;
     struct chunkmgr_worker_context *chunkmgr_worker;

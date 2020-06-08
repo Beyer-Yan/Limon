@@ -276,6 +276,7 @@ _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
     pmgr->nb_used_chunks = 0;
     TAILQ_INIT(&pmgr->global_chunks);
     pmgr->chunkmgr_worker = opts->chunkmgr_worker;
+    pmgr->water_mark  = opts->chunk_cache_water_mark;
 
     pmgr->kv_chunk_request_pool = (struct object_cache_pool*)(pmgr+1);
     uint8_t* req_pool_data = (uint8_t*)pmgr->kv_chunk_request_pool + common_header_size;

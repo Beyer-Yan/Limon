@@ -22,6 +22,9 @@ struct worker_init_opts{
 
     struct chunkmgr_worker_context *chunkmgr_worker;
 
+    //average chunks for each worker.
+    uint64_t chunk_cache_water_mark;
+
     uint32_t core_id;
     
     uint32_t nb_reclaim_shards;
