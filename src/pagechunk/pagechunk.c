@@ -600,8 +600,7 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
     if(!TAILQ_EMPTY(&desc->chunk_miss_callback_head)){
         TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
     }   
-    else{
-        if(_pagechunk_local_evaluate(pmgr)){
+    else if(_pagechunk_local_evaluate(pmgr)){
             //I should perform local evicting instead of requesting chunk mempry from
             //global chunk manager, since the cost of cross-core communication is much
             //higher than local evicting.
@@ -609,13 +608,12 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
             cb_obj->kverrno = -KV_ESUCCESS;
             TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
             _remote_chunk_mem_request_finish(cb_obj);
-        }
-        else{
-            //SPDK_NOTICELOG("New chunk mem request\n");
-            cb_obj->finish_cb = _remote_chunk_mem_request_finish;
-            TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
-            chunkmgr_request_one_aysnc(cb_obj);
-        }
+    }
+    else{
+        //SPDK_NOTICELOG("New chunk mem request\n");
+        cb_obj->finish_cb = _remote_chunk_mem_request_finish;
+        TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
+        chunkmgr_request_one_aysnc(cb_obj);
     }
 }
 
