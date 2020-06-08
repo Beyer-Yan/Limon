@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <assert.h>
+#include <stdlib.h>
 #include "kverrno.h"
 #include "pagechunk.h"
 #include "slab.h"
@@ -522,7 +523,7 @@ pagechunk_evict_one_chunk(struct pagechunk_mgr *pmgr){
 }
 
 //This callback shall be exceuted in the original polling thread.
-static void _chunk_mem_request_finish(void*ctx){
+static void _remote_chunk_mem_request_finish(void*ctx){
     struct chunk_miss_callback *cb_obj = ctx;
     struct pagechunk_mgr *pmgr = cb_obj->requestor_pmgr;
     struct chunk_desc *desc = cb_obj->desc;
@@ -549,16 +550,64 @@ static void _chunk_mem_request_finish(void*ctx){
     }
 }
 
+static bool
+_pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
+    //experience number.
+    uint64_t threshold = pmgr->water_mark*6/10;
+    if(pmgr->nb_used_chunks<=threshold){
+        return true;
+    }
+    else{
+        //The values are chosen randomly.
+        //They should be according in engineering.
+        static double alpha = 0.5;
+        static double beta  = 0.5;
+        //calculate the miss rate.
+        double miss_rate = (double)pmgr->miss_times/(double)(pmgr->hit_times+pmgr->miss_times);
+        //calculate the  utilization.
+        double ulti_rate = (double)pmgr->nb_used_chunks/(double)pmgr->water_mark;
+
+        //My dog tells me the formula (^_^)
+        //Don't ask me why...
+        double p_remote = alpha*miss_rate + beta*(1.0-ulti_rate);
+        double god_desision = (double)rand()/RAND_MAX;
+
+        //Now listen to the God.
+        return (god_desision<=p_remote) ? false : true;
+    }
+}
+
 void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
                                  struct chunk_desc* desc,
                                  void(*cb)(void*ctx,int kverrno), 
                                  void* ctx){
+    if(_pagechunk_local_evaluate(pmgr)){
+        //I should perform local evicting instead of requesting chunk mempry from
+        //global chunk manager, since the cost of cross-core communication is much
+        //higher than local evicting. It's in God's hands !!
+        struct chunk_mem *mem = pagechunk_evict_one_chunk(pmgr);
+        bitmap_clear_bit_all(mem->bitmap);
+        desc->chunk_mem = mem;
+
+        TAILQ_INSERT_TAIL(&pmgr->global_chunks,desc,link);
+        pmgr->nb_used_chunks++;
+        pmgr->miss_times++;
+
+        cb(ctx,-KV_ESUCCESS);
+        return;
+    }
+
+    //In such case, I should send a request to the global chunk memory manager.
+    //The global chunk maneger will deside how I should get a chunk memory, 
+    //ether from the local evicting, or from the remote evicting , or allocating
+    //from the global chunk manager. All just depend in the 
+
     struct chunk_miss_callback *cb_obj = pool_get(pmgr->kv_chunk_request_pool);
     assert(cb_obj!=NULL);
     cb_obj->requestor_pmgr = pmgr;
     cb_obj->desc  = desc;
 
-    cb_obj->finish_cb = _chunk_mem_request_finish;
+    cb_obj->finish_cb = _remote_chunk_mem_request_finish;
 
     cb_obj->cb_fn = cb;
     cb_obj->ctx   = ctx;

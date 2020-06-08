@@ -45,6 +45,8 @@ struct workload_api {
    // pretty print API name (YCSB or PRODUCTION)
    const char* (*api_name)(void); 
 
+   void (*print_histogram)(void);
+
    // allocate an item in memory and return it
    struct kv_item* (*create_unique_item)(uint64_t uid, uint64_t max_uid); 
 };
@@ -57,4 +59,5 @@ void run_workload(struct workload *w, bench_t bench);
 
 struct kv_item *create_unique_item(uint64_t item_size, uint64_t uid);
 struct workload_api *get_api(bench_t b);
+
 #endif

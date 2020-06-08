@@ -139,6 +139,7 @@ struct chunkmgr_worker_context{
 struct pagechunk_mgr{
     TAILQ_HEAD(,chunk_desc) global_chunks; 
     uint64_t nb_used_chunks;
+    uint64_t water_mark;
     uint64_t hit_times;
     uint64_t miss_times;
     struct chunkmgr_worker_context *chunkmgr_worker;

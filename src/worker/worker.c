@@ -205,7 +205,9 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
                        enum op_code op){
     
     //For debug only
-    *(uint64_t*)item->meta.cdt = spdk_get_ticks();
+    uint64_t tsc;
+    rdtscll(tsc);
+    memcpy(item->meta.cdt,&tsc,sizeof(tsc));
 
     req->cb_fn = cb_fn;
     req->ctx = ctx;

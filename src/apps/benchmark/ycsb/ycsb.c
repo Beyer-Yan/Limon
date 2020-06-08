@@ -5,6 +5,7 @@
 #include "item.h"
 #include "kvutil.h"
 #include "kvs.h"
+#include "histogram.h"
 
 static struct kv_item* _create_unique_item_ycsb(uint64_t uid) {
    size_t item_size = 100;
@@ -36,12 +37,22 @@ static int random_get_put(int test) {
    exit(-1);
 }
 
+static inline void
+_update_stat(struct kv_item* item){
+   uint64_t tsc0,tsc1;
+   memcpy(&tsc0,item->meta.cdt,sizeof(tsc0));
+   rdtscll(tsc1);
+   uint64_t tsc_diff = tsc1 - tsc0;
+   histogram_update(tsc_diff);
+}
+
 static void
 _ycsb_put_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *ori_item = ctx;
    if(kverrno){
       printf("Put error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
    }
+   _update_stat(ori_item);
    free(ori_item);
 }
 
@@ -56,6 +67,7 @@ _ycsb_get_complete(void*ctx, struct kv_item* item, int kverrno){
    //if(!memcpy(ori_item->data+ksize, item->data+ksize, vsize)){
    //   printf("Value mismatch, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
    //}
+   _update_stat(ori_item);
    free(ori_item);
 }
 

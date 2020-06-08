@@ -16,6 +16,7 @@
 #include "spdk/string.h"
 
 #include "ycsb/common.h"
+#include "ycsb/histogram.h"
 
 static int
 _kvs_parse_arg(int ch, char *arg){
@@ -50,6 +51,8 @@ _do_start_benchmark(void*ctx){
 		//ycsb_e_uniform, ycsb_e_zipfian, // Scans
 	};
 
+	histogram_init();
+
 	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
 		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
@@ -58,7 +61,9 @@ _do_start_benchmark(void*ctx){
 			w.nb_requests = 8000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
+		histogram_reset();
 		run_workload(&w, workloads[i]);
+		histogram_print();
 	}
 	printf("All workloads complete, ctrl+c to stop the program\n");
 }
