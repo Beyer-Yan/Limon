@@ -560,17 +560,17 @@ _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
     else{
         //The values are chosen randomly.
         //They should be according in engineering.
-        static double alpha = 0.5;
-        static double beta  = 0.5;
+        static float alpha = 0.5;
+        static float beta  = 0.5;
         //calculate the miss rate.
-        double miss_rate = (double)pmgr->miss_times/(double)(pmgr->hit_times+pmgr->miss_times);
+        float miss_rate = (float)pmgr->miss_times/(float)(pmgr->hit_times+pmgr->miss_times);
         //calculate the  utilization.
-        double ulti_rate = (double)pmgr->nb_used_chunks/(double)pmgr->water_mark;
+        float ulti_rate = (float)pmgr->nb_used_chunks/(float)pmgr->water_mark;
 
         //My dog tells me the formula (^_^)
         //Don't ask me why...
-        double p_remote = alpha*miss_rate + beta*(1.0-ulti_rate);
-        double god_desision = (double)rand()/RAND_MAX;
+        float p_remote = alpha*miss_rate + beta*(1-ulti_rate);
+        float god_desision = (float)rand()/RAND_MAX;
 
         //Now listen to the God.
         return (god_desision<=p_remote) ? false : true ;
