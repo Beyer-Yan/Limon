@@ -555,7 +555,7 @@ _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
     //experience value.
     uint64_t threshold = pmgr->water_mark*6/10;
     if(pmgr->nb_used_chunks<=threshold){
-        return true;
+        return false;
     }
     else{
         //The values are chosen randomly.
@@ -573,7 +573,7 @@ _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
         double god_desision = (double)rand()/RAND_MAX;
 
         //Now listen to the God.
-        return (god_desision<=p_remote) ? false : true;
+        return (god_desision<=p_remote) ? false : true ;
     }
 }
 
