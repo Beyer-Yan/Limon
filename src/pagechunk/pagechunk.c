@@ -228,6 +228,7 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
     iomgr_load_pages_async(imgr,slab->blob,key_prefix,
                            buf,start_page_in_slab,nb_pages,
                            _item_load_complete_cb_fn,cls_ctx);
+    pmgr->miss_times++;
 }
 
 static void
@@ -329,6 +330,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
                     start_page_in_slab,nb_pages,
                     _item_share_load_complete_cb_fn,cls_ctx);
     }
+    pmgr->miss_times++;
 }
 
 static void
@@ -385,6 +387,7 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
 
     iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,start_page_in_slab,1,
                           _item_meta_load_complete_cb_fn,cls_ctx);
+    pmgr->miss_times++;
 }
 
 static void
@@ -565,15 +568,16 @@ _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
         //calculate the miss rate.
         float miss_rate = (float)pmgr->miss_times/(float)(pmgr->hit_times+pmgr->miss_times);
         //calculate the  utilization.
-        float ulti_rate = (float)pmgr->nb_used_chunks/(float)pmgr->water_mark;
+        float util_rate = (float)pmgr->nb_used_chunks/(float)pmgr->water_mark;
 
         //My dog tells me the formula (^_^)
         //Don't ask me why...
-        float p_remote = alpha*miss_rate + beta*(1-ulti_rate);
-        float god_desision = (float)rand()/RAND_MAX;
+        float p_remote = alpha*miss_rate + beta*(1-util_rate);
+        float god_decision = (float)rand()/RAND_MAX;
 
+         SPDK_NOTICELOG("Local evaluating, nb:%u, mr:%f, ur:%f  p_remote:%f, decision:%f\n",pmgr->nb_used_chunks, miss_rate,util_rate ,p_remote,god_decision);
         //Now listen to the God.
-        return (god_desision<=p_remote) ? false : true ;
+        return (god_decision<=p_remote) ? false : true ;
     }
 }
 
@@ -581,21 +585,6 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
                                  struct chunk_desc* desc,
                                  void(*cb)(void*ctx,int kverrno), 
                                  void* ctx){
-    if(_pagechunk_local_evaluate(pmgr)){
-        //I should perform local evicting instead of requesting chunk mempry from
-        //global chunk manager, since the cost of cross-core communication is much
-        //higher than local evicting.
-        struct chunk_mem *mem = pagechunk_evict_one_chunk(pmgr);
-        bitmap_clear_bit_all(mem->bitmap);
-        desc->chunk_mem = mem;
-
-        TAILQ_INSERT_TAIL(&pmgr->global_chunks,desc,link);
-        pmgr->nb_used_chunks++;
-        pmgr->miss_times++;
-
-        cb(ctx,-KV_ESUCCESS);
-        return;
-    }
 
     //In such case, I should send a request to the global chunk memory manager.
     //The global chunk maneger will deside how I should get a chunk memory, 
@@ -605,9 +594,6 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
     assert(cb_obj!=NULL);
     cb_obj->requestor_pmgr = pmgr;
     cb_obj->desc  = desc;
-
-    cb_obj->finish_cb = _remote_chunk_mem_request_finish;
-
     cb_obj->cb_fn = cb;
     cb_obj->ctx   = ctx;
 
@@ -615,11 +601,22 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
         TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
     }   
     else{
-        //SPDK_NOTICELOG("New chunk mem request\n");
-        TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
-        chunkmgr_request_one_aysnc(cb_obj);
+        if(_pagechunk_local_evaluate(pmgr)){
+            //I should perform local evicting instead of requesting chunk mempry from
+            //global chunk manager, since the cost of cross-core communication is much
+            //higher than local evicting.
+            cb_obj->mem = pagechunk_evict_one_chunk(pmgr);
+            cb_obj->kverrno = -KV_ESUCCESS;
+            TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
+            _remote_chunk_mem_request_finish(cb_obj);
+        }
+        else{
+            //SPDK_NOTICELOG("New chunk mem request\n");
+            cb_obj->finish_cb = _remote_chunk_mem_request_finish;
+            TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
+            chunkmgr_request_one_aysnc(cb_obj);
+        }
     }
-    pmgr->miss_times++;
 }
 
 void pagechunk_release_one(struct pagechunk_mgr *pmgr,
