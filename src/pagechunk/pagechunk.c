@@ -552,7 +552,7 @@ static void _remote_chunk_mem_request_finish(void*ctx){
 
 static bool
 _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
-    //experience number.
+    //experience value.
     uint64_t threshold = pmgr->water_mark*6/10;
     if(pmgr->nb_used_chunks<=threshold){
         return true;
@@ -584,7 +584,7 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
     if(_pagechunk_local_evaluate(pmgr)){
         //I should perform local evicting instead of requesting chunk mempry from
         //global chunk manager, since the cost of cross-core communication is much
-        //higher than local evicting. It's in God's hands !!
+        //higher than local evicting.
         struct chunk_mem *mem = pagechunk_evict_one_chunk(pmgr);
         bitmap_clear_bit_all(mem->bitmap);
         desc->chunk_mem = mem;
@@ -600,8 +600,7 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
     //In such case, I should send a request to the global chunk memory manager.
     //The global chunk maneger will deside how I should get a chunk memory, 
     //ether from the local evicting, or from the remote evicting , or allocating
-    //from the global chunk manager. All just depend in the 
-
+    //from the global chunk manager. It's in God's hands !!
     struct chunk_miss_callback *cb_obj = pool_get(pmgr->kv_chunk_request_pool);
     assert(cb_obj!=NULL);
     cb_obj->requestor_pmgr = pmgr;
