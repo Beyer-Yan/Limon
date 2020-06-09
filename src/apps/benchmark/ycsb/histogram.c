@@ -77,6 +77,6 @@ void histogram_print(void){
     printf("min:%9.3fus\n",g_min);
     printf("avg:%9.3fus\n",g_avg);
     printf("max:%9.3fus\n",g_max);
-    printf("\n",g_max);
+    printf("\n");
 }
 
