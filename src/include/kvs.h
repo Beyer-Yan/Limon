@@ -51,6 +51,8 @@ struct kv_iterator* kv_iterator_alloc(void);
 void kv_iterator_release(struct kv_iterator *it);
 bool kv_iterator_first(struct kv_iterator *it);
 bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item);
+
+//Its a sync operation, since we can not get the next before we get the current item.
 bool kv_iterator_next(struct kv_iterator *it);
 struct kv_item* kv_iterator_item(struct kv_iterator *it);
 

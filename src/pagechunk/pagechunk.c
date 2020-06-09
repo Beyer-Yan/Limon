@@ -411,7 +411,7 @@ _item_store_complete_cb_fn(void* ctx, int kverrno){
         SPDK_ERRLOG("Error in storing,slab:%u,slot:%lu,err:%d\n",desc->slab_size,cls_ctx->slot_idx,kverrno);
     }
     pool_release(pmgr->load_store_ctx_pool,cls_ctx);
-    cls_ctx->user_cb(cls_ctx->user_ctx,cls_ctx->kverrno);
+    cls_ctx->user_cb(cls_ctx->user_ctx,kverrno);
 }
 
 void 
