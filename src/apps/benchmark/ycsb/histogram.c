@@ -70,10 +70,13 @@ void histogram_update(uint64_t data){
 void histogram_print(void){
     assert(g_his_data!=NULL);
     printf("Summary latency histogram\n");
-    printf("min:%9.3fus avg:%9.3fus max: %9.3fus\n",g_min,g_avg,g_max);
     printf("=================================================================================\n");
 
     const double *cutoff = g_latency_cutoffs;
     spdk_histogram_data_iterate(g_his_data, _check_cutoff, &cutoff);
+    printf("min:%9.3fus\n",g_min);
+    printf("avg:%9.3fus\n",g_avg);
+    printf("max:%9.3fus\n",g_max);
+    printf("\n",g_max);
 }
 

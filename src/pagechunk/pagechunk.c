@@ -575,7 +575,7 @@ _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
         float p_remote = alpha*miss_rate + beta*(1-util_rate);
         float god_decision = (float)rand()/RAND_MAX;
 
-        SPDK_NOTICELOG("Local evaluating, nb:%u, mr:%f, ur:%f  p_remote:%f, decision:%f\n",pmgr->nb_used_chunks, miss_rate,util_rate ,p_remote,god_decision);
+        //SPDK_NOTICELOG("Local evaluating, nb:%u, mr:%f, ur:%f  p_remote:%f, decision:%f\n",pmgr->nb_used_chunks, miss_rate,util_rate ,p_remote,god_decision);
         //Now listen to the God.
         return (god_decision<=p_remote) ? false : true ;
     }
