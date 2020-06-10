@@ -39,32 +39,45 @@ struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item
 
 const uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
+    art_leaf *leaf = art_minimum(t);
+    
+    if(leaf){
+        *key_len_out = leaf->key_len;
+        return leaf->key;
+    }
+    return NULL;
+}
+
+struct _iter_next_data{
     const unsigned char *key;
     uint32_t len;
     struct index_entry *entry;
+};
 
-    art_first(t,&key,&len,&entry);
-    if(key==NULL){
-        return NULL;
-    }
-    else{
-        *key_len_out = len;
-        return key;
-    }
+static int _iter_next_cb(void *data, const unsigned char *key, uint32_t key_len, void *value){
+    struct _iter_next_data *iter = data;
+    iter->key = key;
+    iter->len = key_len;
+    iter->entry = value;
+
+    //We scan only one item.
+    return 1;
 }
 
 const uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out){
     art_tree *t = (art_tree*)mem_index;
-    const unsigned char *key;
-    uint32_t len;
-    struct index_entry *entry;
+    
+    struct _iter_next_data data = {
+        .key = NULL,
+        .len = 0,
+        .entry = NULL
+    };
 
-    art_find_next(t,base_item->data,base_item->meta.ksize,&key,&len,&entry);
-    if(key==NULL){
-        return NULL;
+    art_iter_next(t,base_item->data,base_item->meta.ksize,_iter_next_cb,&data);
+    
+    if(data.entry){
+        *key_len_out =  data.len;
+        return data.key;
     }
-    else{
-        *key_len_out = len;
-        return key;
-    }
+    return NULL;
 }

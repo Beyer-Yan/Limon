@@ -952,116 +952,71 @@ int art_iter_prefix(art_tree *t, const unsigned char *key, int key_len, art_call
     return 0;
 }
 
-/*
- * Find n
- */
-struct key_index {
-   unsigned char key;
-   size_t index;
-} key_to_index[256];
-
-static int cmp_key_index(const void *_a, const void *_b) {
-   const struct key_index *a = _a;
-   const struct key_index *b = _b;
-   if(a->key > b->key)
-      return 1;
-   if(a->key < b->key)
-      return -1;
-   return 0;
-}
-
-static inline bool
-_key_equal(const unsigned char *key1,uint32_t key1_len,const unsigned char *key2, uint32_t key2_len){
-    uint32_t n = key1_len<key2_len ? key1_len : key2_len;
-    int res = strncmp(key1,key2,n);
-    if(!res && key1_len==key2_len){
-        //key1 and key2 are equal
-        return true;
-    }
-    return false;
-}
-
-static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned char *key, uint32_t len) {
+//x is the flag indicating whetehr I should scan the next key from the start.
+//If x is true, I should scan all sub nodes of the parent node.
+//If x is false, I should scan the sub nodes with keys larger or equal to the given key
+static int _art_iter_next(art_node *n, const unsigned char* key, int key_len, int depth, int x, 
+                          art_callback cb, void *data){
     // Handle base cases
-    if (!n) {
-        return NULL;
-    }
-    else if (IS_LEAF(n)) {
+    if (!n) return 0;
+    if (IS_LEAF(n)) {
         art_leaf *l = LEAF_RAW(n);
-        if(!l->value.deleting && !_key_equal(key,len,l->key,l->key_len)){
-            return l;
-        } 
+        return x ? cb(data, (const unsigned char*)l->key, l->key_len, &l->value) : 0;
     }
 
-    int idx;
-    art_leaf *leaf;
-    union {
-        art_node4 *p1;
-        art_node16 *p2;
-        art_node48 *p3;
-        art_node256 *p4;
-    } p;
-    struct key_index key_to_index[256];
+    if(n->partial_len){
+        int max_cmp = min(min(n->partial_len, MAX_PREFIX_LEN), key_len - depth);
+        if( x || ( x=memcmp(n->partial,key+depth,max_cmp))>=0 ){
+            depth += n->partial_len;
+        }
+        else{
+            return 0;
+        }
+        x = !!x;
+    }
+
+    int idx, res;
     switch (n->type) {
         case NODE4:
-            p.p1 = (art_node4*)n;
-
             for (int i=0; i < n->num_children; i++) {
-               key_to_index[i].key = p.p1->keys[i];
-               if(!p.p1->children[i]) {
-                  key_to_index[i].index = 512;
-               } else {
-                  key_to_index[i].index = i;
-               }
-            }
-            qsort(key_to_index, n->num_children, sizeof(*key_to_index), cmp_key_index);
-
-            for (int i=0; i < n->num_children; i++) {
-                size_t index = key_to_index[i].index;
-                if(index != 512 && key_to_index[i].key >= key[depth]) {
-                   leaf = recursive_iter_next(p.p1->children[index], depth+1, key, len);
-                   if (leaf) return leaf;
+                art_node4 *node = (art_node4*)n;
+                if( x || depth>key_len ||  node->keys[i]>=key[depth]){
+                    x  = (x || depth>key_len ||  node->keys[i]>key[depth]);
+                    res = _art_iter_next(((art_node4*)n)->children[i],key,key_len,depth+1,x,cb, data);
+                    if (res) return res;
                 }
             }
             break;
 
         case NODE16:
-            p.p2 = (art_node16*)n;
-
             for (int i=0; i < n->num_children; i++) {
-               key_to_index[i].key = p.p2->keys[i];
-               if(!p.p2->children[i]) {
-                  key_to_index[i].index = 512;
-               } else {
-                  key_to_index[i].index = i;
-               }
-            }
-            qsort(key_to_index, n->num_children, sizeof(*key_to_index), cmp_key_index);
-
-            for (int i=0; i < n->num_children; i++) {
-                size_t index = key_to_index[i].index;
-                if(index != 512 && key_to_index[i].key >= key[depth]) {
-                   leaf = recursive_iter_next(p.p2->children[index], depth+1, key, len);
-                   if (leaf) return leaf;
+                art_node16 *node = (art_node16*)n;
+                if( x || depth>key_len ||  node->keys[i]>=key[depth] ){
+                    x  = (x || depth>key_len ||  node->keys[i]>key[depth]);
+                    res = _art_iter_next(((art_node16*)n)->children[i],key,key_len,depth+1,x ,cb, data);
+                    if (res) return res;
                 }
             }
             break;
 
         case NODE48:
-            for (int i=key[depth]; i < 256; i++) {
+            for (int i = (x||depth>key_len) ? 0 : key[depth]; i < 256; i++) {
                 idx = ((art_node48*)n)->keys[i];
                 if (!idx) continue;
 
-                leaf = recursive_iter_next(((art_node48*)n)->children[idx-1], depth+1, key, len);
-                if (leaf) return leaf;
+                x = x || i>key[depth];
+                res = _art_iter_next(((art_node48*)n)->children[idx-1],key,key_len,depth+1,x,cb, data);
+                if (res) return res;
             }
             break;
 
         case NODE256:
-            for (int i=key[depth]; i < 256; i++) {
+            for (int i = (x||depth>key_len) ? 0 : key[depth]; i < 256; i++) {
                 if (!((art_node256*)n)->children[i]) continue;
-                leaf = recursive_iter_next(((art_node256*)n)->children[i], depth+1, key, len);
-                if (leaf) return leaf;
+
+                x = x || i>key[depth];
+                res = _art_iter_next(((art_node256*)n)->children[i],key,key_len,depth+1,x,cb, data);
+                if (res) return res;
             }
             break;
 
@@ -1071,38 +1026,6 @@ static art_leaf* recursive_iter_next(art_node *n, size_t depth, const unsigned c
     return 0;
 }
 
-void art_find_next(art_tree *t, const unsigned char *key, int key_len,
-                   const unsigned char** key_out, int *len_out, struct index_entry **entry_out){
-    art_leaf* leaf = recursive_iter_next(t->root,0,key,key_len);
-    if(!leaf){
-        //The key has no next node.
-        *key_out = NULL;
-        *len_out = 0;
-        *entry_out = NULL;
-    }
-    else{
-        *key_out = leaf->key;
-        *len_out = leaf->key_len;
-        *entry_out = &leaf->value;
-    }
-}
-
-void art_first(art_tree *t,const unsigned char** key_out, int *len_out, struct index_entry **entry_out){
-    if(t->size==0){
-        *key_out = NULL;
-        *len_out = 0;
-        *entry_out = NULL;
-        return;
-    }
-
-    static const unsigned char key = 0;
-    struct index_entry *entry = art_search(t,&key,1);
-    if(entry){
-        *key_out = &key;
-        *len_out = 1;
-        *entry_out = entry;
-    }
-    else{
-        art_find_next(t,&key,1, key_out,len_out,entry_out);
-    }
+int art_iter_next(art_tree *t, const unsigned char *key, int key_len, art_callback cb, void*data){
+    return _art_iter_next(t->root,key,key_len,0,0,cb,data);
 }

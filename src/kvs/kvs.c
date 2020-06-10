@@ -62,6 +62,8 @@ struct kv_iterator{
     volatile bool completed;
     uint32_t nb_workers;
     uint32_t item_idx;
+    uint32_t item_worker;
+    struct 
     struct _scan_worker_ctx *ctx_array;
     struct kv_item *item_array;
 };
@@ -76,6 +78,7 @@ struct kv_iterator* kv_iterator_alloc(void){
     struct kv_iterator *it = malloc(size);
     it->nb_workers = g_kvs->nb_workers;
     it->item_idx = UINT32_MAX;
+    it->item_worker = UINT32_MAX;
     it->ctx_array = (struct _scan_worker_ctx *)(it+1);
     it->item_array = (struct kv_item*)(it->ctx_array + g_kvs->nb_workers);
 

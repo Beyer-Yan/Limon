@@ -12,9 +12,7 @@
 
 static void 
 _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal *req){
-    if(!req->pctx.no_lookup){
-        req->pctx.entry  = mem_index_lookup(wctx->mem_index,req->item);
-    }
+
     req->pctx.wctx = wctx;
     req->pctx.slab = NULL;
     req->pctx.old_slab = NULL;

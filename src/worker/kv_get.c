@@ -44,8 +44,13 @@ _process_get_pagechunk_cb(void* ctx, int kverrno){
 }
 
 void worker_process_get(struct kv_request_internal *req){
-    struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
+
+    if(!req->pctx.no_lookup){
+        req->pctx.entry = mem_index_lookup(wctx->mem_index,req->item);
+    }
+    
+    struct index_entry *entry = req->pctx.entry;
 
     if(!entry){
         //item does not exist

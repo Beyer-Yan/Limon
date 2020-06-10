@@ -433,8 +433,13 @@ _process_put_case3(struct kv_request_internal *req){
  * @param req The kv_request_internal object
  */
 void worker_process_put(struct kv_request_internal *req){
-    struct index_entry *entry = req->pctx.entry;
     struct worker_context *wctx = req->pctx.wctx;
+
+    if(!req->pctx.no_lookup){
+        req->pctx.entry = mem_index_lookup(wctx->mem_index,req->item);
+    }
+    
+    struct index_entry *entry = req->pctx.entry;
 
     if(!entry){
         //item does not exist. It a new item!

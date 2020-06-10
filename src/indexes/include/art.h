@@ -199,36 +199,18 @@ int art_iter(art_tree *t, art_callback cb, void *data);
 int art_iter_prefix(art_tree *t, const unsigned char *prefix, int prefix_len, art_callback cb, void *data);
 
 /**
- * @brief Find the first item, of which the key is greater than the given key.
+ * @brief Find the first item, of which the key is greater than the given key. When the key is found,
+ * the cb will be called. If the cb return 0, the iter will continue.   If the cb return non-0 value,
+ * the iter will terminate.
  * 
- * ATTENTION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- * 
- * An item in scan result is an kv_item without valid meta field. The kv item is filled as follow:
- *          [cversion, dversion, ksize, vsize, key, value]
- * Amoung them, the cversion and dversion will be filled by 0, and the ksize if 
- * filled by the real ksize and the key is fill by the real ky. The vsize is also
- * filled by 0 and the value is NULL. If one want to load the whole item, he shall
- * issue a read operation for the item with the scaned key.
- * 
- * @param t                      The pointer of art tree.
- * @param key                    The start key.
- * @param key_len                The key length of the start key. 
- * @param key_out                The pointer of put key.
- * @param len_out                The length of out key.
- * @param entry_out              The entry of out key
+ * @param t         The art tree pointer
+ * @param key       The  base key. 
+ * @param key_len   The length of base key
+ * @param cb        User callback
+ * @param data      User callback data
+ * @return int      0 on sucess, or the return  of the callback.
  */
-void art_find_next(art_tree *t, const unsigned char *key, int key_len,
-                   const unsigned char** key_out, int *len_out, struct index_entry **entry_out);
-
-/**
- * @brief Get the first element from the art tree.
- * 
- * @param t            The art tree.
- * @param char         The returned key pointer.
- * @param len_out      The returned key length.
- * @param entry_out    The returned index entry.
- */
-void art_first(art_tree *t,const unsigned char** key_out, int *len_out, struct index_entry **entry_out);
+int art_iter_next(art_tree *t, const unsigned char *key, int key_len, art_callback cb, void*data);
 
 #ifdef __cplusplus
 }
