@@ -208,10 +208,13 @@ void worker_process_first(struct kv_request_internal *req){
     if(key){
         item->meta.ksize = key_len;
         memcpy(item->data,key,key_len);
+        req->cb_fn(req->ctx,item,-KV_ESUCCESS);
+    }
+    else{
+        req->cb_fn(req->ctx,NULL,-KV_EMPTY);
     }
 
     pool_release(wctx->kv_request_internal_pool,req);
-    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
 }
 
 void worker_process_seek(struct kv_request_internal *req){
