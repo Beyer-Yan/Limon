@@ -246,6 +246,11 @@ _next_cb_fn(void*ctx, struct kv_item* item, int kverrno){
 bool kv_iterator_next(struct kv_iterator *it){
     assert(it!=NULL);
 
+    if(it->item_cursor==UINT32_MAX){
+        //No more items
+        return false;
+    }
+    
     //Get the maximum item.
     uint32_t worker_id = it->sorted_ctx[it->item_cursor]->worker_id;
     uint32_t item_id = worker_id;

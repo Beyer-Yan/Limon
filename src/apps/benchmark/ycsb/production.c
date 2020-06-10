@@ -21,14 +21,33 @@ static struct kv_item *create_unique_item_prod(uint64_t uid, uint64_t max_uid) {
    return create_unique_item(item_size, uid);
 }
 
-static void
-_prod_get_complete(void*ctx, struct kv_item* item, int kverrn){
-
+static inline void
+_update_stat(struct kv_item* item){
+   uint64_t tsc0,tsc1;
+   memcpy(&tsc0,item->meta.cdt,sizeof(tsc0));
+   rdtscll(tsc1);
+   uint64_t tsc_diff = tsc1 - tsc0;
+   histogram_update(tsc_diff);
 }
 
 static void
-_prod_put_complete(void*ctx, struct kv_item* item, int kverrn){
+_prod_get_complete(void*ctx, struct kv_item* item, int kverrno){
+   struct kv_item *ori_item = ctx;
+   if(kverrno){
+      printf("Get error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
+   }
+   _update_stat(ori_item);
+   free(ori_item);
+}
 
+static void
+_prod_put_complete(void*ctx, struct kv_item* item, int kverrno){
+   struct kv_item *ori_item = ctx;
+   if(kverrno){
+      printf("Put error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
+   }
+   _update_stat(ori_item);
+   free(ori_item);
 }
 
 static void launch_prod(struct workload *w, bench_t b, int id) {
@@ -58,7 +77,7 @@ static void launch_prod(struct workload *w, bench_t b, int id) {
 
          for(uint64_t i = 0; i < scan_length; i++) {
             if(kv_iterator_next(it)){
-               item = kv_iterator_item(it);
+               item = create_item_from_item(kv_iterator_item(it));
                kv_get_async(item, _prod_get_complete, (void*)i);
             }
          }

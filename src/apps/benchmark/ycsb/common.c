@@ -37,6 +37,14 @@ struct kv_item *create_unique_item(uint64_t item_size, uint64_t uid) {
    return item;
 }
 
+struct kv_item* create_item_from_item(struct kv_item *item) {
+   assert(item!=NULL);
+   uint32_t size = sizeof(struct kv_item) + item->meta.ksize + item->meta.vsize;
+   struct kv_item* new_item = malloc(size);
+   memcpy(new_item,item,size);
+   return new_item;
+}
+
 /* We also store an item in the database that says if the database has been populated for YCSB, PRODUCTION, or another workload. */
 struct kv_item *create_workload_item(struct workload *w) {
    const uint64_t key = (uint64_t)-10;

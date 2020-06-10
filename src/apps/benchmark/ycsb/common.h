@@ -58,6 +58,8 @@ void repopulate_db(struct workload *w);
 void run_workload(struct workload *w, bench_t bench);
 
 struct kv_item *create_unique_item(uint64_t item_size, uint64_t uid);
+struct kv_item* create_item_from_item(struct kv_item *item);
+
 struct workload_api *get_api(bench_t b);
 
 #endif
