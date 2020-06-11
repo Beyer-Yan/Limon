@@ -84,7 +84,7 @@ struct kv_iterator* kv_iterator_alloc(int batch_size){
 
     uint32_t size = sizeof(struct kv_iterator) + 
                     g_kvs->nb_workers * sizeof(struct _scan_worker_ctx) +
-                    g_kvs->nb_workers * sizeof(struct kv_item*) * batch_size + 1 +
+                    sizeof(struct kv_item*)*(batch_size + 1) +
                     MAX_SLAB_SIZE;
 
     struct kv_iterator *it = malloc(size);
@@ -96,8 +96,8 @@ struct kv_iterator* kv_iterator_alloc(int batch_size){
     it->cursor     = 0;
     it->seek_item  = NULL;
     it->ctx_array  = (struct _scan_worker_ctx *)(it+1);
-    it->sorted_item = (struct kv_item **)(it->ctx_array + g_kvs->nb_workers*batch_size);
-    it->seek_item = (struct kv_item*)(it->sorted_item + g_kvs->nb_workers * sizeof(struct kv_item*) * batch_size + 1 );
+    it->sorted_item = (struct kv_item **)(it->ctx_array + g_kvs->nb_workers);
+    it->seek_item = (struct kv_item*)(it->sorted_item + batch_size+1 );
 
     uint32_t i = 0;
     for(;i<g_kvs->nb_workers;i++){
@@ -199,11 +199,13 @@ _scan_merge(struct kv_iterator *it){
     uint32_t i=0, j=0;
 
     for(;i<it->nb_workers;i++){
-        //get the max item from all scan context
+        //get the max item from all scan contexts
         struct _scan_worker_ctx * swctx = &it->ctx_array[i];
-        for(j=0;j<swctx->scan_res->nb_items;j++){
-            it->sorted_item[it->nb_items] = swctx->scan_res->items[j];
-            it->nb_items++;
+        if(swctx->scan_res){
+            for(j=0;j<swctx->scan_res->nb_items;j++){
+                it->sorted_item[it->nb_items] = swctx->scan_res->items[j];
+                it->nb_items++;
+            }
         }
     }
     
