@@ -169,7 +169,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
     }
 
     //check the valid items.
-    it->item_cursor = 0;;
+    it->item_cursor = 0;
     for(i=0;i<it->nb_workers;i++){
         struct _scan_worker_ctx *swctx  = &it->ctx_array[i];
         if(!swctx->kverrno){

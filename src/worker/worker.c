@@ -203,9 +203,11 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
                        enum op_code op){
     
     //For debug only
-    uint64_t tsc;
-    rdtscll(tsc);
-    memcpy(item->meta.cdt,&tsc,sizeof(tsc));
+    if(op==GET || op==PUT){
+        uint64_t tsc;
+        rdtscll(tsc);
+        memcpy(item->meta.cdt,&tsc,sizeof(tsc));
+    }
 
     req->cb_fn = cb_fn;
     req->ctx = ctx;
