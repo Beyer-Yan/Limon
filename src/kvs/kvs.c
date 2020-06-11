@@ -181,7 +181,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
         return false;
     }
 
-    //copy the item into cursor.
+    //copy the item into seek_item.
     //I will use it in the "next" operation. 
     memcpy(it->seek_item->data,item->data,item->meta.ksize);
     it->seek_item->meta.ksize = item->meta.ksize;
@@ -198,24 +198,30 @@ static void
 _scan_merge(struct kv_iterator *it){
     uint32_t i=0, j=0;
 
-    uint32_t max_nb_items = 0;
     for(;i<it->nb_workers;i++){
         //get the max item from all scan context
-        if(it->ctx_array[i].scan_res->nb_items>max_nb_items){
-            max_nb_items = it->ctx_array[i].scan_res->nb_items;
+        struct _scan_worker_ctx * swctx = &it->ctx_array[i];
+        for(j=0;j<swctx->scan_res->nb_items;j++){
+            it->sorted_item[it->nb_items] = swctx->scan_res->items[j];
+            it->nb_items++;
         }
     }
-
+    
+    //A merge sort may be the best choice, which will be implemented in the next
+    //version.
+    qsort(it->sorted_item,it->nb_items,sizeof(struct kv_item*),_item_cmp);
+    
+    /*
     //record the scaning index for each scan context
-    //sort the items. A heap sort may be the best choice.
+    //sort the items. 
     uint32_t item_idx[it->nb_workers];
     memset(item_idx,0,it->nb_workers);
 
-    for(i=0;i<max_nb_items;i++){
-        struct kv_item *max_item = NULL;
-        uint32_t max_worker_idx = 0;
-        uint32_t max_scan_idx  = 0;
+    struct kv_item *max_item = NULL;
+    uint32_t max_worker_idx = 0;
+    uint32_t max_scan_idx  = 0;
 
+    for(i=0;i<max_nb_items;i++){
         //find the max item in the column.
         for(j=0;j<it->nb_workers;j++){
             struct _scan_worker_ctx * swctx = &it->ctx_array[i];
@@ -233,6 +239,7 @@ _scan_merge(struct kv_iterator *it){
         it->sorted_item[it->nb_items] = max_item;
         it->nb_items++;
     }
+    */
 }
 
 static void

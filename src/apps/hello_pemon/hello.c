@@ -119,7 +119,7 @@ _batch_test_start(void* ctx){
     pin_me_on(core_id);
     printf("start id %d\n",bctx->core_id);
 
-    _test_scan(bctx);
+    _scan_test(bctx);
     //Test put
     /*
     printf("Testing add\n");
