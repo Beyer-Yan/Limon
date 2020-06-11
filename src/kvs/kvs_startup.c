@@ -124,11 +124,16 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     void *startup_ctx  = kctx->opts->startup_ctx;
     free(kctx);
 
+    uint64_t tsc0,tsc1;
+    rdtscll(tsc0);
     //wait the recoverying
     for(i=0;i<kctx->opts->nb_works;i++){
         while(!worker_is_ready(kvs->workers[i]));
         SPDK_NOTICELOG("Woker:%u ready\n",i);
     }
+    rdtscll(tsc1);
+    SPDK_NOTICELOG("Recovery completes, time elapsed:%luus\n",kv_cycles_to_us(tsc1-tsc0));
+
     //All workers are ready
     startup_fn(startup_ctx,-KV_ESUCCESS);
 }
