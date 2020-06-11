@@ -60,7 +60,7 @@ _batch_test(struct batch_context *bctx){
 
     for(;start_num<end_item;start_num++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + bctx->vsize);
-        memcpy(item->data,&start_num,4);
+        snprintf(item->data,4,"%04d",start_num);
         item->meta.ksize = 4;
         item->meta.vsize = bctx->vsize;
         switch(op){
@@ -107,7 +107,13 @@ _test_scan(struct batch_context *bctx){
     for(;i<100;i++){
         kv_iterator_next(it);
         struct kv_item* item = kv_iterator_item(it);
-        printf("scan,key:%d\n",*(int*)item->data);
+        if(!item){
+            printf("No more items found\n");
+            break;
+        }
+        else{
+            printf("scan,key:%d\n",*(int*)item->data);
+        }
     }
 }
 

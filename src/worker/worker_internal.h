@@ -47,6 +47,11 @@ struct kv_request{
     uint32_t shard;
     struct kv_item* item;
     worker_cb cb_fn;
+
+    //used when issue scan reuest.
+    scan_cb scan_cb_fn;
+    uint32_t scan_batch;
+
     void* ctx;
 } __attribute__(( aligned(CACHE_LINE_LENGTH) ));
 
@@ -57,6 +62,10 @@ struct kv_request_internal{
     uint32_t shard;
     struct kv_item* item;
     worker_cb cb_fn;
+
+    scan_cb scan_cb_fn;
+    uint32_t scan_batch;
+
     void* ctx;
 
     struct process_ctx pctx;

@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 #include "common.h"
 #include "item.h"
 #include "kvutil.h"
@@ -31,7 +32,8 @@ struct kv_item *create_unique_item(uint64_t item_size, uint64_t uid) {
    item->meta.ksize = 8;
    item->meta.vsize = item_size - sizeof(struct item_meta) - 8;
 
-   *(uint64_t*)(item->data) = uid;
+   //make keys bytes sequence comparable.
+   *(uint64_t*)(item->data) = htonll(uid);
    *(uint64_t*)(item->data + 8) = uid;
    
    return item;

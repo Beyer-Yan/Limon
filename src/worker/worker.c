@@ -98,6 +98,9 @@ _worker_business_processor_poll(void*ctx){
             req_internal->op_code = req_array[i]->op_code;
             req_internal->cb_fn = req_array[i]->cb_fn;
             req_internal->shard = req_array[i]->shard;
+
+            req_internal->scan_cb_fn = req_array[i]->scan_cb_fn;
+            req_internal->scan_batch = req_array[i]->scan_batch;
             //I do not perform a lookup, since it is a new request.
             req_internal->pctx.no_lookup = false;
 
@@ -241,27 +244,33 @@ void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_
     _submit_req_buffer(wctx,req);
 }
 
-void worker_enqueue_first(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
-                         worker_cb cb_fn, void* ctx){
+//interface implementation for scan operation.
+void worker_enqueue_seek(struct worker_context* wctx,struct kv_item *item, worker_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,FIRST);
+    _worker_enqueue_common(req,UINT32_MAX,item,cb_fn,ctx,SEEK);
     _submit_req_buffer(wctx,req);
 }
 
-void worker_enqueue_seek(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
-                         worker_cb cb_fn, void* ctx){
+void worker_enqueue_first(struct worker_context* wctx, scan_cb cb_fn, uint32_t scan_batch, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,SEEK);
+    req->scan_cb_fn = cb_fn;
+    req->scan_batch = scan_batch;
+    req->item = NULL;
+    req->ctx = ctx;
+    req->op_code = FIRST;
     _submit_req_buffer(wctx,req);
 }
 
-void worker_enqueue_next(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
-                         worker_cb cb_fn, void* ctx){
+void worker_enqueue_next(struct worker_context* wctx,struct kv_item *item, scan_cb cb_fn, uint32_t scan_batch, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,NEXT);
+    req->scan_cb_fn = cb_fn;
+    req->scan_batch = scan_batch;
+    req->item = item;
+    req->ctx = ctx;
+    req->op_code = NEXT;
     _submit_req_buffer(wctx,req);
 }
 

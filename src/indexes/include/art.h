@@ -199,7 +199,7 @@ int art_iter(art_tree *t, art_callback cb, void *data);
 int art_iter_prefix(art_tree *t, const unsigned char *prefix, int prefix_len, art_callback cb, void *data);
 
 /**
- * @brief Find the first item, of which the key is greater than the given key. When the key is found,
+ * @brief iterate all items, of which the key is greater than the given key. When the key is found,
  * the cb will be called. If the cb return 0, the iter will continue.   If the cb return non-0 value,
  * the iter will terminate.
  * 

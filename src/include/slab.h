@@ -19,7 +19,7 @@
 #define MULTI_PAGE_SLAB_SIZE   768u
 #define CHUNK_SIZE             135u
 #define KVS_PAGE_SIZE          4096u
-#define MAX_SLAB_SIZE          64*1024u
+#define MAX_SLAB_SIZE          10*1024u
 
 //In disk layout
 

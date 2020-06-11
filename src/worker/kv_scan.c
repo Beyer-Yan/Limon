@@ -191,30 +191,45 @@
 //     pool_release(wctx->kv_request_internal_pool,req);
 // }
 
-/**
- * @brief It is a global item data buffer, the caller shall copy it
- * to other place when nessacery.
- * The buffer will be flushed whenever the next scan request is performed.
- */
-static uint64_t _scan_data[MAX_SLAB_SIZE/sizeof(uint64_t)];
+static int
+_scan_iter_fn(void *data, const uint8_t *key, uint32_t key_len, void *value){
+    struct index_entry *entry = value;
+    struct worker_scan_result *scan_res = data; 
+    if(!entry->deleting){
+        //Skip the pending deleting item ??
+        struct kv_item* item = malloc(sizeof(struct item_meta) + key_len);
+        assert(item);
+
+        memcpy(item->data,key,key_len);
+        item->meta.ksize = key_len;
+        item->meta.vsize = 0;
+
+        scan_res->items[scan_res->nb_items] = item;
+        scan_res->nb_items++;
+        
+        if(scan_res->nb_items==scan_res->batch_size){
+            //stop iterating.
+            return 1;
+        }
+    }
+    //let's go on.
+    return 0;
+}
 
 void worker_process_first(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
-    struct kv_item *item = (struct kv_item*)_scan_data;
-    const uint8_t* key;
-    uint32_t key_len;
 
-    key = mem_index_first(wctx->mem_index,&key_len);
-    if(key){
-        item->meta.ksize = key_len;
-        memcpy(item->data,key,key_len);
-        req->cb_fn(req->ctx,item,-KV_ESUCCESS);
-    }
-    else{
-        req->cb_fn(req->ctx,NULL,-KV_EMPTY);
-    }
+    uint32_t size = sizeof(struct worker_scan_result) + sizeof(struct kv_item*)*req->scan_batch;
+    struct worker_scan_result *scan_res = malloc(size);
+    assert(scan_res);
+
+    scan_res->nb_items = 0;
+    scan_res->batch_size = req->scan_batch;
+    
+    mem_index_iter(wctx->mem_index,NULL,_scan_iter_fn,scan_res);
 
     pool_release(wctx->kv_request_internal_pool,req);
+    req->scan_cb_fn(req->ctx,scan_res,-KV_ESUCCESS);
 }
 
 void worker_process_seek(struct kv_request_internal *req){
@@ -229,16 +244,16 @@ void worker_process_seek(struct kv_request_internal *req){
 
 void worker_process_next(struct kv_request_internal *req){
     struct worker_context *wctx = req->pctx.wctx;
-    struct kv_item *item = (struct kv_item*)_scan_data;
-    const uint8_t* key;
-    uint32_t key_len;
 
-    key = mem_index_next(wctx->mem_index,req->item,&key_len);
-    if(key){
-        item->meta.ksize = key_len;
-        memcpy(item->data,key,key_len);
-    }
+    uint32_t size = sizeof(struct worker_scan_result) + sizeof(struct kv_item*)*req->scan_batch;
+    struct worker_scan_result *scan_res = malloc(size);
+    assert(scan_res);
+
+    scan_res->nb_items = 0;
+    scan_res->batch_size = req->scan_batch;
+    
+    mem_index_iter(wctx->mem_index,req->item,_scan_iter_fn,scan_res);
 
     pool_release(wctx->kv_request_internal_pool,req);
-    req->cb_fn(req->ctx,item,key!=NULL?-KV_ESUCCESS:KV_EMPTY);
+    req->scan_cb_fn(req->ctx,scan_res,-KV_ESUCCESS);
 }

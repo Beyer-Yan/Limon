@@ -40,6 +40,8 @@ static_assert(sizeof(struct index_entry)==16,"size incorrect");
 
 struct mem_index;
 
+typedef int (*mem_cb)(void *ctx, const uint8_t *key, uint32_t key_len, void *value);
+
 /**
  * @brief Allocate a new mem index run time object.
  * 
@@ -80,27 +82,19 @@ void mem_index_delete(struct mem_index *mem_index,struct kv_item *item);
 struct index_entry* mem_index_lookup(struct mem_index *mem_index, struct kv_item *item);
 
 /**
- * @brief  Get the first item.
- * 
- * @param mem_index       The in-mem data
- * @param key_len_out     The return length of key
- * @return uint8_t*       The returned item. The item_out needn't releasing, since it is allocated
- * statically. Uers have to copy its value out, as it will be flushed every time when users call
- * this function.
- */
-const uint8_t* mem_index_first(struct mem_index *mem_index, uint32_t *key_len_out);
-
-/**
- * @brief  Get the first item, which is greater than the base item.
+ * @brief  iterate the mem index orderly. If the base_item is specified, the iterating
+ * will go though all item with keys greater than base_item. If the base_item is NULL,
+ * the iterating will go though from start. 
+ * The call back gets a key, value for each and returns an integer stop value.
+ * If the callback returns non-zero, then the iteration stops.
  * 
  * @param mem_index         The in-mem data.
  * @param base_item         The base item.
- * @param key_len_out       The return length of key.
- * @return struct kv_item*  Return the first item that is greater than the base item. 
- * The item_out needn't releasing, since it is allocated statically. Uers have to
- * copy its value out, as it will be flushed every time when users call this function.
+ * @param cb_fn             callback for each item.
+ * @param ctx               user callback context.
+ * @return int              0 on success, or the return of the callback.
  */
-const uint8_t* mem_index_next(struct mem_index *mem_index,struct kv_item *base_item,uint32_t *key_len_out);
+int mem_index_iter(struct mem_index *mem_index,struct kv_item *base_item,mem_cb cb_fn, void*ctx);
 
 #endif
 
