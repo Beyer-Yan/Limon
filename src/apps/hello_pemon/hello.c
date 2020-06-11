@@ -9,6 +9,7 @@
 
 #include <stdatomic.h>
 #include <time.h>
+#include <arpa/inet.h>
 
 struct batch_context{
     int core_id;
@@ -60,7 +61,7 @@ _batch_test(struct batch_context *bctx){
 
     for(;start_num<end_item;start_num++){
         struct kv_item *item = malloc(sizeof(struct item_meta) + 4 + bctx->vsize);
-        snprintf(item->data,4,"%04d",start_num);
+        *(int*)item->data = htonl(start_num);
         item->meta.ksize = 4;
         item->meta.vsize = bctx->vsize;
         switch(op){
@@ -86,21 +87,11 @@ _batch_test(struct batch_context *bctx){
 }
 
 static void
-_scan_test(struct batch_context *bctx ){
-
-}
-
-static void
-_idel_running_cb(void*ctx, struct kv_item* item,  int kverrno){
-    //Do nothing
-}
-
-static void
-_test_scan(struct batch_context *bctx){
+_scan_test(struct batch_context *bctx){
     int end_item = bctx->start_num + bctx->nb_items;
     int start_num = bctx->start_num;
 
-    struct kv_iterator* it = kv_iterator_alloc();
+    struct kv_iterator* it = kv_iterator_alloc(128);
     kv_iterator_first(it);
 
     int i = 0;

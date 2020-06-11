@@ -77,6 +77,11 @@ struct kv_iterator{
 struct kv_iterator* kv_iterator_alloc(int batch_size){
     assert(g_kvs!=NULL);
 
+    if(batch_size&(batch_size-1)){
+        SPDK_ERRLOG("batch size must be the value of power-of-two\n");
+        assert(0);
+    }
+
     uint32_t size = sizeof(struct kv_iterator) + 
                     g_kvs->nb_workers * sizeof(struct _scan_worker_ctx) +
                     g_kvs->nb_workers * sizeof(struct kv_item*) * batch_size + 1 +
