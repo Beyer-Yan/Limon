@@ -107,8 +107,8 @@ _key_cmp(const uint8_t *key1,uint32_t len1,const uint8_t *key2, uint32_t len2){
 
 static int
 _sort_compare(const void*a, const void*b){
-    struct _scan_worker_ctx * swctx1 = a;
-    struct _scan_worker_ctx * swctx2 = b;
+    const struct _scan_worker_ctx * swctx1 = a;
+    const struct _scan_worker_ctx * swctx2 = b;
     struct kv_iterator* it = swctx1->it;
 
     const uint8_t* key1 = it->item_array[swctx1->worker_id].data;
@@ -227,7 +227,6 @@ _next_cb_fn(void*ctx, struct kv_item* item, int kverrno){
    struct kv_iterator *it = swctx->it;
    if(!kverrno){
         uint32_t item_id = swctx->worker_id;
-        struct kv_iterator* it = swctx->it;
         uint32_t ksize = item->meta.ksize;
 
         memcpy(it->item_array[item_id].data,item->data,ksize);
@@ -250,7 +249,7 @@ bool kv_iterator_next(struct kv_iterator *it){
         //No more items
         return false;
     }
-    
+
     //Get the maximum item.
     uint32_t worker_id = it->sorted_ctx[it->item_cursor]->worker_id;
     uint32_t item_id = worker_id;
