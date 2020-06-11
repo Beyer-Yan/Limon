@@ -95,6 +95,22 @@ _idel_running_cb(void*ctx, struct kv_item* item,  int kverrno){
     //Do nothing
 }
 
+static void
+_test_scan(struct batch_context *bctx){
+    int end_item = bctx->start_num + bctx->nb_items;
+    int start_num = bctx->start_num;
+
+    struct kv_iterator* it = kv_iterator_alloc();
+    kv_iterator_first(it);
+
+    int i = 0;
+    for(;i<100;i++){
+        kv_iterator_next(it);
+        struct kv_item* item = kv_iterator_item(it);
+        printf("scan,key:%d\n",*(int*)item->data);
+    }
+}
+
 static void*
 _batch_test_start(void* ctx){
     struct batch_context *bctx = ctx;
@@ -106,13 +122,13 @@ _batch_test_start(void* ctx){
     pin_me_on(core_id);
     printf("start id %d\n",bctx->core_id);
 
+    _test_scan(bctx);
     //Test put
+    /*
     printf("Testing add\n");
     bctx->op = 0;
     bctx->vsize = 10;
     _batch_test(bctx);
-
-    /*
     //Test get
     printf("Testing get\n");
     bctx->op = 1;
