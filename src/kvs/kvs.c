@@ -130,14 +130,27 @@ void kv_iterator_release(struct kv_iterator *it){
 
 static inline int
 _item_cmp(const struct kv_item* item0,const struct kv_item* item1 ){
-    uint32_t n = len1<len2 ? len1 : len2;
-    int res = strncmp(key1,key2,n);
+    
+    //A null item is less than any item.
+    if(!item1){
+        return 1;
+    }
+    if(!item0){
+        return -1;
+    }
+
+    const uint8_t *key0 = item0->data;
+    const uint8_t *key1 = item1->data;
+    uint32_t len0   = item0->meta.ksize;
+    uint32_t len1   = item1->meta.ksize;
+
+    uint32_t n = len0<len1 ? len0 : len1;
+    int res = memcmp(key0,key1,n);
     if(!res){
-        res = len1==len2 ? 0 : (len1<len2 ? -1 : 1 );
+        res = len0==len1 ? 0 : (len0<len1 ? -1 : 1 );
     }
     return res;
 }
-
 
 static void
 _seek_cb_fn(void*ctx, struct kv_item* item, int kverrno){
