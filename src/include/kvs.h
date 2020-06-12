@@ -47,7 +47,7 @@ struct kv_iterator;
 //seek to first element.
 //All scan interfaces are designed as sync interfaces, as any one of the scan operations 
 //will not issue disk IO. They just performing lookuping in in-mem index.
-struct kv_iterator* kv_iterator_alloc(int batch_size);
+struct kv_iterator* kv_iterator_alloc(uint32_t batch_size);
 void kv_iterator_release(struct kv_iterator *it);
 bool kv_iterator_first(struct kv_iterator *it);
 bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item);
