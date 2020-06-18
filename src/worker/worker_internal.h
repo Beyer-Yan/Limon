@@ -99,10 +99,9 @@ struct worker_context{
     struct spdk_ring *req_used_ring;  
     struct spdk_ring *req_free_ring;
     
-    struct spdk_poller *business_poller;
+    //poller to process internal requests, the poller will be run 
+    struct spdk_poller *request_poller;
     struct spdk_poller* slab_evaluation_poller;
-    struct spdk_poller* reclaim_poller;
-    struct spdk_poller* io_poller;
 
     struct object_cache_pool *kv_request_internal_pool;
 

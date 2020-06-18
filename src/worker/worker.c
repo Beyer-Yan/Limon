@@ -44,8 +44,7 @@ _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal 
 }
 
 static int
-_worker_business_processor_poll(void*ctx){
-    struct worker_context *wctx = ctx;
+_worker_poll_business(struct worker_context *wctx){
     int events = 0;
 
     // The pending requests in the worker context no-lock request queue
@@ -120,16 +119,14 @@ _worker_business_processor_poll(void*ctx){
 }
 
 static int
-_worker_io_poll(void* ctx){
-    struct worker_context *wctx = ctx;
+_worker_poll_io(struct worker_context *wctx){
     int events = 0;
     events += iomgr_io_poll(wctx->imgr);
     return events;
 }
 
 static int
-_worker_reclaim_poll(void* ctx){
-    struct worker_context *wctx = ctx;
+_worker_poll_reclaim(struct worker_context *wctx){
     int events = 0;
     events += worker_reclaim_process_pending_slab_migrate(wctx);
     events += worker_reclaim_process_pending_item_migrate(wctx);
@@ -137,6 +134,16 @@ _worker_reclaim_poll(void* ctx){
     return events;
 }
 
+static int
+_worker_request_poll(void*ctx){
+    struct worker_context *wctx = ctx;
+    int events = 0;
+    events += _worker_poll_reclaim(wctx);
+    events += _worker_poll_business(wctx);
+    events += _worker_poll_io(wctx);
+    return events;
+
+}
 static void
 _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
     //Submit a slab shrinking request
@@ -154,6 +161,7 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
     //If it is not in the free_node_tree, the deleting will no nothing.
     rbtree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
 }
+
 //This poller shall be excecuted regularly, e.g. once a second.
 static int
 _worker_slab_evaluation_poll(void* ctx){
@@ -536,17 +544,9 @@ _rebuild_complete(void*ctx, int kverrno){
     //Register pollers to start the service.
     struct spdk_poller *poller;
 
-    poller = SPDK_POLLER_REGISTER(_worker_io_poll,wctx,0);
+    poller = SPDK_POLLER_REGISTER(_worker_request_poll,wctx,0);
     assert(poller!=NULL);
-    wctx->io_poller = poller;
-
-    poller = SPDK_POLLER_REGISTER(_worker_business_processor_poll,wctx,0);
-    assert(poller!=NULL);
-    wctx->business_poller = poller;
-
-    poller = SPDK_POLLER_REGISTER(_worker_reclaim_poll,wctx,0);
-    assert(poller!=NULL);
-    wctx->reclaim_poller = poller;
+    wctx->request_poller = poller;
 
     poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
     assert(poller!=NULL);
@@ -568,7 +568,6 @@ _do_worker_start(void*ctx){
     SPDK_NOTICELOG("Start rebuilding\n");
     worker_perform_rebuild_async(wctx,_rebuild_complete,wctx);
 }
-
 
 void worker_start(struct worker_context* wctx){
     assert(wctx!=NULL);
@@ -605,10 +604,8 @@ static void
 _do_worker_destroy(void*ctx){
     struct worker_context* wctx = ctx;
     //Release all the poller.
-    spdk_poller_unregister(&wctx->business_poller);
-    spdk_poller_unregister(&wctx->reclaim_poller);
+    spdk_poller_unregister(&wctx->request_poller);
     spdk_poller_unregister(&wctx->slab_evaluation_poller);
-    spdk_poller_unregister(&wctx->io_poller);
 
     spdk_put_io_channel(wctx->imgr->channel);
 
