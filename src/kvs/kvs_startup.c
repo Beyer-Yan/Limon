@@ -17,6 +17,12 @@ struct kvs *g_kvs = NULL;
 struct kvs_start_ctx{
     struct spdk_blob_store *bs;
     struct spdk_io_channel *channel;
+
+    //Register a poller to check whether the workers are ready
+    //in case the current thread is blocked.
+    struct spdk_poller* ready_poller;
+    uint64_t tsc; //record the recovering time.
+
     spdk_blob_id super_blob_id;
 	struct spdk_blob *super_blob;
 	uint64_t io_unit_size;
@@ -73,6 +79,42 @@ _unload_bs(struct kvs_start_ctx *kctx, char *msg, int bserrno)
     }
 }
 
+static int
+_kvs_worker_ready_poller(void*ctx){
+    //Poller to check wether the workers are ready
+    struct kvs_start_ctx *kctx;
+    struct kvs* kvs = kctx->kvs;
+
+    bool res = true;
+    int i = 0;
+    //wait the recoverying
+    for(i=0;i<kctx->opts->nb_works;i++){
+        res &= worker_is_ready(kvs->workers[i]);
+    }
+
+    if(!res){
+        //I should wait for the next polling cycle.
+        return 0;
+    }
+
+    //Now all workers are ready.
+    uint64_t tsc = spdk_get_ticks();
+    SPDK_NOTICELOG("Recovery completes, time elapsed:%luus\n",kv_cycles_to_us(tsc-kctx->tsc));
+
+    g_kvs = kvs;
+    void (*startup_fn)(void*ctx, int kverrno) = kctx->opts->startup_fn;
+    void *startup_ctx  = kctx->opts->startup_ctx;
+
+    //The poller will not be used any more.
+    spdk_poller_unregister(kctx->ready_poller);
+
+    spdk_free(kctx->sl);
+    free(kctx);
+
+    startup_fn(startup_ctx,-KV_ESUCCESS);
+    return 0;
+}
+
 static void
 _kvs_worker_init(struct kvs_start_ctx *kctx){
 
@@ -116,26 +158,12 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     for(i=0;i<kctx->opts->nb_works;i++){
         worker_start(wctx[i]);
     }
-    //Now all worker have been started
-    g_kvs = kvs;
-    spdk_free(kctx->sl);
 
-    void (*startup_fn)(void*ctx, int kverrno) = kctx->opts->startup_fn;
-    void *startup_ctx  = kctx->opts->startup_ctx;
-    free(kctx);
+    struct spdk_poller* poller = spdk_poller_register(_kvs_worker_ready_poller,kctx,0);
+    kctx->ready_poller = poller;
+    kctx->tsc = spdk_get_ticks();
 
-    uint64_t tsc0,tsc1;
-    rdtscll(tsc0);
-    //wait the recoverying
-    for(i=0;i<kctx->opts->nb_works;i++){
-        while(!worker_is_ready(kvs->workers[i]));
-        SPDK_NOTICELOG("Woker:%u ready\n",i);
-    }
-    rdtscll(tsc1);
-    SPDK_NOTICELOG("Recovery completes, time elapsed:%luus\n",kv_cycles_to_us(tsc1-tsc0));
-
-    //All workers are ready
-    startup_fn(startup_ctx,-KV_ESUCCESS);
+    SPDK_NOTICELOG("start Recovering\n");
 }
 
 static void

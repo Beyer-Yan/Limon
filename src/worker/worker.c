@@ -536,16 +536,16 @@ static void
 _rebuild_complete(void*ctx, int kverrno){
     struct worker_context *wctx = ctx;
     if(kverrno){
-        SPDK_ERRLOG("Fails in database recovering\n");
+        SPDK_ERRLOG("Fails in database recovering,wid:%u\n",wctx->core_id);
         assert(0);
     }
-    SPDK_NOTICELOG("Rebuild completes\n");
+    SPDK_NOTICELOG("Rebuild completes, wid:%u\n",wctx->core_id);
     //All initialization jobs complete.
     //Register pollers to start the service.
     struct spdk_poller *poller;
 
     poller = SPDK_POLLER_REGISTER(_worker_request_poll,wctx,0);
-    assert(poller!=NULL);
+    assert(poller!=NULL); 
     wctx->request_poller = poller;
 
     poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
@@ -565,7 +565,7 @@ _do_worker_start(void*ctx){
 
     //Perform recovering for all slab file.
     //All kv request all blocked, before the recovering completes,
-    SPDK_NOTICELOG("Start rebuilding\n");
+    SPDK_NOTICELOG("Start rebuilding,wid:%u\n",wctx->core_id);
     worker_perform_rebuild_async(wctx,_rebuild_complete,wctx);
 }
 
