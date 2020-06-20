@@ -22,4 +22,5 @@ C_SRCS += src/indexes/index.c src/indexes/impl/art.c src/indexes/impl/rbtree_uin
 
 LIBNAME = pemon
 
+SPDK_MAP_FILE = $(SPDK_ROOT_DIR)/mk/spdk_blank.map
 include $(SPDK_ROOT_DIR)/mk/spdk.lib.mk
