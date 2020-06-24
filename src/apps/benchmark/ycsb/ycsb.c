@@ -106,7 +106,7 @@ static void
 _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
    declare_periodic_count;
    random_gen_t rand_next = zipfian?zipf_next:uniform_next;
-   struct kv_iterator *it = kv_iterator_alloc();
+   struct kv_iterator *it = kv_iterator_alloc(100);
 
    for(size_t i = 0; i < nb_requests; i++) {
       if(random_get_put(test)) { 
