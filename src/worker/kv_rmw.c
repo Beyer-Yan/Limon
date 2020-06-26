@@ -199,7 +199,8 @@ _process_rmw_get_load_data_cb(void* ctx, int kverrno){
             assert(0);
         }
 
-        if(!res){
+        //modify_fn returns non-zero val meaning that an error happens
+        if(res){
             req->cb_fn(req->ctx,NULL,-KV_EIO);
             _resource_release(req,entry);
             return;
