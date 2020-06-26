@@ -26,6 +26,7 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
 
     if(kverrno){
         //Store data error, which may be caused by IO error.
+        //the update is out-of-place, so the cache state is not needed to be invalidated.
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
     }
     else{
@@ -176,6 +177,10 @@ _process_put_case2_store_data_cb(void* ctx, int kverrno){
     pool_release(wctx->kv_request_internal_pool,req);
     entry->writing = 0;
     pagechunk_mem_lower(desc);
+
+    if(kverrno){
+        //@todo invalidate the cache state, indicating the update is invalid.
+    }
 
     req->cb_fn(req->ctx, NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
