@@ -201,7 +201,7 @@ hello_start(void*ctx, int kverrno){
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "Nvme0n1";
+    opts->devname = "bdev_pmem0";
     opts->kvs_name = "hello_pemon";
     opts->max_cache_chunks = 1024;
     opts->max_io_pending_queue_size_per_worker = 64;
