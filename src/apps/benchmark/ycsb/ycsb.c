@@ -135,6 +135,24 @@ _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
    }
 }
 
+static void
+_ycsb_rmw_complete(void*ctx, struct kv_item* item, int kverrno){
+   struct kv_item *ori_item = ctx;
+   if(kverrno){
+      printf("RMW error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
+   }
+   _update_stat(ori_item);
+   free(ori_item);
+}
+
+static int
+_ysc_rmw_modify_fn(struct kv_item* item){
+   char tmp[10];
+
+   //dummy modify.
+   memcpy(tmp,item->meta);
+}
+
 // YCSB F
 static void
 _launch_ycsb_f(int test, int nb_requests, int zipfian, int id) {
@@ -144,14 +162,8 @@ _launch_ycsb_f(int test, int nb_requests, int zipfian, int id) {
       struct kv_item *item = _create_unique_item_ycsb(next);
       // In these tests we update with a given probability
       if(random_get_put(test)) {
-         // get-modify-write
-         kv_get_async(item,_ycsb_get_complete,item);
-         // Issue put after the get completes ???
-         // clone the item, then issue put.
-         // Should I put something ??
-         struct kv_item *modified_item = _create_unique_item_ycsb(next);
-         kv_put_async(modified_item,_ycsb_put_complete,modified_item);
-         
+         // read-modify-write
+         kv_rmw_async(item,_ysc_rmw_modify_fn,_ycsb_rmw_complete,item);
       } 
       else { // or we read
          kv_get_async(item,_ycsb_get_complete,item);
