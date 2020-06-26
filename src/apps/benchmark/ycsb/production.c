@@ -54,7 +54,7 @@ static void launch_prod(struct workload *w, bench_t b, int id) {
    declare_periodic_count;
    random_gen_t rand_next = (b==prod1)?(production_random1):(production_random2);
    uint64_t nb_requests = w->nb_requests_per_thread;
-   struct kv_iterator *it = kv_iterator_alloc();
+   struct kv_iterator *it = kv_iterator_alloc(100);
 
    for(uint64_t i = 0; i < nb_requests; i++) {
       struct kv_item* item = create_unique_item_prod(rand_next(), w->nb_items_in_db);
