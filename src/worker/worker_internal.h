@@ -15,7 +15,7 @@
 #include "spdk/thread.h"
 #include "spdk/env.h"
 
-enum op_code { GET=0, PUT, DELETE, FIRST, SEEK, NEXT,};
+enum op_code { GET=0, PUT, DELETE, RMW, FIRST, SEEK, NEXT,};
 
 struct process_ctx{
     struct worker_context *wctx;
@@ -46,7 +46,10 @@ struct kv_request{
     uint32_t op_code;
     uint32_t shard;
     struct kv_item* item;
-    worker_cb cb_fn;
+    kv_cb cb_fn;
+
+    //For read-modify-write equest
+    modify_fn m_fn;
 
     //used when issue scan reuest.
     scan_cb scan_cb_fn;
@@ -60,8 +63,11 @@ struct kv_request_internal{
 
     uint32_t op_code;
     uint32_t shard;
+
     struct kv_item* item;
-    worker_cb cb_fn;
+    kv_cb cb_fn;
+
+    modify_fn m_fn;
 
     scan_cb scan_cb_fn;
     uint32_t scan_batch;
@@ -116,6 +122,7 @@ struct worker_context{
 void worker_process_get(struct kv_request_internal *req);
 void worker_process_put(struct kv_request_internal *req);
 void worker_process_delete(struct kv_request_internal *req);
+void worker_process_rmw(struct kv_request_internal *req);
 
 //For range scan operation
 void worker_process_first(struct kv_request_internal *req);

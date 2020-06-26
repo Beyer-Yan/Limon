@@ -158,8 +158,8 @@ _process_put_case1(struct kv_request_internal *req, bool slab_changed){
     }
 
     slab_request_slot_async(wctx->imgr,pctx->slab,
-                                 _process_put_case1_request_slot_cb,
-                                 req);
+                            _process_put_case1_request_slot_cb,
+                            req);
 }
 
 /*-------------------------------------------------------------*/

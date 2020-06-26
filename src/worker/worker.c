@@ -27,6 +27,9 @@ _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal 
         case DELETE:
             worker_process_delete(req);
             break;
+        case RMW:
+            worker_process_rmw(req);
+            break;
         case FIRST:
             worker_process_first(req);
             break;
@@ -249,6 +252,15 @@ void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,DELETE);
+    _submit_req_buffer(wctx,req);
+}
+
+void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
+                        modify_fn m_fn, worker_cb cb_fn, void* ctx){
+    assert(wctx!=NULL);
+    struct kv_request *req = _get_free_req_buffer(wctx);
+    _worker_enqueue_common(req,shard,item,cb_fn,ctx,RMW);
+    req->m_fn = m_fn;
     _submit_req_buffer(wctx,req);
 }
 

@@ -115,6 +115,14 @@ static inline void pagechunk_mem_lower(struct chunk_desc* desc){
 bool pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx);
 
 /**
+ * @brief Invalidate the cache state for the given slot
+ * 
+ * @param  desc      The page chunk description
+ * @param  slot_idx  The slot index in the slab
+ */
+void pagechunk_cache_invalidate(struct chunk_desc *desc, uint64_t slot_idx);
+
+/**
  * @brief Check whether the item is stored into multi pages.
  * 
  * @param desc       The page chunk description

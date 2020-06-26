@@ -29,8 +29,6 @@ void kvs_start_loop(struct kvs_start_opts *opts);
 void kvs_shutdown(void);
 bool kvs_is_started(void);
 
-typedef void (*kv_cb)(void* ctx, struct kv_item* item, int kverrno);
-
 // The key filed of item  shall be filed
 void kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
@@ -39,6 +37,8 @@ void kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
 // The key field of item shall be filed
 void kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
+
+void kv_rmw_async(struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void*ctx);
 
 struct kv_iterator;
 

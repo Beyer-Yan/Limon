@@ -97,6 +97,14 @@ pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx){
     }
 }
 
+void pagechunk_cache_invalidate(struct chunk_desc *desc, uint64_t slot_idx){
+    assert(desc->chunk_mem!=NULL);
+
+    uint32_t first_page, last_page;
+    _get_page_position(desc,slot_idx,&first_page,&last_page);
+    bitmap_clear_bit_range(desc->chunk_mem->bitmap,first_page,last_page);
+}
+
 bool 
 pagechunk_is_cross_page(struct chunk_desc *desc, uint64_t slot_idx){
     

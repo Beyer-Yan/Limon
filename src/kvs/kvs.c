@@ -50,6 +50,13 @@ kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     worker_enqueue_delete(g_kvs->workers[worker_id],shard_id,item,cb_fn,ctx);
 }
 
+void kv_rmw_async(struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void*ctx){
+    _assert_parameters(item,cb_fn);
+    uint32_t shard_id = _hash_item_to_shard(item);
+    uint32_t worker_id = _hash_shard_to_worker(shard_id);
+    worker_enqueue_rmw(g_kvs->workers[worker_id],shard,item,m_fn,cb_fn,ctx);
+}
+
 struct _scan_worker_ctx{
     uint32_t worker_id;
     volatile bool completed;
@@ -316,10 +323,9 @@ bool kv_iterator_first(struct kv_iterator *it){
     uint32_t i=0;
     for(;i<it->nb_workers;i++){
         struct _scan_worker_ctx *swctx  = &it->ctx_array[i];
-        uint32_t per_worker_batch = it->batch_size/it->nb_workers;
         swctx->completed = false;
         swctx->kverrno = 0;
-        worker_enqueue_first(g_kvs->workers[i],_iter_cb_fn,per_worker_batch,swctx);
+        worker_enqueue_first(g_kvs->workers[i],_iter_cb_fn,it->batch_size,swctx);
     }
 
     bool res = true;
@@ -370,6 +376,7 @@ bool kv_iterator_next(struct kv_iterator *it){
             it->seek_item.item->meta.vsize = 0;
             it->seek_item.wid = swctx->worker_id;
             
+            //Need I scan batch_size items ??
             _reset_scan_res(swctx);
             worker_enqueue_next(g_kvs->workers[wid],it->seek_item.item,_iter_cb_fn,it->batch_size,swctx);
 
