@@ -54,7 +54,7 @@ void kv_rmw_async(struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void*ctx){
     _assert_parameters(item,cb_fn);
     uint32_t shard_id = _hash_item_to_shard(item);
     uint32_t worker_id = _hash_shard_to_worker(shard_id);
-    worker_enqueue_rmw(g_kvs->workers[worker_id],shard,item,m_fn,cb_fn,ctx);
+    worker_enqueue_rmw(g_kvs->workers[worker_id],shard_id,item,m_fn,cb_fn,ctx);
 }
 
 struct _scan_worker_ctx{

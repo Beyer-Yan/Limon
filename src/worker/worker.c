@@ -213,7 +213,7 @@ _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
 
 static inline void
 _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *item, 
-                       worker_cb cb_fn,void* ctx,
+                       kv_cb cb_fn,void* ctx,
                        enum op_code op){
     
     //For debug only
@@ -231,7 +231,7 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
 }
 
 void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
-                        worker_cb cb_fn, void* ctx){
+                        kv_cb cb_fn, void* ctx){
 
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
@@ -240,7 +240,7 @@ void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_ite
 }
 
 void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
-                        worker_cb cb_fn, void* ctx){
+                        kv_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,PUT);
@@ -248,7 +248,7 @@ void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_ite
 }
 
 void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
-                           worker_cb cb_fn, void* ctx){
+                           kv_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,DELETE);
@@ -256,7 +256,7 @@ void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_
 }
 
 void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
-                        modify_fn m_fn, worker_cb cb_fn, void* ctx){
+                        modify_fn m_fn, kv_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,shard,item,cb_fn,ctx,RMW);
@@ -265,7 +265,7 @@ void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_ite
 }
 
 //interface implementation for scan operation.
-void worker_enqueue_seek(struct worker_context* wctx,struct kv_item *item, worker_cb cb_fn, void* ctx){
+void worker_enqueue_seek(struct worker_context* wctx,struct kv_item *item, kv_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
     _worker_enqueue_common(req,UINT32_MAX,item,cb_fn,ctx,SEEK);

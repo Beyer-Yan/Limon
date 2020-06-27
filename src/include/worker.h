@@ -50,7 +50,7 @@ void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_ite
 void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item, kv_cb cb_fn, void* ctx);
 void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, kv_cb cb_fn, void* ctx);
 
-void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void* ctx)
+void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void* ctx);
 
 struct worker_scan_result{
     uint32_t nb_items;
