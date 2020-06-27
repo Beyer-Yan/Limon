@@ -286,8 +286,9 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
         worker_enqueue_next(g_kvs->workers[i],it->seek_item.item,_iter_cb_fn,batch_size,swctx);
     }
 
-    bool res = true;
-    while(res){
+    bool res = false;
+    while(!res){
+        res = true;
         for(i=0;i<g_kvs->nb_workers;i++){
             res &= it->ctx_array[i].completed;
         }
@@ -328,8 +329,9 @@ bool kv_iterator_first(struct kv_iterator *it){
         worker_enqueue_first(g_kvs->workers[i],_iter_cb_fn,it->batch_size,swctx);
     }
 
-    bool res = true;
-    while(res){
+    bool res = false;
+    while(!res){
+        res = true;
         for(i=0;i<g_kvs->nb_workers;i++){
             res &= it->ctx_array[i].completed;
         }

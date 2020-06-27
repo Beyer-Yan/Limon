@@ -82,11 +82,11 @@ _unload_bs(struct kvs_start_ctx *kctx, char *msg, int bserrno)
 static int
 _kvs_worker_ready_poller(void*ctx){
     //Poller to check wether the workers are ready
-    struct kvs_start_ctx *kctx;
+    struct kvs_start_ctx *kctx = ctx;
     struct kvs* kvs = kctx->kvs;
 
     bool res = true;
-    int i = 0;
+    uint32_t i = 0;
     //wait the recoverying
     for(i=0;i<kctx->opts->nb_works;i++){
         res &= worker_is_ready(kvs->workers[i]);
@@ -106,7 +106,7 @@ _kvs_worker_ready_poller(void*ctx){
     void *startup_ctx  = kctx->opts->startup_ctx;
 
     //The poller will not be used any more.
-    spdk_poller_unregister(kctx->ready_poller);
+    spdk_poller_unregister(&kctx->ready_poller);
 
     spdk_free(kctx->sl);
     free(kctx);

@@ -598,7 +598,7 @@ _do_worker_destroy_check_pollers(void*ctx){
     }
     else{
         spdk_thread_exit(wctx->thread);
-        spdk_thread_destroy(wctx->thread);
+        //spdk_thread_destroy(wctx->thread);
 
         //Free all the memory
         spdk_ring_free(wctx->req_free_ring);
