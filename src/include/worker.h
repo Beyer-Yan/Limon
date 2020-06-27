@@ -46,11 +46,11 @@ bool worker_is_ready(struct worker_context* wctx);
 typedef void (*kv_cb)(void* ctx, struct kv_item* item, int kverrno);
 typedef int (*modify_fn)(struct kv_item* item);
 
-void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
-void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
-void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, kv_cb cb_fn, void* ctx);
+void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item, kv_cb cb_fn, void* ctx);
+void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, kv_cb cb_fn, void* ctx);
 
-void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item, modify_fn m_fn, worker_cb cb_fn, void* ctx)
+void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void* ctx)
 
 struct worker_scan_result{
     uint32_t nb_items;
@@ -60,7 +60,7 @@ struct worker_scan_result{
 
 typedef void (*scan_cb)(void* ctx, struct worker_scan_result* scan_res, int kverrno);
 
-void worker_enqueue_seek(struct worker_context* wctx,struct kv_item *item, worker_cb cb_fn, void* ctx);
+void worker_enqueue_seek(struct worker_context* wctx,struct kv_item *item, kv_cb cb_fn, void* ctx);
 void worker_enqueue_first(struct worker_context* wctx, scan_cb cb_fn, uint32_t scan_batch, void* ctx);
 void worker_enqueue_next(struct worker_context* wctx,struct kv_item *item, scan_cb cb_fn, uint32_t scan_batch, void* ctx);
 
