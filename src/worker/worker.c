@@ -101,6 +101,8 @@ _worker_poll_business(struct worker_context *wctx){
             req_internal->cb_fn = req_array[i]->cb_fn;
             req_internal->shard = req_array[i]->shard;
 
+            req_internal->m_fn = req->req_array[i]->m_fn;
+
             req_internal->scan_cb_fn = req_array[i]->scan_cb_fn;
             req_internal->scan_batch = req_array[i]->scan_batch;
             //I do not perform a lookup, since it is a new request.
@@ -217,7 +219,7 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
                        enum op_code op){
     
     //For debug only
-    if(op==GET || op==PUT){
+    if(op==GET || op==PUT || op==RMW){
         uint64_t tsc;
         rdtscll(tsc);
         memcpy(item->meta.cdt,&tsc,sizeof(tsc));

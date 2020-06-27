@@ -150,7 +150,8 @@ _ysc_rmw_modify_fn(struct kv_item* item){
    char tmp[10];
 
    //dummy modify.
-   memcpy(tmp,item->meta);
+   memcpy(tmp,&item->meta,4);
+   return 0;
 }
 
 // YCSB F

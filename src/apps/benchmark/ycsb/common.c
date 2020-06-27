@@ -7,6 +7,7 @@
 #include "kvutil.h"
 #include "kvs.h"
 #include "kverrno.h"
+#include <arpa/inet.h>
 
 static void 
 pin_me_on(int core) {
@@ -22,6 +23,10 @@ pin_me_on(int core) {
        printf("core:%d,pin failed\n",core);
        exit(-1);
    }
+}
+
+static uint64_t htonll(uint64_t val){
+   return (((uint64_t)htonl(val))<<32) + htonl(val>>32); 
 }
 
 /*
