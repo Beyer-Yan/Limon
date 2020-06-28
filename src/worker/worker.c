@@ -101,7 +101,7 @@ _worker_poll_business(struct worker_context *wctx){
             req_internal->cb_fn = req_array[i]->cb_fn;
             req_internal->shard = req_array[i]->shard;
 
-            req_internal->m_fn = req->req_array[i]->m_fn;
+            req_internal->m_fn = req_array[i]->m_fn;
 
             req_internal->scan_cb_fn = req_array[i]->scan_cb_fn;
             req_internal->scan_batch = req_array[i]->scan_batch;
