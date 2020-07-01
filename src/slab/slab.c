@@ -71,11 +71,18 @@ slab_is_slab_changed(uint32_t old_item_size, uint32_t new_item_size){
 
 bool 
 slab_is_valid_size(uint32_t slab_size, uint32_t item_size){
-    uint32_t idx = slab_find_slab(item_size);
+
     uint32_t len = sizeof(slab_sizes)/sizeof(slab_sizes[0]);
-    if(item_size>slab_sizes[len-1]){
+
+    uint32_t min_slab = slab_sizes[0];
+    uint32_t max_slab = slab_sizes[len-1];
+
+    if(item_size<min_slab || item_size>max_slab){
         return false;
     }
+
+    uint32_t idx = slab_find_slab(item_size);
+
     return slab_sizes[idx]==slab_size ? true : false;
 }
 

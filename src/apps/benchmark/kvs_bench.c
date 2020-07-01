@@ -33,7 +33,7 @@ _do_start_benchmark(void*ctx){
 
 	struct workload w = {
 		.api = &YCSB,
-		.nb_items_in_db = 40000000LU,
+		.nb_items_in_db = 4000000LU,
 		.nb_load_injectors = 4,
 		.start_core = 10,
 	};
@@ -47,8 +47,9 @@ _do_start_benchmark(void*ctx){
 	   /* Launch benchs */
 	bench_t workloads[] = {
 		//ycsb_f_uniform
-		ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
-		ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
+		//ycsb_a_uniform
+		//ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
+		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
 		//ycsb_e_uniform, ycsb_e_zipfian, // Scans
 	};
 
@@ -85,9 +86,9 @@ _kvs_bench_start(void*ctx,int kverrno){
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "bdev_pmem0";
+    opts->devname = "AIO0";
     opts->kvs_name = "kvs_bench";
-    opts->max_cache_chunks = 10000;
+    opts->max_cache_chunks = 2000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 32;
     opts->nb_works = 4;

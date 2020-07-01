@@ -57,15 +57,23 @@ _node_read_complete(void* ctx, int bserrno){
     uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
     for(;idx<nb_slots_per_node;idx++){
         uint8_t *raw_data = rctx->recovery_node_buffer + slab_slot_offset(slab,idx);
-        uint64_t tsc0;
         struct kv_item *item = (struct kv_item*)(raw_data + 8);
-        uint64_t tsc1;
-
-        memcpy(&tsc0,raw_data,sizeof(tsc0));
-        memcpy(&tsc1,raw_data + item_get_size(item) + 8,sizeof(tsc1));
 
         if(item->meta.ksize!=0){
-            //It may be a valid item.
+            //It may not be a valid item.
+            uint32_t actual_item_size = item_packed_size(item);
+            if( !slab_is_valid_size(slab->slab_size,actual_item_size) ){
+                //The item is invalid
+                SPDK_ERRLOG("Invalid item found in slab rebuilding, shard:%u,slab size:%u,slot:%lu, item_size:%u\n",
+                            rctx->cur->shard_idx,slab->slab_size,idx+slot_base ,actual_item_size);
+                continue;
+            }
+
+            uint64_t tsc0;
+            uint64_t tsc1;
+            memcpy(&tsc0,raw_data,sizeof(tsc0));
+            memcpy(&tsc1,raw_data + item_get_size(item) + 8,sizeof(tsc1));
+            //It may not be a correct item.
             if( (tsc0!=tsc1) || (tsc0==UINT64_MAX) || (tsc0==0) ){
                 //The item is crashed, which may be caused by a system crash when the item is being stored.
                 //User may format a disk by 1 or 0. 
@@ -73,13 +81,6 @@ _node_read_complete(void* ctx, int bserrno){
                     SPDK_NOTICELOG("Find broken item, drop it. slab:%u,slot:%lu, tsc0:%lu, tsc1:%lu\n",
                                     slab->slab_size,idx+slot_base,tsc0,tsc1);
                 }
-                continue;
-            }
-            uint32_t actual_item_size = item_get_size(item) + 16;
-            if( !slab_is_valid_size(slab->slab_size,actual_item_size) ){
-                //The item is invalid
-                SPDK_ERRLOG("Invalid item found in slab rebuilding, shard:%u,slab size:%u, item_size:%u\n",
-                            rctx->cur->shard_idx,slab->slab_size, actual_item_size);
                 continue;
             }
 

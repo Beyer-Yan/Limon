@@ -86,7 +86,8 @@ struct _blob_iter{
 #define KVS_OP_CREATE   0
 #define KVS_OP_OPEN     1
 #define KVS_OP_RESIZE   2
-#define KVS_OP_CLOSE    3
+#define KVS_OP_ZERO     3
+#define KVS_OP_CLOSE    4
 
 
 static void
@@ -178,6 +179,20 @@ _slab_iter_foreach_resize_cb(void* ctx,int bserrno){
 }
 
 static void
+_slab_iter_foreach_zero_cb(void* ctx,int bserrno){
+    struct _blob_iter *iter = ctx;
+    struct kvs_format_ctx *kctx = iter->kctx;
+
+    if (bserrno) {
+        free(iter);
+        _unload_bs(kctx, "Error in blob resize callback", bserrno);
+        return;
+    }
+
+    _slab_iter_foreach_next(iter);
+}
+
+static void
 _slab_iter_foreach_close_cb(void* ctx,int bserrno){
     struct _blob_iter *iter = ctx;
     struct kvs_format_ctx *kctx = iter->kctx;
@@ -205,6 +220,12 @@ _slab_iter_do_op(struct slab_layout* slab,int op_type, struct _blob_iter *iter){
         case KVS_OP_RESIZE:{
             uint32_t chunks = iter->kctx->nb_init_nodes_per_slab*iter->kctx->sl->nb_chunks_per_reclaim_node;
             spdk_blob_resize(slab->resv,chunks,_slab_iter_foreach_resize_cb,iter);
+            break;
+        }
+        case KVS_OP_ZERO:{
+            uint32_t chunks = iter->kctx->nb_init_nodes_per_slab*iter->kctx->sl->nb_chunks_per_reclaim_node;
+            uint32_t nb_pages = chunks * iter->kctx->sl->nb_pages_per_chunk;
+            spdk_blob_io_write_zeroes(slab->resv,iter->kctx->channel,0,nb_pages,_slab_iter_foreach_zero_cb,iter);
             break;
         }
         case KVS_OP_CLOSE:{
@@ -465,10 +486,15 @@ _do_super_write(struct kvs_format_ctx *kctx){
 }
 
 static void
+_slab_all_resize_complete(struct kvs_format_ctx *kctx){
+    _slab_iter_foreach(kctx,KVS_OP_ZERO,_do_super_write);
+}
+
+static void
 _slab_all_open_complete(struct kvs_format_ctx *kctx){
     //Resize all slabs with init nodes.
     //When all slabs have been resized, just write the super blob.
-    _slab_iter_foreach(kctx,KVS_OP_RESIZE,_do_super_write);
+    _slab_iter_foreach(kctx,KVS_OP_RESIZE,_slab_all_resize_complete);
 }
 
 static void

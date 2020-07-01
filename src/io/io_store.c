@@ -6,6 +6,7 @@
 #include "hashmap.h"
 
 #include "spdk/thread.h"
+#include "spdk/log.h"
 
 static void _store_pages_complete_cb(void*ctx, int kverrno);
 
@@ -35,7 +36,9 @@ static void
 _store_pages_complete_cb(void*ctx, int kverrno){
     struct page_io *pio = ctx;
 
-    pio->imgr->nb_pending_io++;
+    //SPDK_NOTICELOG("Storing page complete:%lu\n",pio->start_page);
+
+    pio->imgr->nb_pending_io--;
 
     _process_cache_io(pio->cache_io,kverrno);
     if(pio->io_link){
@@ -92,9 +95,12 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
     pio->key = key_prefix;
     pio->imgr = imgr;
     pio->io_link = NULL;
+    pio->start_page = start_page;
 
     //Now issue a blob IO command for pio_1_pages;
     imgr->nb_pending_io++;
+
+    SPDK_NOTICELOG("Storing page:%lu\n",start_page);
     spdk_blob_io_write(blob,imgr->channel,buf,start_page,1,
                         _store_pages_complete_cb,pio);
 }
@@ -133,4 +139,8 @@ iomgr_store_pages_async(struct iomgr* imgr,
         //Two-phases writing.
         _store_pages_multipages(imgr,blob,key_prefix,buf,start_page,nb_pages,cio);
     }
+}
+
+int iomgr_io_write_poll(struct iomgr* imgr){
+    return 0;
 }

@@ -1,4 +1,3 @@
-#include <stdatomic.h>
 #include "kvs_internal.h"
 
 #include "spdk/env.h"

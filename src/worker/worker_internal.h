@@ -2,7 +2,6 @@
 #define KVS_WORKER_INTERNAL_H
 
 #include <stddef.h>
-#include <stdatomic.h>
 #include "index.h"
 #include "worker.h"
 #include "slab.h"

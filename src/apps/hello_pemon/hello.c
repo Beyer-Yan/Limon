@@ -38,7 +38,7 @@ static void
 _batch_op_complete(void*ctx, struct kv_item* item,  int kverrno){
     struct kv_item* ori_item = ctx;
     if(kverrno){
-        printf("Op error, key:%x, err:%d\n", *(int*)ori_item->data ,kverrno);
+        printf("Op error, key:%d, err:%d\n", ntohl(*(int*)ori_item->data) ,kverrno);
     }
     static atomic_int i = 0;
     int cnt = atomic_fetch_add(&i,1);
@@ -95,15 +95,14 @@ _scan_test(struct batch_context *bctx){
     kv_iterator_first(it);
 
     int i = 0;
-    for(;i<100;i++){
-        kv_iterator_next(it);
+    while(kv_iterator_next(it)){
         struct kv_item* item = kv_iterator_item(it);
         if(!item){
             printf("No more items found\n");
             break;
         }
         else{
-            printf("scan,key:%x\n",*(int*)item->data);
+            printf("scan,key:%d\n",ntohl(*(int*)item->data));
         }
     }
 }
@@ -121,12 +120,13 @@ _batch_test_start(void* ctx){
 
     //_scan_test(bctx);
     //Test put
-    /*
+    
     printf("Testing add\n");
     bctx->op = 0;
     bctx->vsize = 10;
     _batch_test(bctx);
-    */
+    
+    /*
     //Test get
     printf("Testing get\n");
     bctx->op = 1;
@@ -198,14 +198,14 @@ _start_batch_test(int start_core_id, int nb_workers, int nb_items_per_worker){
 static void
 hello_start(void*ctx, int kverrno){
     printf("Hello pemon~\n");
-    _start_batch_test(10,1,300000);
+    _start_batch_test(10,1,20000);
 }
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "bdev_pmem0";
+    opts->devname = "AIO0";
     opts->kvs_name = "hello_pemon";
-    opts->max_cache_chunks = 10000;
+    opts->max_cache_chunks = 1000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
     opts->nb_works = 1;
