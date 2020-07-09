@@ -54,7 +54,7 @@ static void launch_prod(struct workload *w, bench_t b, int id) {
    declare_periodic_count;
    random_gen_t rand_next = (b==prod1)?(production_random1):(production_random2);
    uint64_t nb_requests = w->nb_requests_per_thread;
-   struct kv_iterator *it = kv_iterator_alloc(100);
+   struct kv_iterator *it = kv_iterator_alloc(16);
 
    for(uint64_t i = 0; i < nb_requests; i++) {
       struct kv_item* item = create_unique_item_prod(rand_next(), w->nb_items_in_db);
@@ -78,12 +78,13 @@ static void launch_prod(struct workload *w, bench_t b, int id) {
          for(uint64_t i = 0; i < scan_length; i++) {
             if(kv_iterator_next(it)){
                item = create_item_from_item(kv_iterator_item(it));
-               kv_get_async(item, _prod_get_complete, (void*)i);
+               kv_get_async(item, _prod_get_complete, item);
             }
          }
       }
       periodic_count(1000, "Production Load Injector:%02d, (%lu%%)", id ,i*100UL/nb_requests);
    }
+   kv_iterator_release(it);
 }
 
 /* Pretty printing */

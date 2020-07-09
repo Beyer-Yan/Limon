@@ -86,7 +86,6 @@ _launch_ycsb_common(int test, int nb_requests, int zipfian, int id) {
 }
 
 // YCSB D
-// ignore zipfian in Workload D
 static void
 _launch_ycsb_d(int test, int nb_requests, int zipfian, int id) {
    declare_periodic_count;
@@ -106,7 +105,7 @@ static void
 _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
    declare_periodic_count;
    random_gen_t rand_next = zipfian?zipf_next:uniform_next;
-   struct kv_iterator *it = kv_iterator_alloc(100);
+   struct kv_iterator *it = kv_iterator_alloc(16);
 
    for(size_t i = 0; i < nb_requests; i++) {
       if(random_get_put(test)) { 
@@ -127,12 +126,13 @@ _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
          for(uint64_t i = 0; i < scan_length; i++) {
             if(kv_iterator_next(it)){
                item = create_item_from_item(kv_iterator_item(it));
-               kv_get_async(item, _ycsb_get_complete, (void*)i);
+               kv_get_async(item, _ycsb_get_complete, item);
             }
          }
       }
       periodic_count(1000, "YCSB Load Injector (scans):%d, (%lu%%)", id, i*100LU/nb_requests);
    }
+   kv_iterator_release(it);
 }
 
 static void

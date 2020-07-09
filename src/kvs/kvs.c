@@ -1,4 +1,5 @@
 #include "kvs_internal.h"
+#include "spdk/env.h"
 
 static inline uint32_t
 _hash_item_to_shard(struct kv_item *item){
@@ -88,6 +89,7 @@ struct kv_iterator{
 
 struct kv_iterator* kv_iterator_alloc(uint32_t batch_size){
     assert(g_kvs!=NULL);
+    assert(batch_size>0);
 
     struct kv_iterator *it;
     uint32_t size = sizeof(struct kv_iterator) + 
@@ -258,7 +260,9 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
     uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_seek(g_kvs->workers[worker_id],item,_seek_cb_fn,&it->ctx_array[worker_id]);
 
-    while(!it->ctx_array[worker_id].completed);
+    while(!it->ctx_array[worker_id].completed){
+        spdk_pause();
+    }
     
     if(it->ctx_array[worker_id].kverrno){
         //seek fails;
@@ -283,6 +287,10 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
         swctx->completed = false;
         swctx->kverrno = 0;
         uint32_t batch_size = i==worker_id ? it->batch_size - 1 : it->batch_size;
+        if(batch_size==0){
+            //scan at least one item.
+            batch_size = 1;
+        }
         worker_enqueue_next(g_kvs->workers[i],it->seek_item.item,_iter_cb_fn,batch_size,swctx);
     }
 
@@ -292,6 +300,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
         for(i=0;i<g_kvs->nb_workers;i++){
             res &= it->ctx_array[i].completed;
         }
+        spdk_pause();
     }
 
     for(i=0;i<it->nb_workers;i++){
@@ -335,6 +344,7 @@ bool kv_iterator_first(struct kv_iterator *it){
         for(i=0;i<g_kvs->nb_workers;i++){
             res &= it->ctx_array[i].completed;
         }
+        spdk_pause();
     }
 
     for(i=0;i<it->nb_workers;i++){
@@ -383,7 +393,9 @@ bool kv_iterator_next(struct kv_iterator *it){
             worker_enqueue_next(g_kvs->workers[wid],it->seek_item.item,_iter_cb_fn,it->batch_size,swctx);
 
             //Just wait the completion.
-            while(!swctx->completed);
+            while(!swctx->completed){
+                spdk_pause();
+            }
         }
     }
 
@@ -410,7 +422,7 @@ bool kv_iterator_next(struct kv_iterator *it){
     return (it->nb_items==0) ? false : true;
 }
 
-//get the whole item data, just issue a kv_get_async command.
+//get the item containing only meta key info.
 struct kv_item* kv_iterator_item(struct kv_iterator *it){
     assert(it!=NULL);
     if(it->nb_items==0){

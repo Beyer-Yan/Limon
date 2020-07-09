@@ -33,7 +33,7 @@ _do_start_benchmark(void*ctx){
 
 	struct workload w = {
 		.api = &YCSB,
-		.nb_items_in_db = 4000000LU,
+		.nb_items_in_db = 40000000LU,
 		.nb_load_injectors = 4,
 		.start_core = 10,
 	};
@@ -50,7 +50,7 @@ _do_start_benchmark(void*ctx){
 		//ycsb_a_uniform
 		//ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
 		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
-		//ycsb_e_uniform, ycsb_e_zipfian, // Scans
+		ycsb_e_uniform, ycsb_e_zipfian, // Scans
 	};
 
 	histogram_init();
@@ -58,9 +58,9 @@ _do_start_benchmark(void*ctx){
 	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
 		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
-			w.nb_requests = 2000000LU; 
+			w.nb_requests = 5000000LU; 
 		} else {
-			w.nb_requests = 8000000LU;
+			w.nb_requests = 80000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		histogram_reset();
@@ -86,11 +86,11 @@ _kvs_bench_start(void*ctx,int kverrno){
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "AIO0";
+    opts->devname = "pmem0";
     opts->kvs_name = "kvs_bench";
-    opts->max_cache_chunks = 2000;
+    opts->max_cache_chunks = 10000;
     opts->max_io_pending_queue_size_per_worker = 64;
-    opts->max_request_queue_size_per_worker = 32;
+    opts->max_request_queue_size_per_worker = 128;
     opts->nb_works = 4;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
