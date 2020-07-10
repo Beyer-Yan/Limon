@@ -109,9 +109,10 @@ _worker_poll_business(struct worker_context *wctx){
             req_internal->pctx.no_lookup = false;
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
+            free(req_array[i]);
         }
-        res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req_array,process_size,NULL);
-        assert(res==process_size);
+        //res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req_array,process_size,NULL);
+        //assert(res==process_size);
     }
  
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
@@ -199,18 +200,26 @@ _worker_slab_evaluation_poll(void* ctx){
 
 static struct kv_request*
 _get_free_req_buffer(struct worker_context* wctx){
+    /*
     struct kv_request *req;
     while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1) !=1 ){
         spdk_pause();
     }
     return req;
+    */
+   return malloc(sizeof(struct kv_request));
 }
 
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
     uint64_t res;
-    res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
-    assert(res==1);
+    
+    while(spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL)!=1 ){
+        spdk_pause();
+    }
+    
+    //res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
+    //assert(res==1);
 }
 
 static inline void

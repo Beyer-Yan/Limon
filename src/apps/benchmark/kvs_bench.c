@@ -35,7 +35,7 @@ _do_start_benchmark(void*ctx){
 		.api = &YCSB,
 		.nb_items_in_db = 40000000LU,
 		.nb_load_injectors = 4,
-		.start_core = 10,
+		.start_core = 20,
 	};
 
 	printf("Initializing random number generator (Zipf) -- this might take a while for large databases...\n");
@@ -48,9 +48,10 @@ _do_start_benchmark(void*ctx){
 	bench_t workloads[] = {
 		//ycsb_f_uniform
 		//ycsb_a_uniform
-		//ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
+		ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
 		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
-		ycsb_e_uniform, ycsb_e_zipfian, // Scans
+		ycsb_e_uniform, 
+		//ycsb_e_zipfian, // Scans
 	};
 
 	histogram_init();
@@ -86,12 +87,12 @@ _kvs_bench_start(void*ctx,int kverrno){
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "pmem0";
+    opts->devname = "pmem_raid0";
     opts->kvs_name = "kvs_bench";
     opts->max_cache_chunks = 10000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
-    opts->nb_works = 4;
+    opts->nb_works = 16;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = _kvs_bench_start;
