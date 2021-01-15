@@ -87,12 +87,12 @@ _kvs_bench_start(void*ctx,int kverrno){
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "pmem_raid0";
+    opts->devname = "Nvme0n1";
     opts->kvs_name = "kvs_bench";
     opts->max_cache_chunks = 10000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
-    opts->nb_works = 16;
+    opts->nb_works = 2;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = _kvs_bench_start;
@@ -104,7 +104,7 @@ main(int argc, char **argv){
     struct spdk_app_opts opts = {};
 	int rc = 0;
 
-	spdk_app_opts_init(&opts);
+	spdk_app_opts_init(&opts,sizeof(opts));
 
 	opts.name = "kvs_bench";
 	if ((rc = spdk_app_parse_args(argc, argv, &opts, NULL, NULL,
