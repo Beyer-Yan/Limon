@@ -210,9 +210,9 @@ void slab_truncate_async(struct iomgr* imgr,
     rctx->kverrno = 0;
 
     //Tell the disk driver that the data can be deserted.
-    uint64_t offset = new_size*slab->reclaim.nb_pages_per_chunk;
-    uint64_t length = nb_nodes*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_pages_per_chunk;
-    spdk_blob_io_unmap(slab->blob,imgr->channel,offset,length,_truncate_unmap_complete,rctx);
+    uint64_t io_unit_offset = new_size*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
+    uint64_t io_unit_length = nb_nodes*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
+    spdk_blob_io_unmap(slab->blob,imgr->channel,io_unit_offset,io_unit_length,_truncate_unmap_complete,rctx);
 }
 
 static inline uint64_t 
@@ -345,10 +345,9 @@ void slab_request_slot_async(struct iomgr* imgr,
         cb(UINT64_MAX,ctx,-KV_EMEM);
         return;
     }
-
+    uint32_t old_size = slab->reclaim.nb_reclaim_nodes * slab->reclaim.nb_chunks_per_node;
     rctx->slab = slab;
-    rctx->new_size = (slab->reclaim.nb_reclaim_nodes+1) * 
-                      slab->reclaim.nb_chunks_per_node * nb_nodes;
+    rctx->new_size = old_size + slab->reclaim.nb_chunks_per_node * nb_nodes;
     rctx->nb_nodes = nb_nodes;
     rctx->thread = spdk_get_thread();
     rctx->user_slot_cb = cb;

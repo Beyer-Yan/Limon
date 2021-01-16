@@ -33,6 +33,20 @@ struct rebuild_ctx{
     uint8_t *recovery_node_buffer;
 };
 
+
+static void _read_pages(struct spdk_blob *blob, uint64_t io_unit_size, struct spdk_io_channel *channel,
+		       void *payload, uint64_t offset, uint64_t length,
+		       spdk_blob_op_complete cb_fn, void *cb_arg){
+
+    uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
+    uint64_t io_unit_offset = offset*io_unit_per_page;
+    uint64_t io_uint_length = length*io_unit_per_page;
+
+    //SPDK_NOTICELOG("read pages, off:%lu,pages:%lu, lba_off:%lu,lbs_len:%lu\n",offset,length,io_unit_offset,io_uint_length);
+
+    spdk_blob_io_read(blob,channel,payload,io_unit_offset,io_uint_length,cb_fn,cb_arg);
+}
+
 static void _rebuild_one_node_async(struct rebuild_ctx* rctx);
 static void _rebuild_one_slab(struct rebuild_ctx* rctx);
 
@@ -168,9 +182,9 @@ _rebuild_one_node_async(struct rebuild_ctx* rctx){
                       slab->reclaim.nb_pages_per_chunk;
     uint64_t pages = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_pages_per_chunk;
 
-    spdk_blob_io_read(slab->blob,rctx->wctx->imgr->channel,rctx->recovery_node_buffer,
-                      offset,pages,
-                      _node_read_complete,rctx);
+    _read_pages(slab->blob,rctx->wctx->imgr->io_unit_size,rctx->wctx->imgr->channel,rctx->recovery_node_buffer,
+                offset,pages,
+                _node_read_complete,rctx);
 }
 
 static void

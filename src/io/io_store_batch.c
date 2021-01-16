@@ -7,6 +7,17 @@
 
 #include "spdk/thread.h"
 
+static inline void _write_pages(struct spdk_blob *blob,uint64_t io_unit_size, struct spdk_io_channel *channel,
+		       void *payload, uint64_t offset, uint64_t length,
+		       spdk_blob_op_complete cb_fn, void *cb_arg){
+
+    uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
+    uint64_t io_unit_offset = offset*io_unit_per_page;
+    uint64_t io_uint_length = length*io_unit_per_page;
+
+    spdk_blob_io_write(blob,channel,payload,io_unit_offset,io_uint_length,cb_fn,cb_arg);
+}
+
 static void _store_pages_complete_cb(void*ctx, int kverrno);
 
 static void
@@ -39,8 +50,8 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 static void
 _store_pages_phase2(struct page_io *pio){
     pio->imgr->nb_pending_io++;
-    spdk_blob_io_write(pio->blob,pio->imgr->channel,pio->buf,pio->start_page,pio->len,
-                           _store_pages_complete_cb,pio);
+    _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,pio->buf,pio->start_page,pio->len,
+                _store_pages_complete_cb,pio);
 }
 
 static void
@@ -151,8 +162,8 @@ int iomgr_io_write_poll(struct iomgr* imgr){
         TAILQ_REMOVE(&pio_head,pio,link);
         events++;
         imgr->nb_pending_io++;
-        spdk_blob_io_write(pio->blob,pio->imgr->channel,pio->buf,pio->start_page,pio->len,
-                           _store_pages_complete_cb,pio);
+        _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,pio->buf,pio->start_page,pio->len,
+                    _store_pages_complete_cb,pio);
     }
     return events;
 }

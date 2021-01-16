@@ -6,6 +6,17 @@
 
 #include "spdk/thread.h"
 
+static inline void _read_pages(struct spdk_blob *blob, uint64_t io_unit_size, struct spdk_io_channel *channel,
+		       void *payload, uint64_t offset, uint64_t length,
+		       spdk_blob_op_complete cb_fn, void *cb_arg){
+
+    uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
+    uint64_t io_unit_offset = offset*io_unit_per_page;
+    uint64_t io_uint_length = length*io_unit_per_page;
+
+    spdk_blob_io_read(blob,channel,payload,io_unit_offset,io_uint_length,cb_fn,cb_arg);
+}
+
 static void
 _process_cache_io(struct cache_io *cio, int kverrno){
     cio->cnt++;
@@ -120,9 +131,9 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             //I need load page 2 to n-1
             cio->nb_segments++;
             imgr->nb_pending_io++;
-            spdk_blob_io_read(blob,imgr->channel,
-                              buf+KVS_PAGE_SIZE,start_page+1,nb_pages-2,
-                              _default_cache_io_complete_cb,cio);
+            _read_pages(blob,imgr->io_unit_size,imgr->channel,
+                        buf+KVS_PAGE_SIZE,start_page+1,nb_pages-2,
+                        _default_cache_io_complete_cb,cio);
         }
     }
     else if(tmp_1==NULL && tmp_n==NULL){
@@ -136,9 +147,9 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio_n->key, sizeof(page_n_key),pio_n);
 
         imgr->nb_pending_io++;
-        spdk_blob_io_read(blob,imgr->channel,
-                          buf,start_page,nb_pages,
-                          _default_page_io_complete_cb,pio_1);
+        _read_pages(blob,imgr->io_unit_size,imgr->channel,
+                    buf,start_page,nb_pages,
+                    _default_page_io_complete_cb,pio_1);
     }
     else{
         struct page_io* _pio;
@@ -157,9 +168,9 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             _pio = pio_1;
         }
         imgr->nb_pending_io++;
-        spdk_blob_io_read(blob,imgr->channel,
-                          buf,start_page,nb_pages-1,
-                          _default_page_io_complete_cb,_pio);
+        _read_pages(blob,imgr->io_unit_size,imgr->channel,
+                    buf,start_page,nb_pages-1,
+                    _default_page_io_complete_cb,_pio);
     }
 }
 
@@ -188,9 +199,9 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->read_hash.page_hash,(uint8_t*)&pio->key,sizeof(key_prefix),pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        spdk_blob_io_read(blob,imgr->channel,
-                          buf,start_page,1,
-                          _default_page_io_complete_cb,pio);
+        _read_pages(blob,imgr->io_unit_size,imgr->channel,
+                    buf,start_page,1,
+                    _default_page_io_complete_cb,pio);
     }
 }
 

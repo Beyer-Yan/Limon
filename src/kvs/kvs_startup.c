@@ -26,6 +26,8 @@ struct kvs_start_ctx{
     spdk_blob_id super_blob_id;
 	struct spdk_blob *super_blob;
 	uint64_t io_unit_size;
+    uint64_t bs_page_size;
+    uint64_t io_unit_per_page;
 	int rc;
 
     struct kvs_start_opts *opts;
@@ -304,8 +306,9 @@ _blob_read_super_page_complete(void* ctx, int bserrno){
     assert(kctx->sl!=NULL);
 
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
+    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_page;
 
-    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_read_all_super_pages_complete,kctx);
+    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_read_all_super_pages_complete,kctx);
 }
 
 static void
@@ -322,11 +325,13 @@ _kvs_start_super_open_complete(void*ctx, struct spdk_blob *blob, int bserrno){
     }
     kctx->super_blob = blob;
     kctx->channel = spdk_get_io_channel(kctx->bs);
-    kctx->sl = spdk_malloc(kctx->io_unit_size, 0x1000, NULL,
+    kctx->sl = spdk_malloc(kctx->bs_page_size, 0x1000, NULL,
 					SPDK_ENV_LCORE_ID_ANY, SPDK_MALLOC_DMA);
     assert(kctx->sl!=NULL);
 
-    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,1,_blob_read_super_page_complete,kctx);
+    //read one page from the super.
+    uint64_t nb_blocks = 1*kctx->io_unit_per_page;
+    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_read_super_page_complete,kctx);
 }
 
 static void
@@ -353,17 +358,24 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
 
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(bs);
     if(io_unit_size!=KVS_PAGE_SIZE){
-        SPDK_ERRLOG("Not a valid-formated kvs!!\n");
-        SPDK_ERRLOG("Supported unit size: %d. Yours:%" PRIu64 "\n",KVS_PAGE_SIZE,io_unit_size);
-        spdk_app_stop(-1);
-		return;
+        SPDK_WARNLOG("IO unit size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
     }
 
     struct kvs_start_ctx* kctx = malloc(sizeof(struct kvs_start_ctx));
     kctx->bs = bs;
     kctx->opts = ctx;
-
     kctx->io_unit_size = io_unit_size;
+
+    uint64_t bs_page_size = spdk_bs_get_page_size(kctx->bs);
+    if(bs_page_size!=KVS_PAGE_SIZE){
+        SPDK_ERRLOG("Blobstore page size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
+        spdk_app_stop(-1);
+        return;
+    }
+
+    kctx->bs_page_size = bs_page_size;
+    kctx->io_unit_per_page = bs_page_size/io_unit_size;
+    assert(kctx->bs_page_size%kctx->io_unit_size==0);
     
     spdk_bs_get_super(bs,_kvs_start_get_super_complete,kctx);
 }
@@ -383,10 +395,9 @@ _kvs_start(void* ctx){
 
     uint64_t block_size = spdk_bdev_get_block_size(bdev);
     if(block_size!=KVS_PAGE_SIZE){
-        SPDK_ERRLOG("Device is not supported for kvs!!\n");
-        SPDK_ERRLOG("Supported page size of kvs: %d. Yours:%" PRIu64 "\n",KVS_PAGE_SIZE,block_size);
-        spdk_app_stop(-1);
-		return;
+        SPDK_WARNLOG("Block size is not 4KB!! Yours:%u\n",block_size);
+        //spdk_app_stop(-1);
+		//return;
     }
 
 	bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);

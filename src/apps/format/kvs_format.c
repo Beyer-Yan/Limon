@@ -60,6 +60,8 @@ struct kvs_format_ctx{
     spdk_blob_id super_blob_id;
 	struct spdk_blob *super_blob;
 	uint64_t io_unit_size;
+    uint64_t bs_page_size;
+    uint64_t io_unit_per_page;
     uint32_t nb_init_nodes_per_slab;
 	int rc;
 
@@ -225,7 +227,8 @@ _slab_iter_do_op(struct slab_layout* slab,int op_type, struct _blob_iter *iter){
         case KVS_OP_ZERO:{
             uint32_t chunks = iter->kctx->nb_init_nodes_per_slab*iter->kctx->sl->nb_chunks_per_reclaim_node;
             uint32_t nb_pages = chunks * iter->kctx->sl->nb_pages_per_chunk;
-            spdk_blob_io_write_zeroes(slab->resv,iter->kctx->channel,0,nb_pages,_slab_iter_foreach_zero_cb,iter);
+            uint64_t nb_blocks = nb_pages*iter->kctx->io_unit_per_page;
+            spdk_blob_io_write_zeroes(slab->resv,iter->kctx->channel,0,nb_blocks,_slab_iter_foreach_zero_cb,iter);
             break;
         }
         case KVS_OP_CLOSE:{
@@ -364,8 +367,9 @@ _blob_dump_read_super_page_complete(void* ctx, int bserrno){
     assert(kctx->sl!=NULL);
 
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
+    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_page;
 
-    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_blob_dump_super_complete,kctx);
+    spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_dump_super_complete,kctx);
 }
 
 static void
@@ -377,11 +381,14 @@ _kvs_dump_super_complete(void*ctx, struct spdk_blob *blob, int bserrno){
     }
     kctx->super_blob = blob;
     kctx->channel = spdk_get_io_channel(kctx->bs);
-    kctx->sl = spdk_malloc(kctx->io_unit_size, 0x1000, NULL,
+    kctx->sl = spdk_malloc(kctx->bs_page_size, 0x1000, NULL,
 					SPDK_ENV_LCORE_ID_ANY, SPDK_MALLOC_DMA);
     assert(kctx->sl!=NULL);
 
-    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,1,_blob_dump_read_super_page_complete,kctx);
+    //read one page from the start
+    uint64_t nb_blocks = 1*kctx->io_unit_per_page;
+
+    spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_dump_read_super_page_complete,kctx);
 }
 
 static void
@@ -408,6 +415,12 @@ _kvs_dump_load_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     kctx->devname = ctx;
     kctx->sl = NULL;
     kctx->io_unit_size = spdk_bs_get_io_unit_size(bs);
+    kctx->bs_page_size = spdk_bs_get_page_size(bs);
+
+    assert(kctx->bs_page_size%kctx->io_unit_size==0);
+    assert(kctx->bs_page_size==KVS_PAGE_SIZE);
+
+    kctx->io_unit_per_page = kctx->bs_page_size/kctx->io_unit_size;
     
     spdk_bs_get_super(bs,_kvs_dump_get_super_complete,kctx);
 }
@@ -482,7 +495,8 @@ _super_write_complete(void *ctx, int bserrno){
 static void
 _do_super_write(struct kvs_format_ctx *kctx){
     uint32_t nb_pages = KV_ALIGN(kctx->super_size,0x1000u)/0x1000u;
-    spdk_blob_io_write(kctx->super_blob,kctx->channel,kctx->sl,0,nb_pages,_super_write_complete,kctx);
+    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_page;
+    spdk_blob_io_write(kctx->super_blob,kctx->channel,kctx->sl,0,nb_blocks,_super_write_complete,kctx);
 }
 
 static void
@@ -595,12 +609,22 @@ bs_init_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
 
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(kctx->bs);
     if(io_unit_size!=KVS_PAGE_SIZE){
-        SPDK_ERRLOG("IO unit size not supported!!\n");
-        SPDK_ERRLOG("Supported unit size: %d. Yours:%" PRIu64 "\n",KVS_PAGE_SIZE,io_unit_size);
-        spdk_app_stop(-1);
-		return;
+        SPDK_WARNLOG("IO unit size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
+        //spdk_app_stop(-1);
+		//return;
     }
     kctx->io_unit_size = io_unit_size;
+
+    uint64_t bs_page_size = spdk_bs_get_page_size(kctx->bs);
+    if(bs_page_size!=KVS_PAGE_SIZE){
+        SPDK_ERRLOG("Blobstore page size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
+        spdk_app_stop(-1);
+        return;
+    }
+    kctx->bs_page_size = bs_page_size;
+    kctx->io_unit_per_page = bs_page_size/io_unit_size;
+
+    assert(kctx->bs_page_size%kctx->io_unit_size==0);
 
 	_create_super_blob(kctx);
 }
@@ -657,10 +681,9 @@ _kvs_create(void*ctx){
 
     uint32_t block_size = spdk_bdev_get_block_size(bdev);
     if(block_size!=KVS_PAGE_SIZE){
-        SPDK_ERRLOG("Page size not supported!!\n");
-        SPDK_ERRLOG("Supported page size: %u. Yours:%u\n",KVS_PAGE_SIZE,block_size);
-        spdk_app_stop(-1);
-		return;
+        SPDK_WARNLOG("Block size is not 4KB!! Yours:%u\n",block_size);
+        //spdk_app_stop(-1);
+		//return;
     }
 
 	bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
@@ -670,7 +693,7 @@ _kvs_create(void*ctx){
 		return;
 	}
 
-    spdk_bs_opts_init(&bs_opts);
+    spdk_bs_opts_init(&bs_opts,sizeof(bs_opts));
     memcpy(bs_opts.bstype.bstype,_g_kvs_name,strlen(_g_kvs_name));
     bs_opts.cluster_sz = kctx->sl->nb_pages_per_chunk * KVS_PAGE_SIZE;
 
@@ -763,7 +786,7 @@ main(int argc, char **argv){
 	int rc = 0;
 	struct kvs_format_ctx *kctx = NULL;
 
-	spdk_app_opts_init(&opts);
+	spdk_app_opts_init(&opts, sizeof(opts));
 
 	opts.name = "kvs_format";
 	if ((rc = spdk_app_parse_args(argc, argv, &opts, _g_kvs_getopt_string, _g_app_long_cmdline_options,

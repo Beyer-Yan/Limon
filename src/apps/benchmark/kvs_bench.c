@@ -59,9 +59,9 @@ _do_start_benchmark(void*ctx){
 	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
 		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
-			w.nb_requests = 5000000LU; 
+			w.nb_requests = 100000LU; 
 		} else {
-			w.nb_requests = 80000000LU;
+			w.nb_requests = 1000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		histogram_reset();
@@ -89,10 +89,10 @@ static void
 _kvs_opts_init(struct kvs_start_opts *opts){
     opts->devname = "Nvme0n1";
     opts->kvs_name = "kvs_bench";
-    opts->max_cache_chunks = 10000;
+    opts->max_cache_chunks = 3000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
-    opts->nb_works = 2;
+    opts->nb_works = 1;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = _kvs_bench_start;

@@ -73,6 +73,8 @@ struct iomgr{
     uint32_t max_pending_io; 
     uint32_t nb_pending_io;
 
+    uint64_t io_unit_size;
+
     TAILQ_HEAD(,cache_io) pending_read_head;
     TAILQ_HEAD(,cache_io) pending_write_head;
 

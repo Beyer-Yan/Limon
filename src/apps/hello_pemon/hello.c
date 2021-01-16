@@ -220,7 +220,7 @@ main(int argc, char **argv){
     struct spdk_app_opts opts = {0};
 	int rc = 0;
 
-	spdk_app_opts_init(&opts);
+	spdk_app_opts_init(&opts,sizeof(opts));
 
 	opts.name = "hello_pemon";
 	if ((rc = spdk_app_parse_args(argc, argv, &opts, NULL, NULL,
