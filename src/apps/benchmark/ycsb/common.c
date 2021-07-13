@@ -52,7 +52,6 @@ struct kv_item* create_item_from_item(struct kv_item *item) {
    return new_item;
 }
 
-/* We also store an item in the database that says if the database has been populated for YCSB, PRODUCTION, or another workload. */
 struct kv_item *create_workload_item(struct workload *w) {
    const uint64_t key = (uint64_t)-10;
    const char *name = w->api->api_name(); // YCSB or PRODUCTION?
@@ -111,7 +110,7 @@ static void
 _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *workload_item = ctx;
    if(kverrno==-KV_EITEM_NOT_EXIST){
-      printf("Running a benchmark on a pre-populated DB, but couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
+      printf("Couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
    }
    if(!kverrno){
       if(!memcmp(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
@@ -186,17 +185,14 @@ void repopulate_db(struct workload *w) {
    }
 
    if(nb_items != 0 && nb_items != w->nb_items_in_db) {
-      /*
-       * Because we shuffle elements, we don't really want to start with a small database and have all the higher order elements at the end, that would be cheating.
-       * Plus, we insert database items at random positions (see shuffle below) and I am too lazy to implement the logic of doing the shuffle minus existing elements.
-       */
+      //need reshuffling
       printf("The database contains %lu elements but the benchmark is configured to use %lu. Please delete the DB first.\n", nb_items, w->nb_items_in_db);
       exit(-1);
    }
 
    uint64_t *pos = NULL;
 
-   printf("Initializing big array to insert elements in random order... This might take a while. (Feel free to comment but then the database will be sorted and scans much faster -- unfair vs other systems)\n");
+   printf("Initializing big array to insert elements in random order to make the benchmark fair vs other systems)\n");
    pos = malloc(w->nb_items_in_db * sizeof(*pos));
    for(uint64_t i = 0; i < w->nb_items_in_db; i++)
       pos[i] = i;
@@ -266,7 +262,7 @@ void run_workload(struct workload *w, bench_t b) {
    pthread_barrier_init(&barrier, NULL, w->nb_load_injectors);
 
    if(!w->api->handles(b)){
-      printf("The database has not been configured to run this benchmark! (Are you trying to run a production benchmark on a database configured for YCSB?)"); 
+      printf("The database has not been configured to run this benchmark!"); 
       exit(-1);
       return;
    }

@@ -13,9 +13,9 @@
 static void 
 _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal *req){
 
+    memset(&req->pctx,0,sizeof(req->pctx));
     req->pctx.wctx = wctx;
-    req->pctx.slab = NULL;
-    req->pctx.old_slab = NULL;
+    *(uint64_t*)&req->pctx.new_entry = 0;
 
     switch(req->op_code){
         case GET:
@@ -155,15 +155,24 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
     //Submit a slab shrinking request
     req->slab = slab;
     req->is_fault = false;
-    req->node = rbtree_last(slab->reclaim.total_tree);
 
+    //Get the node with the maximal fragmentation
+    uint32_t i = 0, maxVal=0, idx=0;
+    for(;i<slab->reclaim.nb_reclaim_nodes;i++){
+        if(slab->reclaim.node_array[i]->nb_free_slots>maxVal){
+            maxVal = slab->reclaim.node_array[i]->nb_free_slots;
+            idx = i;
+        }
+    }
+
+    req->node = slab->reclaim.node_array[idx];
     req->nb_processed = 0;
     req->nb_faults = 0;
     req->start_slot = slab_reclaim_get_start_slot(&slab->reclaim,req->node);
     req->cur_slot = req->start_slot;
-    req->last_slot = slab->reclaim.nb_total_slots-1;
+    req->last_slot = req->start_slot + slab->reclaim.nb_slots_per_chunk * slab->reclaim.nb_chunks_per_node - 1;
 
-    //The last reclaim node is not allowed to performing allocating.
+    //The node is not allowed to performing allocating.
     //If it is not in the free_node_tree, the deleting will no nothing.
     rbtree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
 }
@@ -212,7 +221,7 @@ _get_free_req_buffer(struct worker_context* wctx){
 
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
-    uint64_t res;
+    //uint64_t res;
     
     while(spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL)!=1 ){
         spdk_pause();

@@ -8,29 +8,12 @@
 #include "spdk/env.h"
 
 //All slab sizes are 4-bytes-aligment.
-static const uint32_t _g_slab_chunk_pages = 135;
+static const uint32_t _g_slab_chunk_pages = 16;
 static uint32_t slab_sizes[]={
-    32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, 144, 196, 224, 256, 272, 292, 316, 344, 372, 408, 456,
-    512, 584, 684,
-    768,864,960,1024,1152,1280,1440,1536,1728,1920,2048,2304,2560,2880,3072,3456,3840,4096,4320,4608,5120,
-    5760,6144,6912,7680,8640,9216,10240
+    32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, /* wrapped in one page */
+    128, 160, 192, 224, 256, 320, 384, 480, 576, 704, 864, 1056, 1312, 1632, 2016, 2496, 3104, 3872, 4832, 6016, 7520, 9376, 11712, 14624
 };
 
-static const uint32_t _g_slab_chunk_pages_old = 252;
-static uint32_t slab_sizes_old[] = { 32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, 144, 196, 224, 
-                     256, 272, 292, 316, 344, 372, 408, 456,512, 584, 684, 
-                     768,864,960, 1024, 1364, 2048,4096,
-                     
-                     4608,5376,6144,
-                     7168,8192,9216,10752,12288,14336,16384,18432,21504,24576,28672,32256,36864,
-                     43008,49152,57344,64512,73728,77824, 86016, 
-                     
-                     94208, 102400, 110592, 122880, 
-                     135168, 147456, 163840, 180224,196608, 217088, 237568, 262144, 290816, 
-                     319488, 352256, 389120, 430080, 475136, 524288, 581632, 643072, 712704, 
-                     790528, 876544, 970752, 1077248, 1196032, 1327104, 1474560, 1638400, 1818624,
-                     2019328, 2240512, 2486272, 2760704, 3063808, 3403776, 3780608, 4194304
-};
 
 uint32_t 
 slab_find_slab(uint32_t item_size){
@@ -162,57 +145,67 @@ _slab_blob_resize(void* ctx){
     struct spdk_blob *blob = rctx->slab->blob;
     uint64_t new_size = rctx->new_size;
     spdk_blob_resize(blob,new_size,_slab_blob_resize_complete,rctx);
-    uint32_t old_size = rctx->slab->reclaim.nb_reclaim_nodes * rctx->slab->reclaim.nb_chunks_per_node;
-    SPDK_NOTICELOG("slab %p resized, slab size:%u old size:%u,new size:%lu\n",rctx->slab,rctx->slab->slab_size,old_size,rctx->new_size);
+    //uint32_t old_size = rctx->slab->reclaim.nb_reclaim_nodes * rctx->slab->reclaim.nb_chunks_per_node;
+    //SPDK_NOTICELOG("slab %p resized, slab size:%u old size:%u,new size:%lu\n",rctx->slab,rctx->slab->slab_size,old_size,rctx->new_size);
 }
 
-static void
-_slab_truncate_resize_complete(void*ctx){
-    struct resize_ctx *rctx = ctx;
-    rctx->user_truncate_cb(rctx->user_ctx,rctx->kverrno ? -KV_EIO : -KV_ESUCCESS);
-    free(rctx);
-}
+// static void
+// _slab_truncate_resize_complete(void*ctx){
+//     struct resize_ctx *rctx = ctx;
+//     rctx->user_truncate_cb(rctx->user_ctx,rctx->kverrno ? -KV_EIO : -KV_ESUCCESS);
+//     free(rctx);
+// }
 
-static void
-_truncate_unmap_complete(void*ctx, int bserrno){
-    struct resize_ctx *rctx = ctx;
-    if(bserrno){
-        //Unmap failed.
-        rctx->user_truncate_cb(rctx->user_ctx,KV_EIO);
-        free(rctx);
-        return;
-    }
-    rctx->resize_cb = _slab_truncate_resize_complete;
-    rctx->thread  = spdk_get_thread();
+// static void
+// _truncate_unmap_complete(void*ctx, int bserrno){
+//     struct resize_ctx *rctx = ctx;
+//     if(bserrno){
+//         //Unmap failed.
+//         rctx->user_truncate_cb(rctx->user_ctx,KV_EIO);
+//         free(rctx);
+//         return;
+//     }
+//     rctx->resize_cb = _slab_truncate_resize_complete;
+//     rctx->thread  = spdk_get_thread();
 
-    spdk_thread_send_msg(rctx->thread,_slab_blob_resize,rctx);
-}
+//     spdk_thread_send_msg(rctx->thread,_slab_blob_resize,rctx);
+// }
 
-void slab_truncate_async(struct iomgr* imgr,
+void slab_release_node_async(struct iomgr* imgr,
                        struct slab* slab,
-                       uint64_t nb_nodes,
+                       struct reclaim_node* node,
                        void (*cb)(void* ctx, int kverrno),
                        void* ctx){
     
-    uint64_t old_size = slab->reclaim.nb_reclaim_nodes * slab->reclaim.nb_chunks_per_node;
-    uint64_t new_size = old_size - nb_nodes*slab->reclaim.nb_chunks_per_node;
+    //Only the empty node is allowed to release
+    uint64_t slots_perf_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
+    assert(node->nb_free_slots == slots_perf_node);
 
-    struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));
-    if(!rctx){
-        cb(ctx,-KV_EMEM);
-        return;
-    }
+    //@TODO to be implemented
+    uint64_t start_chunk = slab->reclaim.nb_chunks_per_node * node->id;
+    uint64_t nb_chunks = slab->reclaim.nb_chunks_per_node;
+    (void)nb_chunks;
+    //spdk_blob_punch_hole(slab->blob,imgr->channel,start_chunk,nb_chunks,_punch_hole_complete,ctx);
 
-    rctx->slab = slab;
-    rctx->new_size = new_size;
-    rctx->user_truncate_cb = cb;
-    rctx->user_ctx = ctx;
-    rctx->kverrno = 0;
+    // uint64_t old_size = slab->reclaim.nb_reclaim_nodes * slab->reclaim.nb_chunks_per_node;
+    // uint64_t new_size = old_size - nb_nodes*slab->reclaim.nb_chunks_per_node;
 
-    //Tell the disk driver that the data can be deserted.
-    uint64_t io_unit_offset = new_size*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
-    uint64_t io_unit_length = nb_nodes*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
-    spdk_blob_io_unmap(slab->blob,imgr->channel,io_unit_offset,io_unit_length,_truncate_unmap_complete,rctx);
+    // struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));
+    // if(!rctx){
+    //     cb(ctx,-KV_EMEM);
+    //     return;
+    // }
+
+    // rctx->slab = slab;
+    // rctx->new_size = new_size;
+    // rctx->user_truncate_cb = cb;
+    // rctx->user_ctx = ctx;
+    // rctx->kverrno = 0;
+
+    // //Tell the disk driver that the data can be deserted.
+    // uint64_t io_unit_offset = new_size*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
+    // uint64_t io_unit_length = nb_nodes*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
+    // spdk_blob_io_unmap(slab->blob,imgr->channel,io_unit_offset,io_unit_length,_truncate_unmap_complete,rctx);
 }
 
 static inline uint64_t 
@@ -267,13 +260,14 @@ _slab_blob_resize_common_cb(void*ctx){
                 break;
             }
         }
-        if(i!=nb_nodes){
-            //Fail to allocate enough nodes memory.
-            rctx->kverrno = -KV_EMEM;
-            for(;i>0;i--){
-                free(nodes[i-1]);
-            }
-        }
+        assert(i==nb_nodes && "No enough memory");
+        // if(i!=nb_nodes){
+        //     //Fail to allocate enough nodes memory.
+        //     rctx->kverrno = -KV_EMEM;
+        //     for(;i>0;i--){
+        //         free(nodes[i-1]);
+        //     }
+        // }
     }
 
     if(!rctx->kverrno){
@@ -282,11 +276,20 @@ _slab_blob_resize_common_cb(void*ctx){
             slab->reclaim.nb_total_slots += nodes[i]->nb_free_slots;
             slab->reclaim.nb_free_slots += nodes[i]->nb_free_slots;
             slab->reclaim.nb_reclaim_nodes++;
-            rbtree_insert(slab->reclaim.total_tree,nodes[i]->id,nodes[i],NULL);
             rbtree_insert(slab->reclaim.free_node_tree,nodes[i]->id,nodes[i],NULL);
         }
     }
-    
+
+    //in case of resizing
+    if(slab->reclaim.nb_reclaim_nodes == slab->reclaim.cap){
+        slab->reclaim.node_array = realloc(slab->reclaim.node_array,(slab->reclaim.cap*2)*sizeof(void*));
+        assert(slab->reclaim.node_array);
+        slab->reclaim.cap *= 2;
+    }
+    for(uint32_t i=0; i<nb_nodes;i++){
+        slab->reclaim.node_array[slab->reclaim.nb_reclaim_nodes++] = nodes[i];
+    }
+
     //index of the node that have free slots.
     uint32_t i = 0;
     struct resize_ctx* req,*tmp = NULL;
@@ -332,6 +335,10 @@ void slab_request_slot_async(struct iomgr* imgr,
     //The nodes number that should be resized.
     uint32_t nb_nodes = imgr->max_pending_io/nb_slots_per_node + 
                         !!(imgr->max_pending_io%nb_slots_per_node);
+    
+    //align to 4MB
+    const uint64_t min_alloc_nodes = (4*1024*1024)/(slab->slab_size * nb_slots_per_node);
+    nb_nodes = nb_nodes < min_alloc_nodes ? min_alloc_nodes : nb_nodes;
 
     if(spdk_bs_free_cluster_count(imgr->target) < nb_nodes){
         //No enough space for the disk.

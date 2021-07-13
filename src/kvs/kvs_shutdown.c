@@ -11,12 +11,6 @@ _kvs_shutdown_errno(int bserrno){
 }
 
 static void
-_free_reclaim_node(rbtree_node node){
-    struct reclaim_node *rnode =  node->value;
-    free(rnode);
-}
-
-static void
 _kvs_shutdown_bs_unload_complete(void*ctx ,int bserrno){
     if(bserrno){
         SPDK_ERRLOG("Blobstore unload failed\n");
@@ -42,8 +36,11 @@ _kvs_shutdown_super_blob_close_complete(void*ctx, int bserrno){
         for(j=0;j<g_kvs->shards[i].nb_slabs;j++){
             struct slab *slab = &g_kvs->shards[i].slab_set[j];
             //free the memory all the reclaim nodes
-            rbtree_apply(slab->reclaim.total_tree,_free_reclaim_node);
-            rbtree_destroy(slab->reclaim.total_tree);
+            assert(slab->reclaim.node_array);
+            for(uint32_t i=0;i<slab->reclaim.nb_reclaim_nodes;i++){
+                slab_reclaim_free_node(&slab->reclaim,slab->reclaim.node_array[i]);
+            }
+            free(slab->reclaim.node_array);
             rbtree_destroy(slab->reclaim.free_node_tree);
         }
     }

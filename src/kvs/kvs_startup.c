@@ -153,6 +153,11 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     for(;i<kctx->opts->nb_works;i++){
         worker_opts.reclaim_shard_start_id = i*worker_opts.nb_reclaim_shards;
         worker_opts.core_id = i+1;
+        //The last worker may have less shards.
+        if(i==kctx->opts->nb_works-1 ){
+            worker_opts.nb_reclaim_shards = kvs->nb_shards - i*worker_opts.nb_reclaim_shards;
+        }
+
         wctx[i] = worker_alloc(&worker_opts);
     }
     
@@ -219,8 +224,11 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
         assert(slab_chunks%slab_base[i].reclaim.nb_chunks_per_node==0);
         slab_base[i].reclaim.nb_reclaim_nodes = slab_chunks/slab_base[i].reclaim.nb_chunks_per_node;
         slab_base[i].reclaim.nb_total_slots = slab_base[i].reclaim.nb_slots_per_chunk * slab_chunks;
-        slab_base[i].reclaim.total_tree = rbtree_create();
         slab_base[i].reclaim.free_node_tree = rbtree_create();
+
+        ///Will be inited in each worker.
+        slab_base[i].reclaim.cap = slab_base[i].reclaim.nb_reclaim_nodes;
+        slab_base[i].reclaim.node_array = NULL;
 
         TAILQ_INIT(&slab_base[i].resize_head);
     }
@@ -395,7 +403,7 @@ _kvs_start(void* ctx){
 
     uint64_t block_size = spdk_bdev_get_block_size(bdev);
     if(block_size!=KVS_PAGE_SIZE){
-        SPDK_WARNLOG("Block size is not 4KB!! Yours:%u\n",block_size);
+        SPDK_WARNLOG("Block size is not 4KB!! Yours:%lu\n",block_size);
         //spdk_app_stop(-1);
 		//return;
     }
@@ -414,38 +422,29 @@ _kvs_start(void* ctx){
 
 static const char*
 _get_cpu_mask(uint32_t nb_works){
-    const char* mask = NULL;
+    char* mask = NULL;
     
-    switch(nb_works){
-        case 1:
-            mask =  "0x3";
-            break;
-        case 2:
-            mask = "0x7";
-            break;
-        case 4:
-            mask = "0x1f";
-            break;
-        case 8:
-            mask = "0x1ff";
-            break;
-        case 16:
-            mask = "0x1ffff";
-            break;
-        case 32:
-            mask = "0x1ffffffff";
-            break;
-        case 64:
-            mask = "0x1ffffffffffffffff";
-            break;
-        case 128:
-            mask = "0x1ffffffffffffffffffffffffffffffff";
-            break;
-        default:
-            mask = NULL;
-            break;
+    //number of 'f'
+    int x = nb_works/4;
+    int y = nb_works%4;
+
+    static const char table[] = {'0','1','3','7'};
+
+    //x for 'f', 1 for '1-f', plus 2 chars for '0x' and 1 char for '\0'
+    int nb_ch = x+1+2+1;
+    mask = malloc(nb_ch);
+
+    int i = 0;
+    mask[i] = '\0';
+    for(i=1;i<=x;i++){
+        mask[i] = 'f';
     }
-    return mask;
+    mask[i] = table[y];
+
+    mask[i+1] = 'x';
+    mask[i+2] = '0';
+    
+    return (const char*)mask;
 }
 
 static void

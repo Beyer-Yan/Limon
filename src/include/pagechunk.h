@@ -29,7 +29,7 @@ struct chunk_desc {
     uint32_t id;
     uint32_t nb_pages;
     //Variables below are for fast memory access. Otherwise, I have to get 
-    //the infomation by derefering the slab pointer.
+    //the information by derefering the slab pointer.
     uint32_t slab_size;
     uint32_t nb_slots;
     uint32_t nb_free_slots;
@@ -66,7 +66,9 @@ static inline void pagechunk_get_hints(struct slab*slab, uint64_t slot_idx,
     uint32_t chunk_offset = slot_idx/r->nb_slots_per_chunk%r->nb_chunks_per_node;
     uint64_t offset       = slot_idx%r->nb_slots_per_chunk;
 
-    *node_out    = rbtree_lookup(r->total_tree,node_id);
+    assert(node_id<r->nb_reclaim_nodes);
+
+    *node_out    = r->node_array[node_id];
     *desc_out    = (*node_out)->desc_array[chunk_offset];
     *slot_offset = offset;
 }

@@ -6,8 +6,10 @@
 static inline void
 _resource_release(struct kv_request_internal *req,struct index_entry* entry){
     struct worker_context *wctx = req->pctx.wctx;
+    struct process_ctx *pctx = &(req->pctx);
+
     pool_release(wctx->kv_request_internal_pool,req);
-    pagechunk_mem_lower(entry->chunk_desc);
+    pagechunk_mem_lower(pctx->desc);
     entry->writing = 0;
 }
 
@@ -20,8 +22,7 @@ _process_rmw_write_out_place_store_data_cb(void*ctx, int kverrno){
     struct index_entry* entry       = pctx->entry;
     struct index_entry* new_entry   = &pctx->new_entry;
     
-    pagechunk_mem_lower(new_entry->chunk_desc);
-    _resource_release(req,entry);
+    pagechunk_mem_lower(pctx->new_desc);
 
     if(kverrno){
         //Store data error, which may be caused by IO error.
@@ -32,11 +33,11 @@ _process_rmw_write_out_place_store_data_cb(void*ctx, int kverrno){
     else{
         slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
         //Update the entry info with new_entry.
-        entry->chunk_desc = new_entry->chunk_desc;
         entry->slot_idx = new_entry->slot_idx;
     }
 
     req->cb_fn(req->ctx,NULL, kverrno);
+    _resource_release(req,entry);
 }
 
 static void
@@ -50,7 +51,7 @@ _process_rmw_write_out_place_load_data_cb(void*ctx, int kverrno){
 
     if(kverrno){
         //Load data error, which may be caused by IO error.
-        pagechunk_mem_lower(new_entry->chunk_desc);
+        pagechunk_mem_lower(pctx->new_desc);
         _resource_release(req,entry);
         //I have to free the allocated slot
         slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
@@ -61,27 +62,27 @@ _process_rmw_write_out_place_load_data_cb(void*ctx, int kverrno){
 
     //Now I load the item successfully. Next, I will perform writing.
     //Get the modified item.
-    struct kv_item *item = pagechunk_get_item(wctx->pmgr,entry->chunk_desc,entry->slot_idx);
+    struct kv_item *item = pagechunk_get_item(wctx->pmgr,pctx->desc,entry->slot_idx);
 
     //Put the modified item into another place.
-    pagechunk_put_item(wctx->pmgr,new_entry->chunk_desc,new_entry->slot_idx,item);
+    pagechunk_put_item(wctx->pmgr,pctx->new_desc,new_entry->slot_idx,item);
     pagechunk_store_item_async( wctx->pmgr,
                                 wctx->imgr,
-                                new_entry->chunk_desc,
+                                pctx->new_desc,
                                 new_entry->slot_idx,
                                 _process_rmw_write_out_place_store_data_cb, 
                                 req);
 }
 
 static void
-_process_rmw_write_out_place_pagecchunk_cb(void*ctx, int kverrno){
+_process_rmw_write_out_place_pagechunk_cb(void*ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
     // Now, load the data from disk for the newly allocated page chunk memory.
     assert(!kverrno);
     pagechunk_load_item_share_async( pctx->wctx->pmgr, 
                                pctx->wctx->imgr, 
-                               pctx->new_entry.chunk_desc,
+                               pctx->new_desc,
                                pctx->new_entry.slot_idx,
                                _process_rmw_write_out_place_load_data_cb,
                                req);
@@ -91,7 +92,6 @@ static void
 _process_rmw_write_out_place_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &(req->pctx);
-
     struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
     
@@ -106,13 +106,14 @@ _process_rmw_write_out_place_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
 
     assert(new_desc!=NULL);
     pagechunk_mem_lift(new_desc);
+
+    pctx->new_desc = new_desc;
     pctx->new_entry.slot_idx = slot_idx;
-    pctx->new_entry.chunk_desc = new_desc;
 
     if(!new_desc->chunk_mem){
         //Page chunk is evicted. Now request a new page chunk memory
         pagechunk_request_one_async(wctx->pmgr,new_desc,
-                                    _process_rmw_write_out_place_pagecchunk_cb,req);
+                                    _process_rmw_write_out_place_pagechunk_cb,req);
     }else if(pagechunk_is_cached(new_desc,slot_idx)){
         //I needn't load the item from disk, just write it.
         _process_rmw_write_out_place_load_data_cb(req,-KV_ESUCCESS);
@@ -130,13 +131,8 @@ _process_rmw_write_out_place_slot_cb(uint64_t slot_idx, void* ctx, int kverrno){
 
 static void
 _process_rmw_write_out_place(struct kv_request_internal *req){
-    struct process_ctx *pctx = &req->pctx;
-
-    struct worker_context *wctx     = pctx->wctx;
-    struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = entry->chunk_desc;   
-
-    pctx->slab = desc->slab;
+    struct process_ctx *pctx    = &req->pctx;
+    struct worker_context *wctx = pctx->wctx;
 
     slab_request_slot_async(wctx->imgr,pctx->slab,_process_rmw_write_out_place_slot_cb,req);
 }
@@ -145,16 +141,13 @@ static void
 _process_rmw_write_in_place_store_cb(void* ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &req->pctx;
-
-    struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = entry->chunk_desc;
 
     _resource_release(req,entry);
 
     if(kverrno){
         //Error happen, just rollback
-        //@todo Just invalidate the chunk cache ??
+        //@TODO Just invalidate the chunk cache ??
     }
 
     req->cb_fn(req->ctx, NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
@@ -166,7 +159,7 @@ _process_rmw_write_in_place(struct kv_request_internal *req){
 
     pagechunk_store_item_async(pctx->wctx->pmgr,
                                pctx->wctx->imgr,
-                               pctx->entry->chunk_desc,
+                               pctx->desc,
                                pctx->entry->slot_idx,
                                _process_rmw_write_in_place_store_cb,
                                req);
@@ -179,7 +172,7 @@ _process_rmw_get_load_data_cb(void* ctx, int kverrno){
 
     struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = entry->chunk_desc;
+    struct chunk_desc *desc         = pctx->desc;
 
     if(kverrno){
         //Error hits when load data from disk
@@ -191,7 +184,7 @@ _process_rmw_get_load_data_cb(void* ctx, int kverrno){
         assert(pagechunk_is_cached(desc,entry->slot_idx));
         //Now we load the data into the page chunk cache. Just read it out happily.
         struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,entry->slot_idx);
-        int size = item_get_size(item);
+        uint32_t size = item_get_size(item);
         int res  = req->m_fn(item);
 
         if(item_get_size(item)!=size){
@@ -229,7 +222,7 @@ _process_rmw_get_pagechunk_cb(void* ctx, int kverrno){
 
     pagechunk_load_item_async(pctx->wctx->pmgr,
                               pctx->wctx->imgr, 
-                              pctx->entry->chunk_desc,
+                              pctx->desc,
                               pctx->entry->slot_idx,
                               _process_rmw_get_load_data_cb,
                               req);
@@ -260,8 +253,10 @@ void worker_process_rmw(struct kv_request_internal *req){
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
         return;
     }
-    struct chunk_desc *desc = entry->chunk_desc;
 
+    req->pctx.slab = &(wctx->shards[entry->shard].slab_set[entry->slab]);
+    req->pctx.desc = pagechunk_get_desc(req->pctx.slab,entry->slot_idx);
+    struct chunk_desc* desc = req->pctx.desc;
     assert(desc!=NULL);
 
     //It is a read-modify-write request, treat it as a writinng request.

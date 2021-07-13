@@ -45,16 +45,18 @@ void worker_process_delete(struct kv_request_internal *req){
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
         return;
     }
-    struct chunk_desc *desc = entry->chunk_desc;
+
     entry->deleting = 1;
 
+    req->pctx.slab = &(wctx->shards[entry->shard].slab_set[entry->slab]);
+    req->pctx.desc = pagechunk_get_desc(req->pctx.slab,entry->slot_idx);
+    struct chunk_desc* desc = req->pctx.desc;
     assert(desc!=NULL);
 
     //Should I wait for the end of reclaiming ??
     uint64_t slot_idx = entry->slot_idx;
-    struct slab* slab = desc->slab;
-    req->pctx.slab = slab;
+    struct slab* slab = req->pctx.slab;
 
-    slab_free_slot_async(wctx->rmgr,slab,slot_idx,_process_delete_cb,req);
+    slab_free_slot_async(wctx->rmgr,req->pctx.slab,slot_idx,_process_delete_cb,req);
 }
 

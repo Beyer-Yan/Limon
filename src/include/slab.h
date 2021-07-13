@@ -16,10 +16,10 @@
  * it is allowed to storage in multi pages. Items less than 
  * MULTI_PAGE_SLAB_SIZE will alway be put into only one page.
  */
-#define MULTI_PAGE_SLAB_SIZE   768u
-#define CHUNK_SIZE             135u
+#define MULTI_PAGE_SLAB_SIZE   128u
+#define CHUNK_SIZE             16u
 #define KVS_PAGE_SIZE          4096u
-#define MAX_SLAB_SIZE          10*1024u
+#define MAX_SLAB_SIZE          14624u
 
 //In disk layout
 
@@ -48,6 +48,7 @@ struct chunk_desc;
 struct reclaim_mgr;
 
 struct reclaim_node{
+    //start from 0
     uint32_t id;
     uint32_t nb_free_slots;
     struct chunk_desc *desc_array[0];
@@ -63,17 +64,15 @@ struct slab_reclaim{
     uint64_t nb_free_slots;
 
     /**
-     * @brief All the reclaim node are orgnized by ordered treemap. When a slab size is increased,
-     * the new reclaim node will be inserted into the map. When  there are
-     * slots available  in a reclaim node, the node will be inserted in free hash. When a reclaim
-     * node is fully utilized, it will be removed from the free_hash. When a slab is needed to
-     * compact, the last reclaim node will be migrated into other available reclaim node.
-     * The compacted reclaim node will be removed from total_tree and free_node_tree. Lastly, the 
-     * disk space of items from the reclaim node will be freed.
-     * 
+     * @brief All the reclaim node are orgnized by an array. When a slab size is increased,
+     * the new reclaim node will be inserted into the map. When there are
+     * slots available in a reclaim node, the node will be inserted in free_node_tree. When a reclaim
+     * node is fully utilized, it will be removed from the free_node_tree. 
      */
-    rbtree total_tree;
+    //rbtree total_tree;
     rbtree free_node_tree;
+    struct reclaim_node **node_array;
+    uint64_t cap;
 };
 
 //Used when the slab is resized.
@@ -97,14 +96,15 @@ static_assert(sizeof(struct super_layout)==32,"size incorrect");
 static_assert(sizeof(struct reclaim_node)==8,"incorrect size");
 
 /**
- * @brief Get the slot offset of the slot_idx from 0.
+ * @brief Get the slot byte offset in a reclaim node for the slot_idx.
  * 
  * @param slab       The slab.
  * @param slot_idx   The slot index.
- * @return uint32_t  The offset of the slot_idx.
+ * @return uint32_t  The byte offset in a reclaim node for the slot_idx.
  */
-static inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
+static inline uint32_t slab_slot_offset_of_node(struct slab*slab, uint64_t slot_idx){
     uint32_t slab_size = slab->slab_size;
+    uint64_t slots_per_chunk = slab->reclaim.nb_slots_per_chunk;
     if(slab_size<MULTI_PAGE_SLAB_SIZE){
         uint32_t slots_per_page = KVS_PAGE_SIZE/slab_size;
         uint32_t first_page = slot_idx/slots_per_page;
@@ -112,14 +112,17 @@ static inline uint32_t slab_slot_offset(struct slab*slab, uint64_t slot_idx){
         return first_page*KVS_PAGE_SIZE + offset_in_page*slab_size;
     }
     else{
-        return slab_size*slot_idx;
+        uint32_t first_chunk = slot_idx/slots_per_chunk;
+        uint32_t offset_in_chunk = slot_idx%slots_per_chunk;
+        return first_chunk*slab->reclaim.nb_pages_per_chunk*KVS_PAGE_SIZE + offset_in_chunk*slab_size;
     }
 }
 
 static inline struct reclaim_node* slab_get_node(struct slab*slab, uint64_t slot_idx){
     uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
     uint32_t node_idx = slot_idx/nb_slots_per_node;
-    return rbtree_lookup(slab->reclaim.total_tree,node_idx);
+    assert(node_idx<slab->reclaim.nb_reclaim_nodes);
+    return slab->reclaim.node_array[node_idx];
 }
 
 /**
@@ -204,25 +207,40 @@ void slab_create_async(struct iomgr* imgr,
                        void* ctx);
 */
 
+// /**
+//  * @brief Truncate the slab. The unit is mulitple of size of reclaim node. Data
+//  * will not be migrated automatically when the slab is truncated, which means that the user
+//  * shall migrate the data before truncating the slab.
+//  * The minimum truncating size if one reclaim node.
+//  * Attention that the user shall process the page chunk and slab reclaim data. The slab truncating
+//  * only performs disk data truncating.
+//  * 
+//  * @param imgr      The io manager. The actual disk IO is managed by the iomgr.
+//  * @param slab      The slab to be resized
+//  * @param nb_nodes  The number of reclaim nodes to be truncated.
+//  * @param cb        User callback
+//  * @param ctx       Parameter of user callback
+//  */
+// void slab_truncate_async(struct iomgr* imgr,
+//                        struct slab* slab,
+//                        uint64_t nb_nodes,
+//                        void (*cb)(void* ctx, int kverrno),
+//                        void* ctx);
+
 /**
- * @brief Truncate the slab. The unit is mulitple of size of reclaim node. Data
- * will not be migrated automatically when the slab is truncated, which means that the user
- * shall migrate the data before truncating the slab.
- * The minimum truncating size if one reclaim node.
- * Attention that the user shall process the page chunk and slab reclaim data. The slab truncating
- * only performs disk data truncating.
- * 
- * @param imgr      The io manager. The actual disk IO is managed by the iomgr.
- * @param slab      The slab to be resized
- * @param nb_nodes  The number of reclaim nodes to be truncated.
- * @param cb        User callback
- * @param ctx       Parameter of user callback
+ * @brief release the disk space of the given node.
+ * @param imgr  The io manager. The actual disk IO is managed by the iomgr.
+ * @param slab  The slab to be resized
+ * @param node  The relaim node to be released
+ * @param cb             User callback
+ * @param ctx            Parameter of user callback
  */
-void slab_truncate_async(struct iomgr* imgr,
-                       struct slab* slab,
-                       uint64_t nb_nodes,
-                       void (*cb)(void* ctx, int kverrno),
-                       void* ctx);
+void slab_release_node_async(
+                        struct iomgr* imgr,
+                        struct slab* slab,
+                        struct reclaim_node* node,
+                        void (*cb)(void* ctx, int kverrno),
+                        void* ctx);
 
 /**
  * @brief Request an unoccupied slot from the corresponding slab. This may cause slab reszing
@@ -288,7 +306,11 @@ static inline uint64_t slab_reclaim_get_start_slot(struct slab_reclaim* r, struc
  */
 static inline void slab_reclaim_free_node(struct slab_reclaim* r, struct reclaim_node* node){
     assert(node!=NULL);
-    rbtree_delete(r->total_tree,node->id,NULL);
+    if(node->nb_free_slots!=0){
+        rbtree_delete(r->free_node_tree,node->id,NULL);
+    }
+    assert(node->id<r->nb_reclaim_nodes);
+    r->node_array[node->id] = NULL;
     free(node);
 }
 

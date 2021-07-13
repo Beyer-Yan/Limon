@@ -32,11 +32,13 @@ struct index_entry {
     uint64_t getting :1;
     uint64_t writing :1;
     uint64_t deleting:1;
-    uint64_t slot_idx:61;
-    struct chunk_desc * chunk_desc;
+    uint64_t shard   :10;
+    uint64_t slab    :10;
+    uint64_t slot_idx:41;
+    //struct chunk_desc * chunk_desc;
 };
 
-static_assert(sizeof(struct index_entry)==16,"size incorrect");
+static_assert(sizeof(struct index_entry)==8,"size incorrect");
 
 struct mem_index;
 

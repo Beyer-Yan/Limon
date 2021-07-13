@@ -18,6 +18,40 @@
 #include "ycsb/common.h"
 #include "ycsb/histogram.h"
 
+static const char *_g_kvs_getopt_string = "W:D:Q:C:I:N"; 
+
+static struct option _g_app_long_cmdline_options[] = {
+#define WORKERS_OPT_IDX         'W'
+    {"workers",required_argument,NULL,WORKERS_OPT_IDX},
+#define DEVNAME_OPT_IDX         'D'
+    {"devname",required_argument,NULL,DEVNAME_OPT_IDX},
+#define QUEUE_DEPTH_OPT_IDX     'Q'
+    {"queue-depth",required_argument,NULL,QUEUE_DEPTH_OPT_IDX},
+#define CHUNKS_IDX              'C'
+    {"chunks",required_argument,NULL,CHUNKS_IDX},
+#define INJECTORS_OPT_IDX       'I'
+    {"injectors",required_argument,NULL,INJECTORS_OPT_IDX},
+#define ITMES_OPT_IDX           'N'
+    {"items",required_argument,NULL,ITMES_OPT_IDX}
+};
+
+
+static void
+_bench_usage(void){
+	printf(" -K, --max-key-length <num>   the max key length of the current kvs(default:%u)\n",
+                                          _g_default_opts.max_key_length);
+	printf(" -S, --shards <num>           the number of shards(default:%u)\n",
+                                          _g_default_opts.nb_shards);
+    printf(" -C, --chunks-per-node <num>  the chunks per reclaim node(default:%u)\n",
+                                          _g_default_opts.nb_chunks_per_reclaim_node);
+    printf(" -f, --force-format           format the kvs forcely\n");
+    printf(" -D, --devname <namestr>      the devname(default:%s)\n",
+                                          _g_default_opts.devname);
+    printf(" -N, --init-nodes  <num>      the init nodes for each slab(default:%u)\n",
+                                          _g_default_opts.nb_init_nodes_per_slab);
+    printf(" -E, --dump                   Dump the existing kvs format\n");
+}
+
 static int
 _kvs_parse_arg(int ch, char *arg){
 	return 0;
@@ -59,9 +93,9 @@ _do_start_benchmark(void*ctx){
 	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
 		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
-			w.nb_requests = 100000LU; 
+			w.nb_requests = 1000000LU; 
 		} else {
-			w.nb_requests = 1000000LU;
+			w.nb_requests = 10000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		histogram_reset();
@@ -87,12 +121,12 @@ _kvs_bench_start(void*ctx,int kverrno){
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "Nvme0n1";
+    opts->devname = "Raid0";
     opts->kvs_name = "kvs_bench";
     opts->max_cache_chunks = 3000;
     opts->max_io_pending_queue_size_per_worker = 64;
     opts->max_request_queue_size_per_worker = 128;
-    opts->nb_works = 1;
+    opts->nb_works = 4;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = _kvs_bench_start;

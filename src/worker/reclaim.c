@@ -28,7 +28,9 @@ _process_one_pending_delete_store_data_cb(void* ctx, int kverrno){
 
     uint32_t slot_offset      = del->slot_idx%desc->nb_slots;
     uint32_t node_id          = del->slot_idx/desc->nb_slots/slab->reclaim.nb_chunks_per_node;
-    struct reclaim_node *node = rbtree_lookup(slab->reclaim.total_tree,node_id);
+
+    assert(node_id<slab->reclaim.nb_reclaim_nodes);
+    struct reclaim_node *node = slab->reclaim.node_array[node_id];
 
     bitmap_clear_bit(desc->bitmap,slot_offset);
     if(!node->nb_free_slots){
@@ -51,7 +53,6 @@ _process_one_pending_delete_load_data_cb(void* ctx, int kverrno){
     struct pending_item_delete *del = ctx;
     struct worker_context *wctx     = del->rctx.wctx;
     struct chunk_desc *desc         = del->rctx.desc;
-    struct slab* slab = del->slab;
     uint64_t slot_idx = del->slot_idx;
 
     if(kverrno){
@@ -156,8 +157,7 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
     else{
         //Wonderful! Now evrything is ok!
         slab_free_slot_async(wctx->rmgr,slab,mig->slot_idx,NULL,NULL);
-
-        mig->entry->chunk_desc = mig->new_desc;
+        //the shard and the slab keep unchanged.
         mig->entry->slot_idx = mig->new_slot;
     }
 
@@ -398,7 +398,7 @@ worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
 //Process slab reclaim node.
 
 static void
-slab_truncate_complete(void*ctx,int kverrno){
+slab_release_complete(void*ctx,int kverrno){
     struct slab_migrate_request *req = ctx;
     struct worker_context* wctx = req->wctx;
     if(kverrno){
@@ -416,7 +416,7 @@ slab_truncate_complete(void*ctx,int kverrno){
     
     uint32_t i=0;
     for(;i<nb_chunks;i++){
-        struct chunk_desc *desc = req->node->desc_array[i];
+        struct chunk_desc *desc = node->desc_array[i];
 
         assert(desc!=NULL);
         assert(desc->flag|CHUNK_PIN);
@@ -424,20 +424,24 @@ slab_truncate_complete(void*ctx,int kverrno){
         if(desc->chunk_mem){
             //Free it from global lru list
             pagechunk_release_one(wctx->pmgr,desc->chunk_mem);
-            TAILQ_REMOVE(&wctx->pmgr->global_chunks,desc,link);
-            wctx->pmgr->nb_used_chunks--;
+            //TAILQ_REMOVE(&wctx->pmgr->global_chunks,desc,link);
+            //wctx->pmgr->nb_used_chunks--;
         }
     }
-     //Update slab statistics
-    uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
+
+    //@TODO add hole nodes for a slab. The hole nodes will be firstly allocated of 
+    // the slab is requested to expand.
+
+    //Update slab statistics
+    //uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
 
     //slots_used = nb_slots_per_node - node->nb_free_slots;
     //nb_free_slots -= slot_used + node->nb_free_slots => nb_free_slots -= nb_total_slots;
-    slab->reclaim.nb_free_slots -= nb_slots_per_node;
-    slab->reclaim.nb_total_slots -= nb_slots_per_node;
+    //slab->reclaim.nb_free_slots -= nb_slots_per_node;
+    //slab->reclaim.nb_total_slots -= nb_slots_per_node;
 
     slab->flag &=~ SLAB_FLAG_RECLAIMING;
-    slab_reclaim_free_node(&slab->reclaim,node);
+    //slab_reclaim_free_node(&slab->reclaim,node);
 
     //Now I finish the request, just release it.
     TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
@@ -469,7 +473,7 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     else if( (req->cur_slot==req->last_slot) && (req->nb_processed == req->cur_slot - req->start_slot + 1) ){
         //I have submited all the item-migrating request. And all submited requests have been
         //processed.
-        slab_truncate_async(wctx->imgr,req->slab,1,slab_truncate_complete,req);
+        slab_release_node_async(wctx->imgr,req->slab,req->node,slab_release_complete,req);
     }
     else if( req->cur_slot!=req->last_slot ){
         //The slab migrating has not been finished. So, I should process the next batch.

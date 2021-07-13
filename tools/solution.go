@@ -2,21 +2,20 @@ package main
 
 import "math"
 import "fmt"
-import "sync"
-import "os"
-import "strconv"
+//import "sync"
+//import "os"
+//import "strconv"
+//import "container/list"
 
 var gOpt = 10000
 
-const(
-	E1 = 4300
-	E2 = 72*1024
-	MAX_SLOT = 76*1024
-	BS = 4*1024
-)
+var B = 0.25
+var PS = 4096
+var CS = 64*1024
+var MS = 32
+var s0 = 128
 
-var wg sync.WaitGroup
-var m  sync.Mutex
+var g_Gs = 0
 
 type searchNode struct {
 	path []int
@@ -59,71 +58,79 @@ func gcd(iptA int, iptB int) int{
     return iptA
 }
 
-func bound(val int, C1 float64) int{
+func calc_Gs() int {
+	var m = int(B*float64(CS));
+	for ;m%4==0;m-- {}
+	return m
+}
+
+func bound(val int) int{
 	cnt := 1
 	for{
-		tmp := int(math.Floor(float64(val) * (1+C1)))
-		if (tmp>MAX_SLOT){
+		tmp := int(math.Floor(float64(val) * (1+B)))
+		if (tmp>g_Gs){
 			break
 		}else{
 			val = tmp
 			cnt++
 		}
 	}
+	//fmt.Println("val, bound,",val, cnt)
 	return cnt
 }
 
 func treaceSolution(node *searchNode) {
-	m.Lock()
 	fmt.Printf("%d: ",len(node.path))
 	fmt.Print("[ ")
 	for _, val := range(node.path){
 		fmt.Print(val," ")
 	}
 	fmt.Println("]")
-	m.Unlock()
 }
 
-func checkValidity(solvedCnt int,val int, C1 float64,C2 int, C3 int) bool{
-	isValid := false
-	if (lcm(val,BS)<C2){
-		if (val%BS ==0){
-			isValid = true
-		}else{
-			ri := val%BS
-			gi := BS%ri
-			minGap := gcd(ri,gi)
-			if (minGap>=C3 && bound(val,C1)+solvedCnt <gOpt){
-				isValid = true
-			}
-		}
+func checkValidity(solvedCnt int,val int) bool{
+	if(val>g_Gs){
+		return false
 	}
-	return isValid
+
+	if(val%4!=0){
+		return false
+	}
+		
+	if (val%PS==0 ){
+			return true
+	}
+
+	ri := val%PS
+	gi := PS%ri
+	minGap := gcd(ri,gi)
+	//fmt.Println("minGap,", minGap)
+	if (minGap>=MS && bound(val)+solvedCnt <gOpt){
+		return true
+	}
+	return false
 }
 
-func findSolution(node *searchNode, C1 float64,C2 int, C3 int) {
+func findSolution(node *searchNode) {
 	pathLen := len(node.path)
-	curNode := &searchNode{
-		path : make([]int,pathLen+1),
-	}
-	copy(curNode.path,node.path)
-
 	val := node.path[pathLen-1]
-	maxVal := int(math.Floor(float64(val)*(1+C1)))
+	maxVal := int(math.Floor(float64(val)*(1+B)))
+	//fmt.Println("val, maxVal, pathLen", val,maxVal, pathLen)
 
 	for{
 		if (maxVal>val){
-			if (checkValidity(pathLen,maxVal,C1,C2,C3)){
+			if (checkValidity(pathLen,maxVal)){
+				curNode := &searchNode{
+					path : make([]int,pathLen+1),
+				}
+				copy(curNode.path,node.path)
 				curNode.path[pathLen] = maxVal
-
+				findSolution(curNode)
+			} else if(maxVal>g_Gs){
 				// Now I terminate
-				if (maxVal>=E2){
-					if(pathLen+1 < gOpt){
-						gOpt = pathLen+1
-						treaceSolution(curNode)
-					}
-				}else{
-					findSolution(curNode,C1,C2,C3)
+				if(pathLen+1 < gOpt){
+					gOpt = pathLen+1
+					treaceSolution(node)
 				}
 			}
 			maxVal--
@@ -133,34 +140,16 @@ func findSolution(node *searchNode, C1 float64,C2 int, C3 int) {
 	}
 }
 
-func start(initNode *searchNode,C1 float64, C2 int, C3 int){
-	findSolution(initNode,C1,C2,C3)
-	fmt.Printf("search path completes:%d\n",initNode.path[0])
-	wg.Done()
-}
-
 func main() {
-	//C1 := 0.05
-	//C2 := 4*1024*1024
-	//C3 := 32
-
-	C1,_ := strconv.ParseFloat(os.Args[1],64)
-	C2,_:= strconv.Atoi(os.Args[2])
-	C3,_ := strconv.Atoi(os.Args[3])
-	E1,_ := strconv.Atoi(os.Args[4])
-
-	maxInitVal := E1
-	for val:=maxInitVal; val>4096; val-- {
-		if(checkValidity(0,val,C1,C2,C3)){
-			//fmt.Printf("valid init val:%d\n",val)
-			node := &searchNode{
-				path : make([]int, 1),
-			}
-			node.path[0] = val
-			wg.Add(1)
-			go start(node,C1,C2,C3)
-		}
+	
+	g_Gs = calc_Gs()
+	fmt.Println("Gs: ",g_Gs)
+	initNode := &searchNode{
+		path : make([]int, 1),
 	}
-	wg.Wait()
+	initNode.path[0] = s0
+
+	findSolution(initNode)
+
 	fmt.Println("searching completes")
 }

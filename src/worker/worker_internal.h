@@ -19,15 +19,14 @@ enum op_code { GET=0, PUT, DELETE, RMW, FIRST, SEEK, NEXT,};
 struct process_ctx{
     struct worker_context *wctx;
     struct index_entry* entry;
-    
-    //a cached slab pointer to prevent the repetive computing for slab.
+    struct chunk_desc* desc;
     struct slab* slab;
-    //To record the old slab in case of the change of an item size.
-    struct slab* old_slab;
     
-    //When an item is updated not in place, this field will be used to record
-    //the newly allocated entry infomation.
+    //When an item is updated not in place, this field will be used to states
+    int slab_changed;
     struct index_entry new_entry;
+    struct chunk_desc* new_desc;
+    struct slab* new_slab;
 
     //For resubmit request, it is unnecessary to re-lookup in the mem index.
     uint32_t no_lookup;
@@ -81,7 +80,7 @@ struct worker_context{
     volatile bool ready;
     struct mem_index *mem_index;
     
-    //The shards filed points to the shards field of kvs structure.
+    //The shards points to the shards field of kvs structure.
     struct slab_shard *shards;
     uint32_t nb_shards;
     uint32_t core_id;

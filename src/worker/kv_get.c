@@ -9,7 +9,7 @@ _process_get_load_data_cb(void* ctx, int kverrno){
 
     struct worker_context *wctx     = pctx->wctx;
     struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = entry->chunk_desc;
+    struct chunk_desc *desc         = pctx->desc;
 
     pool_release(wctx->kv_request_internal_pool,req);
     pagechunk_mem_lower(desc);
@@ -37,7 +37,7 @@ _process_get_pagechunk_cb(void* ctx, int kverrno){
 
     pagechunk_load_item_async(pctx->wctx->pmgr,
                               pctx->wctx->imgr, 
-                              pctx->entry->chunk_desc,
+                              pctx->desc,
                               pctx->entry->slot_idx,
                               _process_get_load_data_cb,
                               req);
@@ -68,7 +68,9 @@ void worker_process_get(struct kv_request_internal *req){
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
         return;
     }
-    struct chunk_desc *desc = entry->chunk_desc;
+    req->pctx.slab = &(wctx->shards[entry->shard].slab_set[entry->slab]);
+    req->pctx.desc = pagechunk_get_desc(req->pctx.slab,entry->slot_idx);
+    struct chunk_desc* desc = req->pctx.desc;
 
     assert(desc!=NULL);
 
