@@ -55,8 +55,6 @@ void worker_process_delete(struct kv_request_internal *req){
 
     //Should I wait for the end of reclaiming ??
     uint64_t slot_idx = entry->slot_idx;
-    struct slab* slab = req->pctx.slab;
-
     slab_free_slot_async(wctx->rmgr,req->pctx.slab,slot_idx,_process_delete_cb,req);
 }
 

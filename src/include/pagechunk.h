@@ -14,9 +14,9 @@
 
 #define CHUNK_PIN  1u
 
+//chunk memory descriptor.
 struct chunk_mem {
-    uint32_t nb_bytes;
-    uint8_t* data;
+    uint8_t* page_base;
     struct bitmap bitmap[0];
 };
 
@@ -38,12 +38,13 @@ struct chunk_desc {
     uint32_t nb_pendings;
     uint32_t flag;
     
+    //bitmap to record the slot occupation
     struct bitmap bitmap[0];
 };
 
 struct pagechunk_mgr;
 
-static_assert(sizeof(struct chunk_mem)==16, "incorrect size");
+static_assert(sizeof(struct chunk_mem)==8, "incorrect size");
 static_assert(sizeof(struct chunk_desc)==80,"incorrect size");
 
 /**

@@ -184,6 +184,7 @@ void slab_release_node_async(struct iomgr* imgr,
     //@TODO to be implemented
     uint64_t start_chunk = slab->reclaim.nb_chunks_per_node * node->id;
     uint64_t nb_chunks = slab->reclaim.nb_chunks_per_node;
+    (void)start_chunk;
     (void)nb_chunks;
     //spdk_blob_punch_hole(slab->blob,imgr->channel,start_chunk,nb_chunks,_punch_hole_complete,ctx);
 

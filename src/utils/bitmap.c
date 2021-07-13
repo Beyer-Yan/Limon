@@ -16,6 +16,11 @@ uint32_t bitmap_header_size(uint32_t num_bits){
     return sizeof(struct bitmap) + KV_ALIGN(num_bits,64u)/8;
 }
 
+uint32_t bitmap_get_length(struct bitmap *map){
+    assert(map);
+    return map->length;
+}
+
 uint32_t
 bitmap_get_bit(struct bitmap *map ,uint32_t id){
     assert(map);

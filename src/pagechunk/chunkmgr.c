@@ -12,52 +12,70 @@
 
 //Sinleton mode
 static struct chunkmgr_worker_context g_chunkmgr_worker;
-static struct object_cache_pool  *_g_mem_pool;
+
+static uint8_t* g_mem_desc  = NULL;
+static uint32_t g_desc_size = 0;
+static uint64_t g_total_chunks = 0;
+static uint64_t g_cur = 0;
+
+#define GB(x) ((x)*1024u*1024u*1024u)
 
 //Allocate chunk memory in one-shot mode.
 static void
 _chunk_mem_init(uint64_t nb_chunks){
 
-    uint32_t chunk_data_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
+    //allocate all chunk memory descriptor
     uint32_t bitmap_size = bitmap_header_size(g_chunkmgr_worker.nb_pages_per_chunk);
-    uint32_t mem_hdr_size = KV_ALIGN(sizeof(struct chunk_mem)+bitmap_size,0x1000u);
-    uint32_t chunk_mem_size = mem_hdr_size + chunk_data_size;
+    uint32_t mem_desc_size = KV_ALIGN(sizeof(struct chunk_mem)+bitmap_size,8);
+    
+    g_mem_desc = calloc(mem_desc_size*nb_chunks,1);
+    assert(g_mem_desc && "memory allocation failed");
 
-    uint64_t pool_hdr_size = KV_ALIGN(pool_header_size(nb_chunks),0x1000u);
-    uint64_t total_bytes = pool_hdr_size + chunk_mem_size*nb_chunks;
+    g_desc_size = mem_desc_size;
+    g_total_chunks = nb_chunks;
+    g_cur = 0;
 
-    uint8_t* data = spdk_dma_malloc(total_bytes,0x1000, NULL);
-    if(!data){
-        SPDK_ERRLOG("Faild to allocate memory, chunks:%u, bytes:%lu\n",nb_chunks,total_bytes);
-        exit(-1);
+    //allocator all chunk memory. I have to allocate memories for many times because
+    //the SPDK fails to give a very large memory in one memory allocation.
+    uint32_t chunk_data_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
+    uint32_t total_size = chunk_data_size*nb_chunks;
+
+    assert(GB(1)%chunk_data_size==0 && "chunk size shall be the size with the power of two");
+
+    //allocate 1GB each time.
+    uint32_t times = total_size/GB(1);
+    uint32_t remain = total_size%GB(1);
+    uint32_t k = GB(1)/chunk_data_size;
+
+    uint8_t* page_base[times+1];
+    uint32_t i = 0;
+    for(;i<times;i++){
+        page_base[i] = spdk_dma_malloc(GB(1),0x1000, NULL);
+        assert(page_base[i] && "memory allocation failed");
+        SPDK_NOTICELOG("Allocated 1GB memory, times:%u\n",i);
     }
-    
-    _g_mem_pool = (struct object_cache_pool*)data;
-    data += pool_hdr_size;
-    pool_header_init(_g_mem_pool,nb_chunks,chunk_mem_size,pool_hdr_size,data);
-    
-    uint64_t i = 0;
-    for(;i<nb_chunks;i++){
-        struct chunk_mem* mem = (struct chunk_mem*)(data + chunk_mem_size*i);
-        mem->nb_bytes = chunk_data_size;
-        mem->data = (uint8_t*)(mem) + mem_hdr_size;
+    if(remain){
+        page_base[times] = spdk_dma_malloc(remain,0x1000, NULL);
+        assert(page_base[times] && "memory allocation failed");
+        SPDK_NOTICELOG("Allocated remain memory, times:%u\n",times);
+    }
+
+    //init all chunk memory descriptor
+    for(i=0;i<nb_chunks;i++){
+        struct chunk_mem* mem = (struct chunk_mem*)(g_mem_desc + i*mem_desc_size);
         mem->bitmap[0].length = g_chunkmgr_worker.nb_pages_per_chunk;
+        mem->page_base = page_base[i/k] + chunk_data_size*(i%k);
     }
 }
 
 static struct chunk_mem *
 _get_one_chunk_mem(void){
-    struct chunk_mem* mem = pool_get(_g_mem_pool);
-    if(!mem){
-        return NULL;
+    struct chunk_mem* mem = NULL;
+    if(g_cur<g_total_chunks-1){
+        mem = (struct chunk_mem*)(g_mem_desc+g_cur*g_desc_size);
+        g_cur++;
     }
     return mem;
-}
-
-static void
-_release_one_chunk_mem(struct chunk_mem *mem){
-    assert(mem!=NULL);
-    pool_release(_g_mem_pool,mem);
 }
 
 static struct worker_context* _chunkmgr_evaluate_worklaod(void){
@@ -147,15 +165,9 @@ void chunkmgr_request_one_aysnc(struct chunk_miss_callback *cb_obj){
                          _chunkmgr_worker_get_one_chunk_mem, cb_obj);
 }
 
-static void
-_chunkmgr_worker_release_one_chunk_mem(void *ctx){
-    struct chunk_mem* mem = ctx;
-    _release_one_chunk_mem(mem);
-}
 
 void chunkmgr_release_one(struct pagechunk_mgr* pmgr,struct chunk_mem* mem){
-    assert(g_chunkmgr_worker.thread!=NULL);
-    spdk_thread_send_msg(pmgr->chunkmgr_worker->thread, _chunkmgr_worker_release_one_chunk_mem, mem);
+    assert(0 && "Not implemented");
 }
 
 struct chunkmgr_worker_context* 
@@ -197,9 +209,6 @@ _do_destroy(void*ctx){
     spdk_thread_destroy(g_chunkmgr_worker.thread);
     g_chunkmgr_worker.thread = NULL;
 
-    //Release all the chunk memory
-    spdk_free(_g_mem_pool);
-    _g_mem_pool = NULL;
     SPDK_NOTICELOG("chunkmgr worker destroyed\n");
 }
 

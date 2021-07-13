@@ -135,7 +135,7 @@ pagechunk_get_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     TAILQ_INSERT_TAIL(&chunk_mgr->global_chunks,desc,link);
     
     //Remove 8 bytes tsc;
-    return (struct kv_item*)(desc->chunk_mem->data + addr_offset + 8);
+    return (struct kv_item*)(desc->chunk_mem->page_base + addr_offset + 8);
 }
 
 void 
@@ -151,7 +151,7 @@ pagechunk_put_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     addr_offset = _get_page_position(desc,slot_idx,&first_page,&last_page);
     tsc = _calc_tsc();
 
-    uint8_t* slot_addr = desc->chunk_mem->data + addr_offset;
+    uint8_t* slot_addr = desc->chunk_mem->page_base + addr_offset;
 
     //Fill the 8 bytes timestamp in the header.
     memcpy(slot_addr,&tsc,8);
@@ -219,7 +219,7 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
     
     uint64_t nb_pages = last_page - first_page + 1;
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
-    uint8_t *buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
+    uint8_t *buf = &desc->chunk_mem->page_base[first_page*KVS_PAGE_SIZE];
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
     struct chunk_load_store_ctx* cls_ctx = pool_get(pmgr->load_store_ctx_pool);
@@ -321,7 +321,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     uint64_t key_prefix;
 
     if(first_page!=UINT32_MAX){
-        buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
+        buf = &desc->chunk_mem->page_base[first_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + first_page;
         key_prefix = (uint64_t)desc + first_page;
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
@@ -331,7 +331,7 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     if( (last_page!=first_page) && (last_page!=UINT32_MAX) ){
         // For the item that is stored in single page or of which the last page is cached, it
         // is not be loaded.
-        buf = &desc->chunk_mem->data[last_page*KVS_PAGE_SIZE];
+        buf = &desc->chunk_mem->page_base[last_page*KVS_PAGE_SIZE];
         start_page_in_slab = desc->nb_pages * desc->id + last_page;
         key_prefix = (uint64_t)desc + last_page;
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,buf,
@@ -389,7 +389,7 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
 
-    uint8_t *buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
+    uint8_t *buf = &desc->chunk_mem->page_base[first_page*KVS_PAGE_SIZE];
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
     uint64_t key_prefix = (uint64_t)desc + first_page;
 
@@ -445,7 +445,7 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
 
-    uint8_t *buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
+    uint8_t *buf = &desc->chunk_mem->page_base[first_page*KVS_PAGE_SIZE];
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
     uint64_t nb_pages = last_page - first_page + 1;
     uint64_t key_prefix = (uint64_t)desc + first_page;
@@ -491,7 +491,7 @@ void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
     cls_ctx->user_cb = cb;
     cls_ctx->user_ctx = ctx;
 
-    uint8_t *buf = &desc->chunk_mem->data[first_page*KVS_PAGE_SIZE];
+    uint8_t *buf = &desc->chunk_mem->page_base[first_page*KVS_PAGE_SIZE];
     uint64_t start_page_in_slab = desc->nb_pages * desc->id + first_page;
     uint64_t key_prefix = (uint64_t)desc + first_page;
     
