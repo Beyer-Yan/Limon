@@ -52,7 +52,7 @@ static struct kvs_create_opts _g_default_opts = {
     .nb_init_nodes_per_slab = 10,
     .force_format = false,
     .dump_only = false,
-    .devname = "bdev_pmem0"
+    .devname = "bdev0"
 };
 
 struct kvs_format_ctx{
@@ -315,7 +315,9 @@ _kvs_dump_real_data(struct kvs_format_ctx *kctx){
     printf("\tslabs per shard:%u\n",kctx->sl->nb_slabs_per_shard);
     printf("\tchunks per reclaim node:%u\n",kctx->sl->nb_chunks_per_reclaim_node);
     printf("\tpages per chunk:%u\n",kctx->sl->nb_pages_per_chunk);
-    printf("\tpage size:%" PRIu64 "\n",kctx->io_unit_size);
+    printf("\tpage size:%" PRIu64 "\n",kctx->bs_page_size);
+    printf("\tio size:%u\n",kctx->io_unit_size);
+    printf("\tio per page:%u\n",kctx->io_unit_per_page);
     printf("\tmax key length:%u\n",kctx->sl->max_key_length);
 
     uint64_t total_chunks = spdk_bs_total_data_cluster_count(kctx->bs);
@@ -425,6 +427,11 @@ _kvs_dump_load_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     spdk_bs_get_super(bs,_kvs_dump_get_super_complete,kctx);
 }
 
+static void dump_bs_bdev_cb(enum spdk_bdev_event_type type, struct spdk_bdev *bdev,
+				     void *event_ctx){
+//do nothing
+}
+
 static void
 _kvs_dump(void*ctx){
     const char* devname = (const char*)ctx;
@@ -438,8 +445,11 @@ _kvs_dump(void*ctx){
 		return;
 	}
 
-	bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
-	if (bs_dev == NULL) {
+    //deprecated
+	//bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
+    //adapt to new interface of blobstore
+    int res = spdk_bdev_create_bs_dev_ext(devname, dump_bs_bdev_cb,NULL,&bs_dev);
+	if (res) {
 		printf("Could not create blob bdev!!\n");
 		spdk_app_stop(-1);
 		return;
@@ -662,6 +672,11 @@ _fill_super_parameters(struct kvs_format_ctx *kctx){
     kctx->nb_slabs = nb_slabs;
 }
 
+static void create_bs_bdev_cb(enum spdk_bdev_event_type type, struct spdk_bdev *bdev,
+				     void *event_ctx){
+//do nothing
+}
+
 static void 
 _kvs_create(void*ctx){
     struct kvs_format_ctx *kctx = ctx;
@@ -686,9 +701,12 @@ _kvs_create(void*ctx){
 		//return;
     }
 
-	bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
-	if (bs_dev == NULL) {
-		SPDK_ERRLOG("Could not create blob bdev!!\n");
+    //deprecated
+	//bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
+    //adapt to new interface of blobstore
+    int res = spdk_bdev_create_bs_dev_ext(kctx->devname, create_bs_bdev_cb,NULL,&bs_dev);
+	if (res) {
+		printf("Could not create blob bdev!!\n");
 		spdk_app_stop(-1);
 		return;
 	}
