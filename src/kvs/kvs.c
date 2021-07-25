@@ -260,6 +260,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
     uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_seek(g_kvs->workers[worker_id],item,_seek_cb_fn,&it->ctx_array[worker_id]);
 
+    //ugly, a coroutine is better
     while(!it->ctx_array[worker_id].completed){
         spdk_pause();
     }
@@ -294,6 +295,7 @@ bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item){
         worker_enqueue_next(g_kvs->workers[i],it->seek_item.item,_iter_cb_fn,batch_size,swctx);
     }
 
+    //ugly, a coroutine is better
     bool res = false;
     while(!res){
         res = true;
@@ -392,7 +394,7 @@ bool kv_iterator_next(struct kv_iterator *it){
             _reset_scan_res(swctx);
             worker_enqueue_next(g_kvs->workers[wid],it->seek_item.item,_iter_cb_fn,it->batch_size,swctx);
 
-            //Just wait the completion.
+            //Just wait the completion. ugly, a coroutine is better
             while(!swctx->completed){
                 spdk_pause();
             }

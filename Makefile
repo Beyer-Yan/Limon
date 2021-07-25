@@ -1,4 +1,5 @@
-SPDK_ROOT_DIR := $(abspath $(CURDIR)/../..)
+#SPDK_ROOT_DIR := $(abspath $(CURDIR)/../..)
+SPDK_ROOT_DIR := /home/buaa/yby/spdk
 include $(SPDK_ROOT_DIR)/mk/spdk.common.mk
 
 SO_VER := 2
@@ -20,7 +21,7 @@ C_SRCS += $(shell ls src/kvs/*.c)
 C_SRCS += src/io/io_load.c src/io/io_store_batch.c
 C_SRCS += src/indexes/index.c src/indexes/impl/art.c src/indexes/impl/rbtree_uint.c src/indexes/impl/hashmap.c
 
-LIBNAME = pemon
+LIBNAME = limon
 
 SPDK_MAP_FILE = $(SPDK_ROOT_DIR)/mk/spdk_blank.map
 include $(SPDK_ROOT_DIR)/mk/spdk.lib.mk

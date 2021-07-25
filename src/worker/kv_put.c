@@ -38,7 +38,7 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
         //Update the entry info with new_entry.
         *entry = pctx->new_entry;
     }
-
+    entry->writing = 0;
     req->cb_fn(req->ctx,NULL, kverrno ? -KV_EIO : -KV_ESUCCESS);
 }
 
@@ -143,7 +143,7 @@ _process_put_case1(struct kv_request_internal *req, bool slab_changed){
     struct index_entry* entry       = pctx->entry;
     struct slab* slab = pctx->slab;
 
-    pctx->new_entry = * pctx->entry;
+    pctx->new_entry = *pctx->entry;
 
     if(slab_changed){
         uint32_t new_slab_idx = slab_find_slab(item_packed_size(req->item));

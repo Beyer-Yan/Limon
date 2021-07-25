@@ -7,6 +7,8 @@
 #include "spdk/log.h"
 #include "spdk/env.h"
 
+#define MIN_ALLOC_SIZE_UNIT (64*1024*1024)
+
 //All slab sizes are 4-bytes-aligment.
 static const uint32_t _g_slab_chunk_pages = 16;
 static uint32_t slab_sizes[]={
@@ -271,24 +273,22 @@ _slab_blob_resize_common_cb(void*ctx){
         // }
     }
 
-    if(!rctx->kverrno){
-        uint32_t i=0;
-        for(;i<nb_nodes;i++){
-            slab->reclaim.nb_total_slots += nodes[i]->nb_free_slots;
-            slab->reclaim.nb_free_slots += nodes[i]->nb_free_slots;
-            slab->reclaim.nb_reclaim_nodes++;
-            rbtree_insert(slab->reclaim.free_node_tree,nodes[i]->id,nodes[i],NULL);
-        }
+    uint32_t total_nodes = slab->reclaim.nb_reclaim_nodes+nb_nodes;
+    if(total_nodes>=slab->reclaim.cap){
+        //in case of resizing
+        uint64_t tmp = slab->reclaim.cap*2;
+        slab->reclaim.cap = tmp < total_nodes ? total_nodes : tmp;
+        slab->reclaim.node_array = realloc(slab->reclaim.node_array,slab->reclaim.cap*sizeof(void*));
+        assert(slab->reclaim.node_array);
     }
 
-    //in case of resizing
-    if(slab->reclaim.nb_reclaim_nodes == slab->reclaim.cap){
-        slab->reclaim.node_array = realloc(slab->reclaim.node_array,(slab->reclaim.cap*2)*sizeof(void*));
-        assert(slab->reclaim.node_array);
-        slab->reclaim.cap *= 2;
-    }
-    for(uint32_t i=0; i<nb_nodes;i++){
-        slab->reclaim.node_array[slab->reclaim.nb_reclaim_nodes++] = nodes[i];
+    for(uint32_t i=0;i<nb_nodes;i++){
+        slab->reclaim.nb_total_slots += nodes[i]->nb_free_slots;
+        slab->reclaim.nb_free_slots += nodes[i]->nb_free_slots;
+
+        rbtree_insert(slab->reclaim.free_node_tree,nodes[i]->id,nodes[i],NULL);
+        slab->reclaim.node_array[slab->reclaim.nb_reclaim_nodes] = nodes[i];
+        slab->reclaim.nb_reclaim_nodes++;
     }
 
     //index of the node that have free slots.
@@ -316,8 +316,9 @@ void slab_request_slot_async(struct iomgr* imgr,
     
     if(slab->reclaim.nb_free_slots!=0){
         struct reclaim_node* node = rbtree_first(slab->reclaim.free_node_tree);
+        assert(node);
+
         uint64_t slot = _get_one_slot_from_free_slab(slab,node);
-        
         cb(slot,ctx,-KV_ESUCCESS);
         return;
     }
@@ -338,7 +339,7 @@ void slab_request_slot_async(struct iomgr* imgr,
                         !!(imgr->max_pending_io%nb_slots_per_node);
     
     //align to 4MB
-    const uint64_t min_alloc_nodes = (4*1024*1024)/(slab->slab_size * nb_slots_per_node);
+    const uint64_t min_alloc_nodes = (MIN_ALLOC_SIZE_UNIT)/(slab->reclaim.nb_pages_per_chunk*slab->reclaim.nb_chunks_per_node*KVS_PAGE_SIZE);
     nb_nodes = nb_nodes < min_alloc_nodes ? min_alloc_nodes : nb_nodes;
 
     if(spdk_bs_free_cluster_count(imgr->target) < nb_nodes){
@@ -372,6 +373,7 @@ void slab_request_slot_async(struct iomgr* imgr,
         rctx->resize_cb = _slab_blob_resize_common_cb;
         TAILQ_INSERT_TAIL(&slab->resize_head,rctx,link);
         spdk_thread_send_msg(imgr->meta_thread,_slab_blob_resize,rctx);
+        //SPDK_NOTICELOG("Alloc %u nodes,curent nodes:%u,slab:%u\n",nb_nodes,slab->reclaim.nb_reclaim_nodes,slab->slab_size);
     }
 }
 

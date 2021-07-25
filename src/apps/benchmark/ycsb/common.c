@@ -79,7 +79,9 @@ struct rebuild_pdata {
 
 static void
 _repopulate_item_add_cb(void*ctx, struct kv_item*item, int kverrno){
-
+   assert(ctx);
+   struct kv_item *x = (struct kv_item *)ctx;
+   free(x);
 }
 
 void *repopulate_db_worker(void *pdata) {

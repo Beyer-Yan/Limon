@@ -388,6 +388,11 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     spdk_bs_get_super(bs,_kvs_start_get_super_complete,kctx);
 }
 
+static void start_bs_bdev_cb(enum spdk_bdev_event_type type, struct spdk_bdev *bdev,
+				     void *event_ctx){
+    //do nothing
+}
+
 static void
 _kvs_start(void* ctx){
     struct kvs_start_opts *opts = ctx;
@@ -408,8 +413,12 @@ _kvs_start(void* ctx){
 		//return;
     }
 
-	bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
-	if (bs_dev == NULL) {
+    //deprecated
+	//bs_dev = spdk_bdev_create_bs_dev(bdev, NULL, NULL);
+    //adapt to new interface of blobstore. I think it is not a good API.
+    //The callback is annoying.
+    int res = spdk_bdev_create_bs_dev_ext(opts->devname, start_bs_bdev_cb,NULL,&bs_dev);
+	if (res) {
 		printf("Could not create blob bdev!!\n");
 		spdk_app_stop(-1);
 		return;
@@ -423,7 +432,9 @@ _kvs_start(void* ctx){
 static const char*
 _get_cpu_mask(uint32_t nb_works){
     char* mask = NULL;
-    
+
+    //Thread 0 for meta-morker
+    nb_works++;
     //number of 'f'
     int x = nb_works/4;
     int y = nb_works%4;
@@ -433,16 +444,22 @@ _get_cpu_mask(uint32_t nb_works){
     //x for 'f', 1 for '1-f', plus 2 chars for '0x' and 1 char for '\0'
     int nb_ch = x+1+2+1;
     mask = malloc(nb_ch);
+    assert(mask);
 
-    int i = 0;
-    mask[i] = '\0';
-    for(i=1;i<=x;i++){
-        mask[i] = 'f';
+    mask[0] = '0';
+    mask[1] = 'x';
+
+    if(y){
+        mask[2] = table[y];
     }
-    mask[i] = table[y];
 
-    mask[i+1] = 'x';
-    mask[i+2] = '0';
+    int i = y ? 3 : 2;
+    while(x--){
+        mask[i++] = 'f';
+    }
+    mask[i] = '\0';
+
+    SPDK_NOTICELOG("core mask:%s\n",mask);
     
     return (const char*)mask;
 }

@@ -5,6 +5,8 @@
 #include "spdk/queue.h"
 #include "spdk/log.h"
 
+#define INIT_NODE_CAP 256
+
 struct list_slab{
     struct slab* slab;
     uint32_t shard_idx;
@@ -79,8 +81,8 @@ _node_read_complete(void* ctx, int bserrno){
             uint32_t actual_item_size = item_packed_size(item);
             if( !slab_is_valid_size(slab->slab_size,actual_item_size) ){
                 //The item is invalid
-                SPDK_ERRLOG("Invalid item found in slab rebuilding, shard:%u,slab size:%u,slot:%lu, item_size:%u\n",
-                            rctx->cur->shard_idx,slab->slab_size,idx+slot_base ,actual_item_size);
+                //SPDK_ERRLOG("Invalid item found in slab rebuilding, shard:%u,slab size:%u,slot:%lu, item_size:%u\n",
+                //            rctx->cur->shard_idx,slab->slab_size,idx+slot_base ,actual_item_size);
                 continue;
             }
 
@@ -111,13 +113,20 @@ _node_read_complete(void* ctx, int bserrno){
                 uint64_t tsmp = *(uint64_t*)entry_slab;
                 if(tsmp<tsc0){
                     //This item is newer.
-                    uint32_t ori_node_id = entry_worker->slot_idx/nb_slots_per_node;
                     struct slab* ori_slab = &(wctx->shards[entry_worker->shard].slab_set[entry_worker->slab]);
-                    struct reclaim_node* ori_node = ori_slab->reclaim.node_array[ori_node_id];
-                    struct chunk_desc *ori_desc = ori_node->desc_array[entry_worker->slot_idx/slab->reclaim.nb_slots_per_chunk];
+                    uint32_t ori_node_id = entry_worker->slot_idx/nb_slots_per_node;
+                    uint32_t ori_desc_offset = (entry_worker->slot_idx/ori_slab->reclaim.nb_slots_per_chunk)%ori_slab->reclaim.nb_chunks_per_node;
+                    struct reclaim_node* ori_node = NULL;
+                    struct chunk_desc *ori_desc   = NULL;
 
-                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slab:%u,ori_slot:%lu, ori_tsc:%lu\n",
-                                    slab->slab_size,idx+slot_base,tsc0,ori_slab->slab_size,entry_worker->slot_idx,tsmp);
+                    if(ori_slab==slab && ori_node_id==node->id){
+                        //they are in the same slab and same node, but the node has not been inserted
+                        //into reclaim of the slab.
+                        ori_node = node;
+                    }else{
+                        ori_node = ori_slab->reclaim.node_array[ori_node_id];
+                    }
+                    ori_desc = ori_node->desc_array[ori_desc_offset];
 
                     if(ori_slab!=slab || ori_node_id!=node->id){
                         //Ether the are in different slabs or different nodes of the same slab.
@@ -138,6 +147,8 @@ _node_read_complete(void* ctx, int bserrno){
                                      entry_worker->slot_idx%ori_slab->reclaim.nb_slots_per_chunk);
                     }
 
+                    SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slab:%u,ori_slot:%lu, ori_tsc:%lu\n",
+                                    slab->slab_size,idx+slot_base,tsc0,ori_slab->slab_size,entry_worker->slot_idx,tsmp);
                     //process the newer item
                     bitmap_set_bit(desc->bitmap,idx%slab->reclaim.nb_slots_per_chunk);
                     desc->nb_free_slots--;
@@ -169,6 +180,11 @@ _node_read_complete(void* ctx, int bserrno){
 
     assert(rctx->reclaim_node_idx<slab->reclaim.nb_reclaim_nodes);
     slab->reclaim.node_array[rctx->reclaim_node_idx] = node;
+    if(node->nb_free_slots){
+        rbtree_insert(slab->reclaim.free_node_tree,node->id,node,NULL);
+    }
+
+    //SPDK_NOTICELOG("rebuild one node, shard:%u,slab:%u,node:%u\n",rctx->cur->shard_idx,slab->slab_size,rctx->reclaim_node_idx);
 
     if(rctx->reclaim_node_idx==slab->reclaim.nb_reclaim_nodes-1){
         //All reclaim nodes are rebuilt.
@@ -229,6 +245,8 @@ _slab_rebuild_complete(struct rebuild_ctx* rctx,int kverrno){
         //I am going to rebuld the next shard.
         //And now, I should destroy the mem index for reducing memory usage.
         //As the item will never be stored across shard.
+        SPDK_NOTICELOG("Rebuild completes, worker:%u, shard:%u\n", spdk_env_get_current_core(),s->shard_idx);
+
         mem_index_destroy(rctx->index_for_one_shard);
         rctx->index_for_one_shard = mem_index_init();
     }
@@ -240,14 +258,17 @@ static void
 _rebuild_one_slab(struct rebuild_ctx* rctx){
     struct slab* slab  = rctx->cur->slab;
     
-    SPDK_NOTICELOG("Rebuilding worker:%u, shard:%u, slab:%u, nodes:%u\n", spdk_env_get_current_core(),rctx->cur->shard_idx,slab->slab_size,slab->reclaim.nb_reclaim_nodes);
+    //SPDK_NOTICELOG("Rebuilding worker:%u, shard:%u, slab:%u, nodes:%u\n", spdk_env_get_current_core(),rctx->cur->shard_idx,slab->slab_size,slab->reclaim.nb_reclaim_nodes);
 
     rctx->reclaim_node_idx = 0;
     //Assume that All slots are free.
     slab->reclaim.nb_free_slots = slab->reclaim.nb_total_slots;
 
-    slab->reclaim.cap = slab->reclaim.nb_reclaim_nodes;
-    slab->reclaim.node_array = calloc(0,slab->reclaim.cap*sizeof(void*));
+    uint32_t cap = slab->reclaim.nb_reclaim_nodes > INIT_NODE_CAP ?
+                         slab->reclaim.nb_reclaim_nodes :
+                         INIT_NODE_CAP;
+    slab->reclaim.cap = cap;
+    slab->reclaim.node_array = calloc(slab->reclaim.cap,sizeof(void*));
     assert(slab->reclaim.node_array);
 
     uint32_t nb_pages = slab->reclaim.nb_chunks_per_node * 

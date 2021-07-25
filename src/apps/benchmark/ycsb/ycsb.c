@@ -8,7 +8,7 @@
 #include "histogram.h"
 
 static struct kv_item* _create_unique_item_ycsb(uint64_t uid) {
-   size_t item_size = 100;
+   size_t item_size = 1024;
    return create_unique_item(item_size, uid);
 }
 
@@ -120,7 +120,7 @@ _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
 
          if(!kv_iterator_seek(it,item)){
             printf("Error in seek item, key:%lu\n",*(uint64_t*)item->data);
-            exit(-1);
+            //exit(-1);
          }
 
          for(uint64_t i = 0; i < scan_length; i++) {

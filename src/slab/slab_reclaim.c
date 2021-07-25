@@ -15,7 +15,7 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
      * Since the reclaim node is accessed very often, align mismatch of pointer will be rather costly.
      */
 
-    struct reclaim_node* node = calloc(total_size,1);
+    struct reclaim_node* node = calloc(1,total_size);
     if(!node){
         return NULL;
     }

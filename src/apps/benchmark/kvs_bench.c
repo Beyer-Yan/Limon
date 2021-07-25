@@ -18,48 +18,128 @@
 #include "ycsb/common.h"
 #include "ycsb/histogram.h"
 
-static const char *_g_kvs_getopt_string = "W:D:Q:C:I:N"; 
+static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:"; 
 
 static struct option _g_app_long_cmdline_options[] = {
-#define WORKERS_OPT_IDX         'W'
-    {"workers",required_argument,NULL,WORKERS_OPT_IDX},
 #define DEVNAME_OPT_IDX         'D'
     {"devname",required_argument,NULL,DEVNAME_OPT_IDX},
+#define WORKERS_OPT_IDX         'S'
+    {"workers",required_argument,NULL,WORKERS_OPT_IDX},
+#define INJECTORS_OPT_IDX       'I'
+    {"injectors",required_argument,NULL,INJECTORS_OPT_IDX},
 #define QUEUE_DEPTH_OPT_IDX     'Q'
     {"queue-depth",required_argument,NULL,QUEUE_DEPTH_OPT_IDX},
 #define CHUNKS_IDX              'C'
     {"chunks",required_argument,NULL,CHUNKS_IDX},
-#define INJECTORS_OPT_IDX       'I'
-    {"injectors",required_argument,NULL,INJECTORS_OPT_IDX},
 #define ITMES_OPT_IDX           'N'
     {"items",required_argument,NULL,ITMES_OPT_IDX}
 };
 
+struct kvs_bench_opts{
+    char* devname;
+	char* bench_name;
+
+	uint32_t nb_workers;
+	uint32_t nb_injectors;
+
+	uint32_t queue_size;
+	uint32_t cache_chunks;
+	uint64_t nb_items;
+};
+
+static struct kvs_bench_opts _g_default_opts = {
+	.devname = "Nvme0n1",
+	.bench_name = "kvs_ycsb",
+	.nb_workers = 4,
+	.nb_injectors = 8,
+	.queue_size = 128,
+	.cache_chunks = 327680,
+	.nb_items = 52000000ul
+};
 
 static void
 _bench_usage(void){
-	printf(" -K, --max-key-length <num>   the max key length of the current kvs(default:%u)\n",
-                                          _g_default_opts.max_key_length);
-	printf(" -S, --shards <num>           the number of shards(default:%u)\n",
-                                          _g_default_opts.nb_shards);
-    printf(" -C, --chunks-per-node <num>  the chunks per reclaim node(default:%u)\n",
-                                          _g_default_opts.nb_chunks_per_reclaim_node);
-    printf(" -f, --force-format           format the kvs forcely\n");
-    printf(" -D, --devname <namestr>      the devname(default:%s)\n",
+	printf(" -D, --devname <namestr>      block devname(default:%s)\n",
                                           _g_default_opts.devname);
-    printf(" -N, --init-nodes  <num>      the init nodes for each slab(default:%u)\n",
-                                          _g_default_opts.nb_init_nodes_per_slab);
-    printf(" -E, --dump                   Dump the existing kvs format\n");
+	printf(" -S, --workers <num>          number of workers(default:%u)\n",
+                                          _g_default_opts.nb_workers);
+    printf(" -I, --injectors <num>        number of injector(default:%u)\n",
+                                          _g_default_opts.nb_injectors);
+    printf(" -Q, --queue-size <num>       queue size(default:%u)\n",
+										  _g_default_opts.queue_size);
+    printf(" -C, --chunks <num>           number of cache chunks(default:%u)\n",
+                                          _g_default_opts.cache_chunks);
+    printf(" -N, --items  <num>           total items in db(default:%lu)\n",
+                                          _g_default_opts.nb_items);
 }
 
 static int
-_kvs_parse_arg(int ch, char *arg){
-	return 0;
-}
-
-static void
-_kvs_usage(void){
-
+_bench_parse_arg(int ch, char *arg){
+	switch(ch){
+        case 'D':{
+            _g_default_opts.devname = arg;
+            break;
+        }
+        case 'S':{
+            long workers  = spdk_strtol(arg,0);
+            if(workers>0){
+                _g_default_opts.nb_workers = workers;
+            }
+            else{
+                fprintf(stderr,"The workers shall be a positive integer number\n");
+                return -EINVAL;
+            }
+            break;
+        }
+        case 'I':{
+            long injectors = spdk_strtol(arg,0);
+            if(injectors>0){
+                _g_default_opts.nb_injectors = injectors;
+            }
+            else{
+                fprintf(stderr,"The injectors shall be a positive number\n");
+                return -EINVAL;
+            }
+            break;
+        }
+        case 'Q':{
+            long queue_size = spdk_strtol(arg,0);
+            if(queue_size>0){
+                _g_default_opts.queue_size = queue_size;
+            }
+            else{
+                fprintf(stderr,"The queue size shall be a positive number\n");
+                return -EINVAL;
+            }
+            break;
+        }
+		case 'C':{
+            long chunks = spdk_strtol(arg,0);
+            if(chunks>0){
+                _g_default_opts.cache_chunks = chunks;
+            }
+            else{
+                fprintf(stderr,"The cache chunks shall be a positive number\n");
+                return -EINVAL;
+            }
+            break;
+        }
+		case 'N':{
+            long items = spdk_strtol(arg,0);
+            if(items>0){
+                _g_default_opts.nb_items = items;
+            }
+            else{
+                fprintf(stderr,"The db items shall be a positive number\n");
+                return -EINVAL;
+            }
+            break;
+        }
+        default:
+            return -EINVAL;
+            break;
+    }
+    return 0;
 }
 
 static void*
@@ -67,8 +147,8 @@ _do_start_benchmark(void*ctx){
 
 	struct workload w = {
 		.api = &YCSB,
-		.nb_items_in_db = 40000000LU,
-		.nb_load_injectors = 4,
+		.nb_items_in_db = _g_default_opts.nb_items,
+		.nb_load_injectors = _g_default_opts.nb_injectors,
 		.start_core = 20,
 	};
 
@@ -81,21 +161,33 @@ _do_start_benchmark(void*ctx){
 	   /* Launch benchs */
 	bench_t workloads[] = {
 		//ycsb_f_uniform
-		//ycsb_a_uniform
-		ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_f_uniform,
+        //ycsb_a_uniform,
+        ycsb_c_uniform,
+        ycsb_c_zipfian,
+        ycsb_c_zipfian
+		//ycsb_a_uniform,ycsb_c_uniform,
+        //ycsb_a_zipfian,ycsb_c_zipfian,
+        //ycsb_e_uniform,ycsb_f_uniform,
+        //ycsb_a_uniform,ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,
+        //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian
+		//ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,ycsb_f_uniform,
+        //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian,ycsb_f_zipfian
+        //ycsb_c_zipfian,
+        //ycsb_f_uniform,
 		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
-		ycsb_e_uniform, 
 		//ycsb_e_zipfian, // Scans
+        //ycsb_c_zipfian
 	};
 
 	histogram_init();
 
-	for(int i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
+	for(uint32_t i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
+		//30% extra requests for warm-up
 		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
-			w.nb_requests = 1000000LU; 
+			w.nb_requests = 2600000LU; 
 		} else {
-			w.nb_requests = 10000000LU;
+			w.nb_requests = 100000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		histogram_reset();
@@ -103,6 +195,8 @@ _do_start_benchmark(void*ctx){
 		histogram_print();
 	}
 	printf("All workloads complete, ctrl+c to stop the program\n");
+    kvs_shutdown();
+	return NULL;
 }
 
 static void
@@ -117,20 +211,31 @@ _kvs_bench_start(void*ctx,int kverrno){
 	pthread_t *thread = malloc(sizeof(pthread_t));
 	assert(thread!=NULL);
 	pthread_create(thread,NULL,_do_start_benchmark,thread);
+    //pthread_join(thread,NULL);
 }
 
 static void
 _kvs_opts_init(struct kvs_start_opts *opts){
-    opts->devname = "Raid0";
-    opts->kvs_name = "kvs_bench";
-    opts->max_cache_chunks = 3000;
+    opts->devname = _g_default_opts.devname;
+    opts->kvs_name = _g_default_opts.bench_name;
+    opts->max_cache_chunks = _g_default_opts.cache_chunks;
     opts->max_io_pending_queue_size_per_worker = 64;
-    opts->max_request_queue_size_per_worker = 128;
-    opts->nb_works = 4;
+    opts->max_request_queue_size_per_worker = _g_default_opts.queue_size;
+    opts->nb_works = _g_default_opts.nb_workers;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
     opts->startup_fn = _kvs_bench_start;
     opts->startup_ctx = NULL;
+}
+
+static void
+_kvs_print_parameters(void){
+    printf("block devname     \t:%s\n",_g_default_opts.devname);
+    printf("number of workers \t:%u\n",_g_default_opts.nb_workers);
+    printf("number of injectors \t:%u\n",_g_default_opts.nb_injectors);
+    printf("queue size        \t:%u\n",_g_default_opts.queue_size);
+    printf("number of cache chunks \t:%u\n",_g_default_opts.cache_chunks);
+    printf("total items in db \t:%lu\n",_g_default_opts.nb_items);	
 }
 
 int
@@ -140,9 +245,12 @@ main(int argc, char **argv){
 
 	spdk_app_opts_init(&opts,sizeof(opts));
 
-	opts.name = "kvs_bench";
-	if ((rc = spdk_app_parse_args(argc, argv, &opts, NULL, NULL,
-				      _kvs_parse_arg, _kvs_usage)) !=
+	opts.name = _g_default_opts.bench_name;
+	if ((rc = spdk_app_parse_args(argc, argv, &opts, 
+								  _g_kvs_getopt_string, 
+								  _g_app_long_cmdline_options,
+								  _bench_parse_arg,
+								  _bench_usage)) !=
 	    SPDK_APP_PARSE_ARGS_SUCCESS) {
 		exit(rc);
 	}
@@ -152,6 +260,7 @@ main(int argc, char **argv){
 
     kvs_opts.spdk_opts = &opts;
 
+	_kvs_print_parameters();
     kvs_start_loop(&kvs_opts);
 
 	return rc;

@@ -184,6 +184,8 @@ _worker_slab_evaluation_poll(void* ctx){
     uint32_t i=0,j=0;
 
     int events = 0;
+    //do nothing
+    return 0;
 
     for(;i < wctx->nb_reclaim_shards;i++){
         struct slab_shard *shard = &wctx->shards[wctx->reclaim_shards_start_id + i];

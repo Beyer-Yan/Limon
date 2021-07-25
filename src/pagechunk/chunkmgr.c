@@ -25,10 +25,10 @@ static void
 _chunk_mem_init(uint64_t nb_chunks){
 
     //allocate all chunk memory descriptor
-    uint32_t bitmap_size = bitmap_header_size(g_chunkmgr_worker.nb_pages_per_chunk);
-    uint32_t mem_desc_size = KV_ALIGN(sizeof(struct chunk_mem)+bitmap_size,8);
+    uint64_t bitmap_size = bitmap_header_size(g_chunkmgr_worker.nb_pages_per_chunk);
+    uint64_t mem_desc_size = KV_ALIGN(sizeof(struct chunk_mem)+bitmap_size,8);
     
-    g_mem_desc = calloc(mem_desc_size*nb_chunks,1);
+    g_mem_desc = calloc(nb_chunks,mem_desc_size);
     assert(g_mem_desc && "memory allocation failed");
 
     g_desc_size = mem_desc_size;
@@ -37,27 +37,28 @@ _chunk_mem_init(uint64_t nb_chunks){
 
     //allocator all chunk memory. I have to allocate memories for many times because
     //the SPDK fails to give a very large memory in one memory allocation.
-    uint32_t chunk_data_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
-    uint32_t total_size = chunk_data_size*nb_chunks;
+    uint64_t chunk_data_size = g_chunkmgr_worker.nb_pages_per_chunk * KVS_PAGE_SIZE;
+    uint64_t total_size = chunk_data_size*nb_chunks;
 
     assert(GB(1)%chunk_data_size==0 && "chunk size shall be the size with the power of two");
 
     //allocate 1GB each time.
-    uint32_t times = total_size/GB(1);
-    uint32_t remain = total_size%GB(1);
-    uint32_t k = GB(1)/chunk_data_size;
-
+    uint64_t times = total_size/GB(1);
+    uint64_t remain = total_size%GB(1);
+    uint64_t k = GB(1)/chunk_data_size;
+   
+   SPDK_NOTICELOG("Try to allocate %uGB memory\n",total_size/GB(1));
     uint8_t* page_base[times+1];
-    uint32_t i = 0;
+    uint64_t i = 0;
     for(;i<times;i++){
         page_base[i] = spdk_dma_malloc(GB(1),0x1000, NULL);
         assert(page_base[i] && "memory allocation failed");
-        SPDK_NOTICELOG("Allocated 1GB memory, times:%u\n",i);
+        SPDK_NOTICELOG("Allocated 1GB memory, times:%u/%u\n",i,times);
     }
     if(remain){
         page_base[times] = spdk_dma_malloc(remain,0x1000, NULL);
         assert(page_base[times] && "memory allocation failed");
-        SPDK_NOTICELOG("Allocated remain memory, times:%u\n",times);
+        SPDK_NOTICELOG("Allocated remain memory, times:%u/%u\n",times,times);
     }
 
     //init all chunk memory descriptor
