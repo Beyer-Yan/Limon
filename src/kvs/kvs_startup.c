@@ -144,6 +144,7 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     worker_opts.nb_shards = kvs->nb_shards;
     worker_opts.reclaim_batch_size = kvs->reclaim_batch_size;
     worker_opts.reclaim_percentage_threshold = kvs->reclaim_percentage_threshold;
+    worker_opts.io_cycle = kctx->opts->io_cycle;
     
     worker_opts.shard = kvs->shards;
     worker_opts.target = kctx->bs;

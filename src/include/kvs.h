@@ -17,7 +17,9 @@ struct kvs_start_opts{
 
     uint32_t reclaim_batch_size;
     uint32_t reclaim_percentage_threshold;
-    char* devname;
+    char*    devname;
+
+    uint32_t io_cycle; //us
 
     struct spdk_app_opts *spdk_opts;
     void (*startup_fn)(void*ctx, int kverrno);

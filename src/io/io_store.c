@@ -16,6 +16,7 @@ static inline void _write_pages(struct spdk_blob *blob,uint64_t io_unit_size,str
     uint64_t io_unit_offset = offset*io_unit_per_page;
     uint64_t io_uint_length = length*io_unit_per_page;
 
+    //SPDK_NOTICELOG("Storing io:%lu, %lu\n",io_unit_offset,io_uint_length);
     spdk_blob_io_write(blob,channel,payload,io_unit_offset,io_uint_length,cb_fn,cb_arg);
 }
 
@@ -37,7 +38,7 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 
 static void
 _store_pages_multipages_phase2(struct page_io *pio){
-    pio->imgr->nb_pending_io--;
+    pio->imgr->nb_pending_io++;
     _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
                  pio->buf,pio->start_page,1,
                  _store_pages_complete_cb,pio);
@@ -110,8 +111,6 @@ _store_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
 
     //Now issue a blob IO command for pio_1_pages;
     imgr->nb_pending_io++;
-
-    SPDK_NOTICELOG("Storing page:%lu\n",start_page);
     _write_pages(blob,imgr->io_unit_size,imgr->channel,buf,start_page,1,
                 _store_pages_complete_cb,pio);
 }

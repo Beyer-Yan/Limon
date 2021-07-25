@@ -89,6 +89,7 @@ struct worker_context{
     uint32_t nb_reclaim_shards;
     uint32_t reclaim_shards_start_id;
     uint32_t reclaim_percentage_threshold;
+    uint32_t io_cycle; //us
 
     //simple thread safe mp-sc queue
     struct kv_request *request_queue;  // kv_request mempool for this worker
@@ -105,6 +106,7 @@ struct worker_context{
     
     //poller to process internal requests, the poller will be run 
     struct spdk_poller *request_poller;
+    struct spdk_poller *io_poller;
     struct spdk_poller* slab_evaluation_poller;
 
     struct object_cache_pool *kv_request_internal_pool;

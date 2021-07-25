@@ -19,6 +19,7 @@ C_SRCS += $(shell ls src/slab/*.c)
 C_SRCS += $(shell ls src/pagechunk/*.c)
 C_SRCS += $(shell ls src/kvs/*.c)
 C_SRCS += src/io/io_load.c src/io/io_store_batch.c
+#C_SRCS += src/io/io_load.c src/io/io_store.c
 C_SRCS += src/indexes/index.c src/indexes/impl/art.c src/indexes/impl/rbtree_uint.c src/indexes/impl/hashmap.c
 
 LIBNAME = limon

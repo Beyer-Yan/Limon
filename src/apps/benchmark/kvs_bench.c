@@ -18,7 +18,7 @@
 #include "ycsb/common.h"
 #include "ycsb/histogram.h"
 
-static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:"; 
+static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:T:"; 
 
 static struct option _g_app_long_cmdline_options[] = {
 #define DEVNAME_OPT_IDX         'D'
@@ -32,7 +32,9 @@ static struct option _g_app_long_cmdline_options[] = {
 #define CHUNKS_IDX              'C'
     {"chunks",required_argument,NULL,CHUNKS_IDX},
 #define ITMES_OPT_IDX           'N'
-    {"items",required_argument,NULL,ITMES_OPT_IDX}
+    {"items",required_argument,NULL,ITMES_OPT_IDX},
+#define IO_OPT_IDX              'T'
+    {"io_cycle_us",required_argument,NULL,IO_OPT_IDX}
 };
 
 struct kvs_bench_opts{
@@ -45,6 +47,8 @@ struct kvs_bench_opts{
 	uint32_t queue_size;
 	uint32_t cache_chunks;
 	uint64_t nb_items;
+
+    uint64_t io_cyle_us; //
 };
 
 static struct kvs_bench_opts _g_default_opts = {
@@ -53,8 +57,9 @@ static struct kvs_bench_opts _g_default_opts = {
 	.nb_workers = 4,
 	.nb_injectors = 8,
 	.queue_size = 128,
-	.cache_chunks = 327680,
-	.nb_items = 52000000ul
+	.cache_chunks = 81920,
+	.nb_items = 52000000ul,
+    .io_cyle_us = 0
 };
 
 static void
@@ -71,6 +76,8 @@ _bench_usage(void){
                                           _g_default_opts.cache_chunks);
     printf(" -N, --items  <num>           total items in db(default:%lu)\n",
                                           _g_default_opts.nb_items);
+    printf(" -T, --io-cycle <num>         io polling cycle(default:%lu)\n",
+                                          _g_default_opts.io_cyle_us);
 }
 
 static int
@@ -135,6 +142,17 @@ _bench_parse_arg(int ch, char *arg){
             }
             break;
         }
+		case 'T':{
+            long cycle = spdk_strtol(arg,0);
+            if(cycle>=0){
+                _g_default_opts.io_cyle_us = cycle;
+            }
+            else{
+                fprintf(stderr,"The io_cyle_us shall be a positive number\n");
+                return -EINVAL;
+            }
+            break;
+        }
         default:
             return -EINVAL;
             break;
@@ -161,10 +179,11 @@ _do_start_benchmark(void*ctx){
 	   /* Launch benchs */
 	bench_t workloads[] = {
 		//ycsb_f_uniform
-        //ycsb_a_uniform,
-        ycsb_c_uniform,
-        ycsb_c_zipfian,
-        ycsb_c_zipfian
+        ycsb_a_uniform,
+        ycsb_a_zipfian,
+        //ycsb_c_uniform,
+        //ycsb_c_zipfian,
+        //ycsb_c_zipfian
 		//ycsb_a_uniform,ycsb_c_uniform,
         //ycsb_a_zipfian,ycsb_c_zipfian,
         //ycsb_e_uniform,ycsb_f_uniform,
@@ -176,7 +195,7 @@ _do_start_benchmark(void*ctx){
         //ycsb_f_uniform,
 		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
 		//ycsb_e_zipfian, // Scans
-        //ycsb_c_zipfian
+        ycsb_c_zipfian
 	};
 
 	histogram_init();
@@ -187,7 +206,7 @@ _do_start_benchmark(void*ctx){
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 2600000LU; 
 		} else {
-			w.nb_requests = 100000000LU;
+			w.nb_requests = 26000000LU;
 		}
 		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		histogram_reset();
@@ -224,6 +243,7 @@ _kvs_opts_init(struct kvs_start_opts *opts){
     opts->nb_works = _g_default_opts.nb_workers;
     opts->reclaim_batch_size = 16;
     opts->reclaim_percentage_threshold = 80;
+    opts->io_cycle = _g_default_opts.io_cyle_us;
     opts->startup_fn = _kvs_bench_start;
     opts->startup_ctx = NULL;
 }
@@ -236,6 +256,7 @@ _kvs_print_parameters(void){
     printf("queue size        \t:%u\n",_g_default_opts.queue_size);
     printf("number of cache chunks \t:%u\n",_g_default_opts.cache_chunks);
     printf("total items in db \t:%lu\n",_g_default_opts.nb_items);	
+    printf("io cycle \t:%lu\n",_g_default_opts.io_cyle_us);	
 }
 
 int

@@ -13,6 +13,7 @@ struct worker_init_opts{
     uint32_t max_io_pending_queue_size_per_worker;
     uint32_t reclaim_batch_size;
     uint32_t reclaim_percentage_threshold;
+    uint32_t io_cycle; //us
 
     uint32_t nb_shards;
     struct slab_shard *shard;

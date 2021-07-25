@@ -146,9 +146,7 @@ _worker_request_poll(void*ctx){
     int events = 0;
     events += _worker_poll_reclaim(wctx);
     events += _worker_poll_business(wctx);
-    events += _worker_poll_io(wctx);
     return events;
-
 }
 static void
 _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
@@ -456,6 +454,7 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     wctx->nb_reclaim_shards = opts->nb_reclaim_shards;
     wctx->reclaim_shards_start_id = opts->reclaim_shard_start_id;
     wctx->reclaim_percentage_threshold = opts->reclaim_percentage_threshold;
+    wctx->io_cycle = opts->io_cycle;
     wctx->request_queue = (struct kv_request*)(wctx + 1);
     wctx->max_pending_kv_request = nb_max_reqs;
     
@@ -583,6 +582,10 @@ _rebuild_complete(void*ctx, int kverrno){
     assert(poller!=NULL); 
     wctx->request_poller = poller;
 
+    poller = SPDK_POLLER_REGISTER(_worker_poll_io,wctx,wctx->io_cycle);
+    assert(poller!=NULL);
+    wctx->io_poller = poller;
+
     poller = SPDK_POLLER_REGISTER(_worker_slab_evaluation_poll,wctx,DEFAULT_RECLAIM_POLLING_PERIOD_US);
     assert(poller!=NULL);
     wctx->slab_evaluation_poller = poller;
@@ -640,6 +643,7 @@ _do_worker_destroy(void*ctx){
     struct worker_context* wctx = ctx;
     //Release all the poller.
     spdk_poller_unregister(&wctx->request_poller);
+    spdk_poller_unregister(&wctx->io_poller);
     spdk_poller_unregister(&wctx->slab_evaluation_poller);
 
     spdk_put_io_channel(wctx->imgr->channel);
