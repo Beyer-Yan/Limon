@@ -3,6 +3,9 @@
 
 static inline uint32_t
 _hash_item_to_shard(struct kv_item *item){
+    //uint64_t prefix = *(uint64_t*)item->data;
+    //prefix =  (((uint64_t)htonl(prefix))<<32) + htonl(prefix>>32); 
+    //return prefix%g_kvs->nb_shards;
     return kv_hash(item->data, item->meta.ksize,g_kvs->nb_shards);
 }
 
@@ -21,6 +24,8 @@ _hash_shard_to_worker(uint32_t shard_id){
     return shard_id/nb_shards_per_worker;
 }
 
+//static volatile uint64_t times = 0;
+
 // The key field of item  shall be filed
 void 
 kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
@@ -29,6 +34,33 @@ kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx){
     uint32_t shard_id = _hash_item_to_shard(item);
     uint32_t worker_id = _hash_shard_to_worker(shard_id);
     worker_enqueue_get(g_kvs->workers[worker_id],shard_id,item,cb_fn,ctx);
+
+    // times++;
+    // //for workload skew simulation
+
+    // uint64_t r = *(uint64_t*)(item->data+8);
+    // bool filter = false;
+
+    // if( times > 20000000){
+    //     if(worker_id==0){
+    //         filter = r%10<9;
+    //     }else if(worker_id==1){
+    //         filter = r%10<9;
+    //     }
+    //     else if(worker_id==2){
+    //         filter = r%10<9;
+    //     }
+    //     else if(worker_id==3){
+    //         filter = false;
+    //     }
+    // }
+
+    // if(filter){
+    //     free(item);
+    // }
+    // else{
+    //     worker_enqueue_get(g_kvs->workers[worker_id],shard_id,item,cb_fn,ctx);
+    // }
 }
 
 // The whole item shall be filled

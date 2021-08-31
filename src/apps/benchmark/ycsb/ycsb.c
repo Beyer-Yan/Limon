@@ -56,9 +56,16 @@ _ycsb_put_complete(void*ctx, struct kv_item* item, int kverrno){
    free(ori_item);
 }
 
+struct get_callback{
+   struct kv_item* item;
+   uint64_t* processed;
+};
+
 static void
 _ycsb_get_complete(void*ctx, struct kv_item* item, int kverrno){
-   struct kv_item *ori_item = ctx;
+   //struct get_callback* cb = ctx;
+   //struct kv_item *ori_item = cb->item;
+   struct kv_item *ori_item =ctx;
    if(kverrno){
       printf("Get error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
    }
@@ -72,42 +79,40 @@ _ycsb_get_complete(void*ctx, struct kv_item* item, int kverrno){
 }
 
 static void 
-_launch_ycsb_common(int test, int nb_requests, int zipfian, int id) {
-   declare_periodic_count;
+_launch_ycsb_common(int test, int nb_requests, int zipfian, uint64_t* processed, int id) {
    for(int i = 0; i < nb_requests; i++) {
       uint64_t next = zipfian ? zipf_next() : uniform_next();
       struct kv_item *item = _create_unique_item_ycsb(next);
+      //struct get_callback* cb = malloc(sizeof(*cb));
+      //cb->item = item;
+      //cb->processed = processed;
 
       random_get_put(test) ? kv_put_async(item,_ycsb_put_complete,item) :
                              kv_get_async(item,_ycsb_get_complete,item);
-
-      periodic_count(1000, "YCSB Load Injector:%02d, (%lu%%)", id, i*100LU/nb_requests);
+      *processed = i;
    }
 }
 
 // YCSB D
 static void
-_launch_ycsb_d(int test, int nb_requests, int zipfian, int id) {
-   declare_periodic_count;
+_launch_ycsb_d(int test, int nb_requests, int zipfian,uint64_t* processed, int id) {
    for(int i = 0; i < nb_requests; i++) {
       uint64_t next = random_get_put(test) ? latest_next(1) : latest_next(0);
       struct kv_item *item = _create_unique_item_ycsb(next);
       
       random_get_put(test) ? kv_put_async(item,_ycsb_put_complete,item) :
                              kv_get_async(item,_ycsb_get_complete,item);
-
-      periodic_count(1000, "YCSB Load Injector:%02d, (%lu%%)", id, i*100LU/nb_requests);
+      *processed = i;
    }
 }
 
 // YCSB E
 static void 
-_launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
-   declare_periodic_count;
+_launch_ycsb_e(int test, int nb_requests, int zipfian,uint64_t* processed, int id) {
    random_gen_t rand_next = zipfian?zipf_next:uniform_next;
    struct kv_iterator *it = kv_iterator_alloc(16);
 
-   for(size_t i = 0; i < nb_requests; i++) {
+   for(int i = 0; i < nb_requests; i++) {
       if(random_get_put(test)) { 
          // In this test we update with a given probability
          struct kv_item* item = _create_unique_item_ycsb(rand_next());
@@ -130,7 +135,7 @@ _launch_ycsb_e(int test, int nb_requests, int zipfian, int id) {
             }
          }
       }
-      periodic_count(1000, "YCSB Load Injector (scans):%d, (%lu%%)", id, i*100LU/nb_requests);
+      *processed = i;
    }
    kv_iterator_release(it);
 }
@@ -156,8 +161,7 @@ _ysc_rmw_modify_fn(struct kv_item* item){
 
 // YCSB F
 static void
-_launch_ycsb_f(int test, int nb_requests, int zipfian, int id) {
-   declare_periodic_count;
+_launch_ycsb_f(int test, int nb_requests, int zipfian, uint64_t* processed,int id) {
    for(int i = 0; i < nb_requests; i++) {
       long next = zipfian ? zipf_next() : uniform_next();
       struct kv_item *item = _create_unique_item_ycsb(next);
@@ -169,48 +173,48 @@ _launch_ycsb_f(int test, int nb_requests, int zipfian, int id) {
       else { // or we read
          kv_get_async(item,_ycsb_get_complete,item);
       }
-      periodic_count(1000, "YCSB Load Injector:%02d, (%lu%%)", id, i*100LU/nb_requests);
+      *processed = i;
    }
 }
 
 /* Generic interface */
-static void launch_ycsb(struct workload *w, bench_t b, int id) {
+static void launch_ycsb(struct workload *w, bench_t b,uint64_t* processed, int id) {
    switch(b) {
       case ycsb_a_uniform:
-         _launch_ycsb_common(0, w->nb_requests_per_thread, 0, id);
+         _launch_ycsb_common(0, w->nb_requests_per_thread, 0, processed,id);
          break;
       case ycsb_b_uniform:
-         _launch_ycsb_common(1, w->nb_requests_per_thread, 0, id);
+         _launch_ycsb_common(1, w->nb_requests_per_thread, 0,processed, id);
          break;
       case ycsb_c_uniform:
-         _launch_ycsb_common(2, w->nb_requests_per_thread, 0, id);
+         _launch_ycsb_common(2, w->nb_requests_per_thread, 0, processed, id);
          break;
       case ycsb_d_uniform:
-         _launch_ycsb_d(3, w->nb_requests_per_thread, 0, id);
+         _launch_ycsb_d(3, w->nb_requests_per_thread, 0,processed, id);
          break;
       case ycsb_e_uniform:
-         _launch_ycsb_e(4, w->nb_requests_per_thread, 0, id);
+         _launch_ycsb_e(4, w->nb_requests_per_thread, 0,processed, id);
          break;
       case ycsb_f_uniform:
-         _launch_ycsb_f(5, w->nb_requests_per_thread, 0, id);
+         _launch_ycsb_f(5, w->nb_requests_per_thread, 0,processed, id);
          break;
       case ycsb_a_zipfian:
-         _launch_ycsb_common(0, w->nb_requests_per_thread, 1, id);
+         _launch_ycsb_common(0, w->nb_requests_per_thread, 1,processed, id);
          break;
       case ycsb_b_zipfian:
-         _launch_ycsb_common(1, w->nb_requests_per_thread, 1, id);
+         _launch_ycsb_common(1, w->nb_requests_per_thread, 1,processed, id);
          break;
       case ycsb_c_zipfian:
-         _launch_ycsb_common(2, w->nb_requests_per_thread, 1, id);
+         _launch_ycsb_common(2, w->nb_requests_per_thread, 1,processed, id);
          break;
       case ycsb_d_zipfian:
-         _launch_ycsb_d(3, w->nb_requests_per_thread, 1, id);
+         _launch_ycsb_d(3, w->nb_requests_per_thread, 1,processed, id);
          break;
       case ycsb_e_zipfian:
-         _launch_ycsb_e(4, w->nb_requests_per_thread, 1, id);
+         _launch_ycsb_e(4, w->nb_requests_per_thread, 1,processed, id);
          break;
       case ycsb_f_zipfian:
-         _launch_ycsb_f(5, w->nb_requests_per_thread, 1, id);
+         _launch_ycsb_f(5, w->nb_requests_per_thread, 1,processed, id);
          break;
       default:
          printf("Unsupported workload\n");
@@ -222,29 +226,29 @@ static void launch_ycsb(struct workload *w, bench_t b, int id) {
 static const char *name_ycsb(bench_t w) {
    switch(w) {
       case ycsb_a_uniform:
-         return "YCSB A - Uniform";
+         return "YCSB-A-Uniform";
       case ycsb_b_uniform:
-         return "YCSB B - Uniform";
+         return "YCSB-B-Uniform";
       case ycsb_c_uniform:
-         return "YCSB C - Uniform";
+         return "YCSB-C-Uniform";
       case ycsb_d_uniform:
-         return "YCSB D - Uniform";
+         return "YCSB-D-Uniform";
       case ycsb_e_uniform:
-         return "YCSB E - Uniform";
+         return "YCSB-E-Uniform";
       case ycsb_f_uniform:
-         return "YCSB F - Uniform";
+         return "YCSB-F-Uniform";
       case ycsb_a_zipfian:
-         return "YCSB A - Zipf";
+         return "YCSB-A-Zipf";
       case ycsb_b_zipfian:
-         return "YCSB B - Zipf";
+         return "YCSB-B-Zipf";
       case ycsb_c_zipfian:
-         return "YCSB C - Zipf";
+         return "YCSB-C-Zipf";
       case ycsb_d_zipfian:
-         return "YCSB D - Zipf";
+         return "YCSB-D-Zipf";
       case ycsb_e_zipfian:
-         return "YCSB E - Zipf";
+         return "YCSB-E-Zipf";
       case ycsb_f_zipfian:
-         return "YCSB F - Zipf";
+         return "YCSB-F-Zipf";
       default:
          return "??";
    }

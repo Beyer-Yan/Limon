@@ -130,7 +130,7 @@ pagechunk_get_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     uint64_t addr_offset = _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //Bump the LRU list.
-    chunk_mgr->hit_times++;
+    chunk_mgr->visit_times++;
     TAILQ_REMOVE(&chunk_mgr->global_chunks,desc,link);
     TAILQ_INSERT_TAIL(&chunk_mgr->global_chunks,desc,link);
     
@@ -166,7 +166,7 @@ pagechunk_put_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
     memcpy(slot_addr,&tsc,8);
 
     //Bump the LRU list.
-    chunk_mgr->hit_times++;
+    chunk_mgr->visit_times++;
     TAILQ_REMOVE(&chunk_mgr->global_chunks,desc,link);
     TAILQ_INSERT_TAIL(&chunk_mgr->global_chunks,desc,link);
 }
@@ -564,28 +564,22 @@ static void _remote_chunk_mem_request_finish(void*ctx){
 static bool
 _pagechunk_local_evaluate(struct pagechunk_mgr *pmgr){
     //experience value.
-    uint64_t threshold = pmgr->water_mark*6/10;
+    uint64_t threshold = pmgr->water_mark*9/10;
     if(pmgr->nb_used_chunks<=threshold){
         return false;
     }
     else{
-        //The values are chosen randomly.
-        //They should be according in engineering.
-        static float alpha = 0.5;
-        static float beta  = 0.5;
-        //calculate the miss rate.
-        float miss_rate = (float)pmgr->miss_times/(float)(pmgr->hit_times+pmgr->miss_times);
-        //calculate the  utilization.
-        float util_rate = (float)pmgr->nb_used_chunks/(float)pmgr->water_mark;
+        static int beta  = 0;
+        int miss_rate = pmgr->miss_times*100/pmgr->visit_times;
+        int util_rate = pmgr->nb_used_chunks*100/(4*pmgr->water_mark);
+        int p = beta*miss_rate*(100-util_rate)/100;
 
-        //My dog tells me the formula (^_^)
-        //Don't ask me why...
-        float p_remote = alpha*miss_rate + beta*(1-util_rate);
-        float god_decision = (float)rand()/RAND_MAX;
+        p = p<100 ? p : 100;
+        int god_decision = rand_r(&pmgr->seed)%100;
 
-        //SPDK_NOTICELOG("Local evaluating, nb:%u, mr:%f, ur:%f  p_remote:%f, decision:%f\n",pmgr->nb_used_chunks, miss_rate,util_rate ,p_remote,god_decision);
+        //SPDK_NOTICELOG("Local evaluating, p:%d, decision:%d\n",p,god_decision);
         //Now listen to the God.
-        return (god_decision<=p_remote) ? false : true ;
+        return (god_decision<p) ? false : true ;
     }
 }
 
@@ -593,7 +587,25 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
                                  struct chunk_desc* desc,
                                  void(*cb)(void*ctx,int kverrno), 
                                  void* ctx){
+    #if 0
+    struct chunk_mem* mem = NULL;
+    if(_pagechunk_local_evaluate(pmgr)){
+        mem = pagechunk_evict_one_chunk(pmgr);
+    }else{
+        mem = chunkmgr_request_one(pmgr);
+        if(!mem){
+            mem = pagechunk_evict_one_chunk(pmgr);
+        }else{
+            pmgr->nb_used_chunks++;
+        }
+    }
 
+    bitmap_clear_bit_all(mem->bitmap);
+    desc->chunk_mem = mem;
+    TAILQ_INSERT_TAIL(&pmgr->global_chunks,desc,link);
+    cb(ctx,-KV_ESUCCESS);
+    #endif
+    
     //In such case, I should send a request to the global chunk memory manager.
     //The global chunk maneger will deside how I should get a chunk memory, 
     //ether from the local evicting, or from the remote evicting , or allocating
@@ -609,7 +621,7 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
         TAILQ_INSERT_TAIL(&desc->chunk_miss_callback_head,cb_obj,link);
     }   
     else if(_pagechunk_local_evaluate(pmgr)){
-            //I should perform local evicting instead of requesting chunk mempry from
+            //I should perform local evicting instead of requesting chunk memory from
             //global chunk manager, since the cost of cross-core communication is much
             //higher than local evicting.
             cb_obj->mem = pagechunk_evict_one_chunk(pmgr);

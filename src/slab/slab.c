@@ -180,8 +180,7 @@ void slab_release_node_async(struct iomgr* imgr,
                        void* ctx){
     
     //Only the empty node is allowed to release
-    uint64_t slots_perf_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
-    assert(node->nb_free_slots == slots_perf_node);
+    uint64_t slots_per_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
 
     //@TODO to be implemented
     uint64_t start_chunk = slab->reclaim.nb_chunks_per_node * node->id;
@@ -189,26 +188,7 @@ void slab_release_node_async(struct iomgr* imgr,
     (void)start_chunk;
     (void)nb_chunks;
     //spdk_blob_punch_hole(slab->blob,imgr->channel,start_chunk,nb_chunks,_punch_hole_complete,ctx);
-
-    // uint64_t old_size = slab->reclaim.nb_reclaim_nodes * slab->reclaim.nb_chunks_per_node;
-    // uint64_t new_size = old_size - nb_nodes*slab->reclaim.nb_chunks_per_node;
-
-    // struct resize_ctx *rctx = malloc(sizeof(struct resize_ctx));
-    // if(!rctx){
-    //     cb(ctx,-KV_EMEM);
-    //     return;
-    // }
-
-    // rctx->slab = slab;
-    // rctx->new_size = new_size;
-    // rctx->user_truncate_cb = cb;
-    // rctx->user_ctx = ctx;
-    // rctx->kverrno = 0;
-
-    // //Tell the disk driver that the data can be deserted.
-    // uint64_t io_unit_offset = new_size*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
-    // uint64_t io_unit_length = nb_nodes*slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_pages_per_chunk*imgr->io_unit_size;
-    // spdk_blob_io_unmap(slab->blob,imgr->channel,io_unit_offset,io_unit_length,_truncate_unmap_complete,rctx);
+    cb(ctx,-KV_ESUCCESS);
 }
 
 static inline uint64_t 
@@ -291,6 +271,8 @@ _slab_blob_resize_common_cb(void*ctx){
         slab->reclaim.nb_reclaim_nodes++;
     }
 
+    //SPDK_NOTICELOG("Resized %u nodes, slab:%p, total nodes:%u\n",nb_nodes,slab,slab->reclaim.nb_reclaim_nodes);
+
     //index of the node that have free slots.
     uint32_t i = 0;
     struct resize_ctx* req,*tmp = NULL;
@@ -323,13 +305,26 @@ void slab_request_slot_async(struct iomgr* imgr,
         return;
     }
 
+    // struct reclaim_node* node = NULL;
+    // if(slab->reclaim.nb_free_slots!=0){
+    //      struct reclaim_node* node = rbtree_first(slab->reclaim.free_node_tree);
+    //      //impossible.
+    //      assert(node);
+    // }
+
+    // if(node){
+    //     uint64_t slot = _get_one_slot_from_free_slab(slab,node);
+    //     cb(slot,ctx,-KV_ESUCCESS);
+    //     return;
+    // }
+
     //Not free slot in the slab, now resize it.
     
-    if(slab->flag&SLAB_FLAG_RECLAIMING){
+    //if(slab->flag&SLAB_FLAG_RECLAIMING){
         //The slab is fully utilized, but it is in reclaiming state. I am really overwhelmed.
         //This may be caused by incorrect reclaiming checking algorithm.
-        assert(0);
-    }
+    //    assert(0);
+    //}
 
     uint32_t nb_slots_per_node = slab->reclaim.nb_slots_per_chunk * 
                                  slab->reclaim.nb_chunks_per_node;
@@ -338,11 +333,12 @@ void slab_request_slot_async(struct iomgr* imgr,
     uint32_t nb_nodes = imgr->max_pending_io/nb_slots_per_node + 
                         !!(imgr->max_pending_io%nb_slots_per_node);
     
+    uint32_t nb_chunks = nb_nodes*slab->reclaim.nb_chunks_per_node;
     //align to 4MB
-    const uint64_t min_alloc_nodes = (MIN_ALLOC_SIZE_UNIT)/(slab->reclaim.nb_pages_per_chunk*slab->reclaim.nb_chunks_per_node*KVS_PAGE_SIZE);
-    nb_nodes = nb_nodes < min_alloc_nodes ? min_alloc_nodes : nb_nodes;
+    //const uint64_t min_alloc_nodes = (MIN_ALLOC_SIZE_UNIT)/(slab->reclaim.////nb_pages_per_chunk*slab->reclaim.nb_chunks_per_node*KVS_PAGE_SIZE);
+    //nb_nodes = nb_nodes < min_alloc_nodes ? min_alloc_nodes : nb_nodes;
 
-    if(spdk_bs_free_cluster_count(imgr->target) < nb_nodes){
+    if(spdk_bs_free_cluster_count(imgr->target) < nb_chunks){
         //No enough space for the disk.
         cb(UINT64_MAX,ctx,-KV_EFULL);
         return;
@@ -376,14 +372,3 @@ void slab_request_slot_async(struct iomgr* imgr,
         //SPDK_NOTICELOG("Alloc %u nodes,curent nodes:%u,slab:%u\n",nb_nodes,slab->reclaim.nb_reclaim_nodes,slab->slab_size);
     }
 }
-
-void slab_free_slot_async(struct reclaim_mgr* rmgr,
-                          struct slab* slab, 
-                          uint64_t slot_idx,
-                          void (*cb)(void* ctx, int kverrno),
-                          void* ctx){
-                              
-    //Ok. Just post the deleting to background reclaiming thread.
-    slab_reclaim_post_delete(rmgr,slab,slot_idx,cb,ctx);
-}
-

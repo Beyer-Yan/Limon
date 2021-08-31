@@ -257,22 +257,15 @@ void slab_request_slot_async(struct iomgr* imgr,
                              void* ctx);
 
 /**
- * @brief Delete the slot asynchronized. Deleting a slot means writing tombstone of the 
- * corresponding item into the page and clear the bitmap. The deleting will be post to 
- * background reclaiming thread.
+ * @brief Delete the slot.
  * 
  * @param rmgr      The reclaim manager that the deleting will posted to.
  * @param slab      The slab object pointer
  * @param slot_idx  The slot index to be deleted
- * @param cb        User callback when delete successes. NULL means that user does not care the reclaiming,
- * which means that the reclaiming is posted into background stage. 
- * @param ctx       Parameter of user callback. When cb is NUll, the ctx will not be discarded.
  */
-void slab_free_slot_async(struct reclaim_mgr* rmgr,
-                          struct slab* slab, 
-                          uint64_t slot_idx,
-                          void (*cb)(void* ctx, int kverrno),
-                          void* ctx);
+void slab_free_slot(struct reclaim_mgr* rmgr,
+                    struct slab* slab, 
+                    uint64_t slot_idx);
 
 /**
  * @brief Get the start chunk id for the given reclaim node.
@@ -331,11 +324,5 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
  * @return false  The slab does not need performing reclaim.
  */
 bool slab_reclaim_evaluate_slab(struct slab* slab);
-
-extern void slab_reclaim_post_delete(struct reclaim_mgr* rmgr,
-                          struct slab* slab, 
-                          uint64_t slot_idx,
-                          void (*cb)(void* ctx, int kverrno),
-                          void* ctx);
 
 #endif

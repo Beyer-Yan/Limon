@@ -28,12 +28,13 @@ _process_put_case1_store_data_cb(void*ctx, int kverrno){
     if(kverrno){
         //Store data error, which may be caused by IO error.
         //the update is out-of-place, so the cache state is not needed to be invalidated.
-        slab_free_slot_async(wctx->rmgr,slab,new_entry->slot_idx,NULL,NULL);  
+        slab_free_slot(wctx->rmgr,slab,new_entry->slot_idx);  
     }
     else{
-        //Now I have to reclaim the old slot index. But it is posted to 
-        //background stage
-        slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
+        //Now I have to reclaim the old slot index. Should I write tombstone? 
+        //The old one will not be used even for a startup since the new slot is
+        //newer than the old one even if I don't write the tombstone.
+        slab_free_slot(wctx->rmgr,pctx->slab,entry->slot_idx);
 
         //Update the entry info with new_entry.
         *entry = pctx->new_entry;
@@ -60,7 +61,7 @@ _process_put_case1_load_data_cb(void*ctx, int kverrno){
         pagechunk_mem_lower(pctx->new_desc);
         entry->writing = 0;
         //I have to free the allocated slot
-        slab_free_slot_async(wctx->rmgr,slab,new_entry->slot_idx,NULL,NULL);  
+        slab_free_slot(wctx->rmgr,slab,new_entry->slot_idx);  
         
         req->cb_fn(req->ctx,NULL,-KV_EIO);
         return;
@@ -275,8 +276,8 @@ _process_put_case3_store_data_cb(void*ctx, int kverrno){
 
     if(kverrno){
         //Store data error, which may be caused by IO error.
-        //The newly inseerted index shall be deleted.
-        slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
+        //The newly inserted index shall be deleted.
+        slab_free_slot(wctx->rmgr,pctx->slab,entry->slot_idx);
         mem_index_delete(wctx->mem_index,req->item);    
     }
     else{
@@ -302,7 +303,7 @@ _process_put_case3_load_data_cb(void*ctx, int kverrno){
         pool_release(wctx->kv_request_internal_pool,req);
         pagechunk_mem_lower(pctx->desc);
         //I have to free the allocated slot in background
-        slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
+        slab_free_slot(wctx->rmgr,pctx->slab,entry->slot_idx);
         mem_index_delete(wctx->mem_index,req->item); 
 
         req->cb_fn(req->ctx,NULL,-KV_EIO); 

@@ -271,7 +271,6 @@ void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
                                  struct chunk_desc* desc,
                                  void(*cb)(void*ctx,int kverrno), 
                                  void* ctx);
-
 /**
  * @brief Release the chunk memory to the page chunk manager. When a slab successes in
  * shrinking its size, it will call the function to release its chunk memory.

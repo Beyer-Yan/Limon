@@ -10,6 +10,8 @@ CFLAGS += -I$(CURDIR)/src/include
 CFLAGS += -I$(CURDIR)/src/indexes/include
 CFLAGS += -I$(CURDIR)/src/utils/include
 
+CFLAGS += -g
+
 #CFLAGS += -ffunction-sections
 #CFLAGS += -fdata-sections
 

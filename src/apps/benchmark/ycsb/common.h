@@ -37,7 +37,7 @@ struct workload_api {
    int (*handles)(bench_t w); 
 
    // launch workload
-   void (*launch)(struct workload *w, bench_t b, int id); 
+   void (*launch)(struct workload *w, bench_t b, uint64_t* processed, int wid); 
 
    // pretty print the benchmark (e.g., "YCSB A - Uniform")
    const char* (*name)(bench_t w);

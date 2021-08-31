@@ -28,10 +28,13 @@ _process_rmw_write_out_place_store_data_cb(void*ctx, int kverrno){
         //Store data error, which may be caused by IO error.
         //@todo invalidate the cache state, indicating the update in the cache is invalid.
         //When the slot is read again, it will be loaded from the disk.
-        slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
+        slab_free_slot(wctx->rmgr,pctx->slab,new_entry->slot_idx);  
     }
     else{
-        slab_free_slot_async(wctx->rmgr,pctx->slab,entry->slot_idx,NULL,NULL);
+        //Now I have to reclaim the old slot index. Should I write tombstone? 
+        //The old one will not be used even for a startup since the new slot is
+        //newer than the old one even if I don't write the tombstone.
+        slab_free_slot(wctx->rmgr,pctx->slab,entry->slot_idx);
         //Update the entry info with new_entry.
         entry->slot_idx = new_entry->slot_idx;
     }
@@ -54,7 +57,7 @@ _process_rmw_write_out_place_load_data_cb(void*ctx, int kverrno){
         pagechunk_mem_lower(pctx->new_desc);
         _resource_release(req,entry);
         //I have to free the allocated slot
-        slab_free_slot_async(wctx->rmgr,pctx->slab,new_entry->slot_idx,NULL,NULL);  
+        slab_free_slot(wctx->rmgr,pctx->slab,new_entry->slot_idx);  
         
         req->cb_fn(req->ctx,NULL,-KV_EIO);
         return;

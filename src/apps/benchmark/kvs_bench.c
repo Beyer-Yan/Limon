@@ -56,9 +56,9 @@ static struct kvs_bench_opts _g_default_opts = {
 	.bench_name = "kvs_ycsb",
 	.nb_workers = 4,
 	.nb_injectors = 8,
-	.queue_size = 128,
-	.cache_chunks = 81920,
-	.nb_items = 52000000ul,
+	.queue_size = 64,
+	.cache_chunks = 32768,
+	.nb_items = 26000000,
     .io_cyle_us = 0
 };
 
@@ -179,23 +179,24 @@ _do_start_benchmark(void*ctx){
 	   /* Launch benchs */
 	bench_t workloads[] = {
 		//ycsb_f_uniform
-        ycsb_a_uniform,
-        ycsb_a_zipfian,
-        //ycsb_c_uniform,
+        //ycsb_a_uniform,ycsb_e_uniform
+        //ycsb_a_zipfian,
+        ycsb_c_uniform,
         //ycsb_c_zipfian,
         //ycsb_c_zipfian
-		//ycsb_a_uniform,ycsb_c_uniform,
-        //ycsb_a_zipfian,ycsb_c_zipfian,
+		//ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
+        //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
+        //ycsb_d_uniform
         //ycsb_e_uniform,ycsb_f_uniform,
-        //ycsb_a_uniform,ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,
-        //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian
+        //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
+        //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
 		//ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,ycsb_f_uniform,
         //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian,ycsb_f_zipfian
         //ycsb_c_zipfian,
         //ycsb_f_uniform,
 		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
 		//ycsb_e_zipfian, // Scans
-        ycsb_c_zipfian
+        //ycsb_c_zipfian
 	};
 
 	histogram_init();
@@ -204,16 +205,21 @@ _do_start_benchmark(void*ctx){
 		//30% extra requests for warm-up
 		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
 			//requests for YCSB E are longer (scans) so we do less
-			w.nb_requests = 2600000LU; 
+			w.nb_requests = 3600000LU; 
 		} else {
-			w.nb_requests = 26000000LU;
+			w.nb_requests = 130000000LU;
 		}
-		printf("Benchmark starts, %s\n",w.api->name(workloads[i]));
 		histogram_reset();
+        uint64_t start = spdk_get_ticks();
 		run_workload(&w, workloads[i]);
+        uint32_t us = kv_cycles_to_us(spdk_get_ticks()-start);
+        uint64_t qps = (uint64_t)((double)w.nb_requests/((double)us/1000000.0));
+        printf("Workload %s, requests (%d/s)\n",w.api->name(workloads[i]),qps);
 		histogram_print();
 	}
 	printf("All workloads complete, ctrl+c to stop the program\n");
+    //wait 1 second for left requests.
+    spdk_delay_us(1000000);
     kvs_shutdown();
 	return NULL;
 }
@@ -238,10 +244,10 @@ _kvs_opts_init(struct kvs_start_opts *opts){
     opts->devname = _g_default_opts.devname;
     opts->kvs_name = _g_default_opts.bench_name;
     opts->max_cache_chunks = _g_default_opts.cache_chunks;
-    opts->max_io_pending_queue_size_per_worker = 64;
+    opts->max_io_pending_queue_size_per_worker = 128;
     opts->max_request_queue_size_per_worker = _g_default_opts.queue_size;
     opts->nb_works = _g_default_opts.nb_workers;
-    opts->reclaim_batch_size = 16;
+    opts->reclaim_batch_size = 4;
     opts->reclaim_percentage_threshold = 80;
     opts->io_cycle = _g_default_opts.io_cyle_us;
     opts->startup_fn = _kvs_bench_start;

@@ -37,7 +37,7 @@ void kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 // The whole item shall be filled
 void kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
-// The key field of item shall be filed
+// The key field of item shall be filled
 void kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
 void kv_rmw_async(struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void*ctx);

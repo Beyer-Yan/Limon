@@ -44,8 +44,41 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
     return node;
 }
 
+
 bool slab_reclaim_evaluate_slab(struct slab* slab){
     //todo 
     assert(slab!=NULL);
+    //@TODO slab fragmentation evaluation
+
+    //for simulation
+    if(slab->reclaim.nb_reclaim_nodes>10){
+        return true;
+    }
     return false;
 }
+
+void slab_free_slot(struct reclaim_mgr* rmgr,
+                          struct slab* slab, 
+                          uint64_t slot_idx){
+
+    struct chunk_desc* desc = pagechunk_get_desc(slab,slot_idx);
+    assert(desc!=NULL);
+
+    uint32_t slot_offset      = slot_idx%desc->nb_slots;
+    uint32_t node_id          = slot_idx/desc->nb_slots/slab->reclaim.nb_chunks_per_node;
+
+    assert(node_id<slab->reclaim.nb_reclaim_nodes);
+    struct reclaim_node *node = slab->reclaim.node_array[node_id];
+    bitmap_clear_bit(desc->bitmap,slot_offset);
+
+    if(!node->nb_free_slots){
+        //This node is full node. But now, there is a empty slot for it. So I should put it
+        //in free_node treemap;
+        rbtree_insert(slab->reclaim.free_node_tree,node_id,node,NULL);
+    }
+
+    desc->nb_free_slots++;
+    node->nb_free_slots++;
+    slab->reclaim.nb_free_slots++;
+}
+

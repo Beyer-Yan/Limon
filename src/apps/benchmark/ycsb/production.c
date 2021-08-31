@@ -50,7 +50,7 @@ _prod_put_complete(void*ctx, struct kv_item* item, int kverrno){
    free(ori_item);
 }
 
-static void launch_prod(struct workload *w, bench_t b, int id) {
+static void launch_prod(struct workload *w, bench_t b,uint64_t* processed, int id) {
    declare_periodic_count;
    random_gen_t rand_next = (b==prod1)?(production_random1):(production_random2);
    uint64_t nb_requests = w->nb_requests_per_thread;

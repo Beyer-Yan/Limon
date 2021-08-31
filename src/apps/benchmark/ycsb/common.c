@@ -233,6 +233,9 @@ struct thread_data {
    uint64_t id;
    struct workload *workload;
    bench_t benchmark;
+
+   uint64_t nb_requests;
+   uint64_t nb_injected;
 };
 
 struct workload_api *get_api(bench_t b) {
@@ -252,7 +255,32 @@ void* do_workload_thread(void *pdata) {
    pin_me_on(data->id);
    pthread_barrier_wait(&barrier);
 
-   data->workload->api->launch(data->workload, data->benchmark, data->id);
+   data->workload->api->launch(data->workload,data->benchmark, &data->nb_injected, data->id);
+
+   return NULL;
+}
+
+void* compute_stat(void* pdata){
+   struct thread_data *thread_data = pdata;
+   const char* w_name = thread_data[0].workload->api->name(thread_data[0].benchmark);
+   int nb_threads = thread_data[0].workload->nb_load_injectors;
+   uint64_t total = thread_data[0].workload->nb_requests;
+
+   uint64_t last = 0;
+   int time = 0;
+
+   while(1){
+      uint64_t requested = 0;
+      for(int i = 0; i < nb_threads; i++) {
+         requested += thread_data[i].nb_injected;
+      }
+      uint64_t diff = requested - last;
+      last = requested;
+      time++;
+      printf("Run workload %s %3ds %7lu ops/s (%lu%%)\n",w_name,time,diff,last*100lu/total);
+      fflush(stdout);
+      sleep(1);
+   }
 
    return NULL;
 }
@@ -274,12 +302,20 @@ void run_workload(struct workload *w, bench_t b) {
       pdata[i].id = w->start_core + i;
       pdata[i].workload = w;
       pdata[i].benchmark = b;
+      pdata[i].nb_requests = w->nb_requests_per_thread;
+      pdata[i].nb_injected = 0;
+
       pthread_create(&threads[i], NULL, do_workload_thread, &pdata[i]);
    }
+
+   pthread_t stats_thread;
+   pthread_create(&stats_thread, NULL, compute_stat, pdata);
    
    for(int i = 0; i < w->nb_load_injectors; i++){
       pthread_join(threads[i], NULL);
    }
+
+   pthread_cancel(stats_thread);
       
    free(threads);
    free(pdata);

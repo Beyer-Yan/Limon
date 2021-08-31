@@ -89,6 +89,7 @@ struct worker_context{
     uint32_t nb_reclaim_shards;
     uint32_t reclaim_shards_start_id;
     uint32_t reclaim_percentage_threshold;
+
     uint32_t io_cycle; //us
 
     //simple thread safe mp-sc queue
@@ -160,9 +161,11 @@ struct pagechunk_mgr{
     //work is busy enough, I should try to apply more mem chunks from 
     //chunk manager.
     uint64_t water_mark;
-
-    uint64_t hit_times;
+    uint64_t visit_times;
     uint64_t miss_times;
+
+    uint32_t seed; //for remote eviction
+
     struct chunkmgr_worker_context *chunkmgr_worker;
     struct object_cache_pool *kv_chunk_request_pool;
     struct object_cache_pool *load_store_ctx_pool;
@@ -210,6 +213,9 @@ struct chunk_load_store_ctx{
 };
 
 void chunkmgr_request_one_aysnc(struct chunk_miss_callback *cb_obj);
+
+//sync processing
+struct chunk_mem*  chunkmgr_request_one(struct pagechunk_mgr* pmgr);
 
 // I needn't care when and where the mem is released by page chunk manager
 // worker, so the function is designed as a sync function.
@@ -264,8 +270,8 @@ struct slab_migrate_request{
     //If a fault hits, I should abort the migrating.
     bool is_fault;
     uint32_t nb_faults;
-
     uint64_t nb_processed;
+    uint64_t nb_valid_slots;
     uint64_t start_slot;
     uint64_t cur_slot;
     uint64_t last_slot;
@@ -276,6 +282,7 @@ struct slab_migrate_request{
 struct reclaim_mgr{
     uint32_t migrating_batch;
     uint32_t reclaim_percentage_threshold;
+    uint32_t nb_pending_slots;
     /**
      * @brief Construct a new tailq head object.
      * Each background item deleting will be appended to the list. The reclaim thread
@@ -305,7 +312,6 @@ struct reclaim_mgr{
     struct object_cache_pool *migrate_slab_pool;
 };
 
-int worker_reclaim_process_pending_item_delete(struct worker_context *wctx);
 int worker_reclaim_process_pending_item_migrate(struct worker_context *wctx);
 int worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx);
 

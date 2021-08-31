@@ -11,11 +11,12 @@ static void _default_reclaim_io_cb_fn(void*ctx, int kverrno){
         req->nb_faults++;
     }
     req->nb_processed++;
+    req->wctx->rmgr->nb_pending_slots--;
 }
 
 /*------------------------------------------------------------------------*/
 //Process backgound item deleting.
-
+#if 0
 static void
 _process_one_pending_delete_store_data_cb(void* ctx, int kverrno){
     struct pending_item_delete *del = ctx;
@@ -23,7 +24,7 @@ _process_one_pending_delete_store_data_cb(void* ctx, int kverrno){
     struct chunk_desc *desc     = del->rctx.desc;
     struct slab* slab           = del->slab;
     
-    pool_release(wctx->rmgr->pending_delete_pool,del);
+    //pool_release(wctx->rmgr->pending_delete_pool,del);
     pagechunk_mem_lower(desc);
 
     uint32_t slot_offset      = del->slot_idx%desc->nb_slots;
@@ -46,6 +47,8 @@ _process_one_pending_delete_store_data_cb(void* ctx, int kverrno){
     if(del->io_cb_fn){
         del->io_cb_fn(del->ctx, kverrno ? -KV_EIO : -KV_ESUCCESS);
     }
+    //release the callback context.
+    free(del);
 }
 
 static void
@@ -57,12 +60,13 @@ _process_one_pending_delete_load_data_cb(void* ctx, int kverrno){
 
     if(kverrno){
         //Error hits when load data from disk
-        pool_release(wctx->rmgr->pending_delete_pool,del);
+        //pool_release(wctx->rmgr->pending_delete_pool,del);
         pagechunk_mem_lower(desc);
 
         if(del->io_cb_fn){
             del->io_cb_fn(del->ctx,-KV_EIO);
         }
+        free(del);
 
         return;
     }
@@ -134,9 +138,33 @@ worker_reclaim_process_pending_item_delete(struct worker_context *wctx){
     }
     return events;
 }
-
+#endif
 /*------------------------------------------------------------------------*/
 //Process item migrating.
+
+static void _process_one_pending_migrate_write_tombstone_cb(void* ctx, int kverrno){
+    struct pending_item_migrate *mig = ctx;
+    struct worker_context *wctx = mig->rctx.wctx;
+    struct slab* slab = mig->slab;
+
+    pool_release(wctx->rmgr->pending_migrate_pool,mig);
+    pagechunk_mem_lower(mig->rctx.desc);
+    pagechunk_mem_lower(mig->new_desc);
+    mig->entry->writing = 0;
+
+    //if(kverrno){
+        //Error hits when write tombstone to disk. However, it's OK since 
+        //the old one with smaller timestamp will be dropped in recovery.
+        //Do nothing.
+    //}
+    //the old slot will be reclaimed after all slots in the node have been migrated
+
+    //the shard and the slab keep unchanged.
+    //mig->entry->slot_idx = mig->new_slot;
+    mig->io_cb_fn(mig->ctx, -KV_ESUCCESS);
+
+    //SPDK_NOTICELOG("migrate one slot:%lu, new_slot:%lu\n", mig->slot_idx,mig->new_slot);
+}
 
 static void
 _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
@@ -144,24 +172,28 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
     struct worker_context *wctx = mig->rctx.wctx;
     struct slab* slab = mig->slab;
     
-    pool_release(wctx->kv_request_internal_pool,mig);
-    pagechunk_mem_lower(mig->rctx.desc);
-    pagechunk_mem_lower(mig->new_desc);
-    mig->entry->writing = 0;
-
     if(kverrno){
         //Error hits when store data into disk
         //I have to free the allocated slot
-        slab_free_slot_async(wctx->rmgr,slab,mig->new_slot,NULL,NULL);
+        pool_release(wctx->rmgr->pending_migrate_pool,mig);
+        pagechunk_mem_lower(mig->rctx.desc);
+        pagechunk_mem_lower(mig->new_desc);
+        mig->entry->writing = 0;
+        //I have to free the allocated slot
+        slab_free_slot(wctx->rmgr,slab,mig->new_slot);
+
+        mig->io_cb_fn(mig->ctx,-KV_EIO);
     }
     else{
-        //Wonderful! Now evrything is ok!
-        slab_free_slot_async(wctx->rmgr,slab,mig->slot_idx,NULL,NULL);
-        //the shard and the slab keep unchanged.
-        mig->entry->slot_idx = mig->new_slot;
-    }
+        //Now write tombstone to the previous slot.
+        assert(mig->rctx.desc->chunk_mem);
+        struct kv_item* item = pagechunk_get_item(wctx->pmgr,mig->rctx.desc,mig->slot_idx);
+        //item->meta.ksize = 0;
 
-    mig->io_cb_fn(mig->ctx,kverrno ? -KV_EIO : -KV_ESUCCESS );
+        //pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,mig->rctx.desc,mig->slot_idx,
+        //    _process_one_pending_migrate_write_tombstone_cb,mig);
+        _process_one_pending_migrate_write_tombstone_cb(mig,-KV_ESUCCESS);
+    }
 }
 
 static void
@@ -177,7 +209,7 @@ _process_one_pending_migrate_new_load_data_cb(void* ctx, int kverrno){
         pagechunk_mem_lower(mig->new_desc);
         mig->entry->writing = 0;
         //I have to free the allocated slot
-        slab_free_slot_async(wctx->rmgr,slab,mig->new_slot,NULL,NULL);
+        slab_free_slot(wctx->rmgr,slab,mig->new_slot);
 
         mig->io_cb_fn(mig->ctx,-KV_EIO);
         return;
@@ -186,13 +218,14 @@ _process_one_pending_migrate_new_load_data_cb(void* ctx, int kverrno){
     struct kv_item *origin_item = pagechunk_get_item(wctx->pmgr,mig->rctx.desc,mig->slot_idx);
 
     //Now I load the item successfully. Next, I will perform writing.
-    pagechunk_put_item(wctx->pmgr,mig->new_desc,mig->new_slot,origin_item);
-    pagechunk_store_item_async( wctx->pmgr,
-                                wctx->imgr,
-                                mig->new_desc,
-                                mig->new_slot,
-                                _process_one_pending_migrate_new_store_data_cb, 
-                                mig);
+    //pagechunk_put_item(wctx->pmgr,mig->new_desc,mig->new_slot,origin_item);
+    // pagechunk_store_item_async( wctx->pmgr,
+    //                             wctx->imgr,
+    //                             mig->new_desc,
+    //                             mig->new_slot,
+    //                             _process_one_pending_migrate_new_store_data_cb, 
+    //                             mig);
+    _process_one_pending_migrate_new_store_data_cb(mig,-KV_ESUCCESS);
 }
 
 static void
@@ -200,13 +233,13 @@ _process_one_pending_migrate_new_pagechunk_request_cb(void* ctx, int kverrno){
     struct pending_item_migrate *mig = ctx;
     struct worker_context *wctx = mig->rctx.wctx;
 
-    // Now, load just the shared pages of the item from disk.
+    // Now, load just the shared pages of the new slot from disk.
     assert(!kverrno);
 
     pagechunk_load_item_share_async(wctx->pmgr,
                               wctx->imgr, 
-                              mig->rctx.desc,
-                              mig->slot_idx,
+                              mig->new_desc,
+                              mig->new_slot,
                               _process_one_pending_migrate_new_load_data_cb,
                               mig);
 }
@@ -221,7 +254,7 @@ _process_one_pending_migrate_request_slot_cb(uint64_t slot_idx, void* ctx, int k
     //it happens, the program has a bug.
     assert(!kverrno);
     
-    struct chunk_desc* new_desc = pagechunk_get_desc(slab,mig->slot_idx);
+    struct chunk_desc* new_desc = pagechunk_get_desc(slab,slot_idx);
 
     assert(new_desc!=NULL);
     pagechunk_mem_lift(new_desc);
@@ -275,6 +308,12 @@ _process_one_pending_migrate_load_data_cb(void* ctx, int kverrno){
     //Now I load the data into the page chunk cache.
     struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,mig->slot_idx);  
     mig->entry = mem_index_lookup(wctx->mem_index,item);
+
+    if(!mig->entry){
+        //bug here
+        SPDK_ERRLOG("Item not found in slot migration, slot:%lu.\n",mig->slot_idx);
+        assert(0);
+    }
 
     if(mig->entry->writing){
         mig->rctx.no_lookup = true;
@@ -368,25 +407,40 @@ int
 worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
     int events = 0;
     //The avalaible disk io.
-    uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
-                     (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
+    //uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
+    //                 (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
 
     uint32_t migrate_batch = wctx->rmgr->migrating_batch;
-    uint32_t nb = migrate_batch < a_ios ? migrate_batch : a_ios;
+    uint32_t p_reqs = wctx->rmgr->pending_migrate_pool->count
+                      - wctx->rmgr->pending_migrate_pool->nb_frees;
+
+    //Wait the completion of the previous migration batch
+    uint32_t pending_slots = wctx->rmgr->nb_pending_slots;
+    if(pending_slots || !p_reqs){
+        return 0;
+    }
+
+    uint32_t nb = p_reqs > migrate_batch ? migrate_batch : p_reqs;
+
+    //only nb slots are allowed to be migrated each time.
+    wctx->rmgr->nb_pending_slots = nb;
+
+    //SPDK_NOTICELOG("pending %u\n migration slots\n", nb);
+    //int i = 0;
 
     struct pending_item_migrate *mig, *tmp = NULL;
-
-    //Put all elements in reesubmit queue into pending-migrate queue
+    //Put all elements in resubmit queue into pending-migrate queue
     TAILQ_FOREACH_SAFE(mig,&wctx->rmgr->remigrating_head,link,tmp){
         TAILQ_REMOVE(&wctx->rmgr->remigrating_head,mig,link);
         TAILQ_INSERT_HEAD(&wctx->rmgr->item_migrate_head,mig,link);
     }
 
     TAILQ_FOREACH_SAFE(mig,&wctx->rmgr->item_migrate_head,link,tmp){
-        if(nb==0){
+        if(!nb){
             break;
         }
         TAILQ_REMOVE(&wctx->rmgr->item_migrate_head,mig,link);
+        //SPDK_NOTICELOG("submit a slot request:%lu, %d\n", mig->slot_idx,i++);
         _process_one_pending_migrate(mig);
         nb--;
         events++;
@@ -402,7 +456,6 @@ slab_release_complete(void*ctx,int kverrno){
     struct slab_migrate_request *req = ctx;
     struct worker_context* wctx = req->wctx;
     if(kverrno){
-        //Error in resie the slab
         //Does there exist such case ??
         //I do not know what to do.
         assert(0);
@@ -423,11 +476,14 @@ slab_release_complete(void*ctx,int kverrno){
 
         if(desc->chunk_mem){
             //Free it from global lru list
-            pagechunk_release_one(wctx->pmgr,desc->chunk_mem);
+            //pagechunk_release_one(wctx->pmgr,desc->chunk_mem);
             //TAILQ_REMOVE(&wctx->pmgr->global_chunks,desc,link);
             //wctx->pmgr->nb_used_chunks--;
         }
+        bitmap_clear_bit_all(node->desc_array[i]->bitmap);
     }
+
+    //now clear all slots for this node
 
     //@TODO add hole nodes for a slab. The hole nodes will be firstly allocated of 
     // the slab is requested to expand.
@@ -440,14 +496,15 @@ slab_release_complete(void*ctx,int kverrno){
     //slab->reclaim.nb_free_slots -= nb_slots_per_node;
     //slab->reclaim.nb_total_slots -= nb_slots_per_node;
 
-    slab->flag &=~ SLAB_FLAG_RECLAIMING;
+    //for defragmentation simulation.
+    //slab->flag &=~ SLAB_FLAG_RECLAIMING;
     //slab_reclaim_free_node(&slab->reclaim,node);
 
     //Now I finish the request, just release it.
     TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
     pool_release(wctx->rmgr->migrate_slab_pool,req);
 
-    SPDK_NOTICELOG("Migrating for slab:%u sucesses, prcessed:%u\n",req->slab->slab_size,req->nb_processed);
+    SPDK_NOTICELOG("Migrating for slab:%u, node:%u, processed:%u, valid slots:%u\n",req->slab->slab_size, node->id,req->nb_processed,req->nb_valid_slots);
 }
 
 int 
@@ -461,8 +518,8 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     }
 
     if(req->is_fault){
-        if(req->cur_slot == req->start_slot + req->nb_processed - 1){
-            //Faults happened and all the submited item migrating request have been processed. 
+        if(req->cur_slot == req->start_slot + req->nb_processed){
+            //Faults happened and all the submited item migrating requests have been processed. 
             //So I should abort the migrating.
             SPDK_ERRLOG("Error in migrating, slab:%u, processed:%u,faults:%u. Abort.\n",
                         req->slab->slab_size,req->nb_processed,req->nb_faults);
@@ -470,23 +527,20 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
             pool_release(wctx->rmgr->migrate_slab_pool,req);
         }
     }
-    else if( (req->cur_slot==req->last_slot) && (req->nb_processed == req->cur_slot - req->start_slot + 1) ){
-        //I have submited all the item-migrating request. And all submited requests have been
-        //processed.
+    else if( req->nb_processed == req->last_slot - req->start_slot + 1 ){
+        //all valid slots have been migrated.
         slab_release_node_async(wctx->imgr,req->slab,req->node,slab_release_complete,req);
     }
-    else if( req->cur_slot!=req->last_slot ){
+    else if( req->cur_slot<=req->last_slot ){
         //The slab migrating has not been finished. So, I should process the next batch.
-        uint32_t cnt = req->last_slot - req->cur_slot;
+        uint32_t cnt = req->last_slot - req->cur_slot + 1;
         cnt = cnt < a_mig ? cnt : a_mig;
-        uint32_t i = 0;
-        req->cur_slot += 1;
-        while(i<cnt && req->cur_slot<=req->last_slot){
+
+        while(cnt && req->cur_slot<=req->last_slot){
             if(slab_is_slot_occupied(req->slab,req->cur_slot)){
                 //The slot should be migrated.
                 struct pending_item_migrate *mig = pool_get(wctx->rmgr->pending_migrate_pool);
                 assert(mig!=NULL);
-
                 mig->slab = req->slab;
                 mig->slot_idx = req->cur_slot;
                 mig->io_cb_fn = _default_reclaim_io_cb_fn;
@@ -495,30 +549,33 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
                 mig->rctx.wctx = wctx;
                 mig->rctx.no_lookup = false;
                 TAILQ_INSERT_TAIL(&wctx->rmgr->item_migrate_head,mig,link);
-                i++;
             }
-            //This slot is a free slot. I just do nothing.
+            else{
+                //This slot is a free slot. I just do nothing.
+                req->nb_processed++;
+            }
             req->cur_slot++;
-            req->nb_processed++;
+            cnt--;
             events++;
         }
     }
     return events;
 }
 
-void slab_reclaim_post_delete(struct reclaim_mgr* rmgr,
-                          struct slab* slab, 
-                          uint64_t slot_idx,
-                          void (*cb)(void* ctx, int kverrno),
-                          void* ctx){
+// void slab_reclaim_post_delete(struct reclaim_mgr* rmgr,
+//                           struct slab* slab, 
+//                           uint64_t slot_idx,
+//                           void (*cb)(void* ctx, int kverrno),
+//                           void* ctx){
     
-    struct pending_item_delete *pending_del = pool_get(rmgr->pending_delete_pool);
-    assert(pending_del!=NULL);
+//     struct pending_item_delete *pending_del = pool_get(rmgr->pending_delete_pool);
+//     //struct pending_item_delete *pending_del = malloc(sizeof(*pending_del));
+//     assert(pending_del!=NULL);
 
-    pending_del->slab = slab;
-    pending_del->slot_idx = slot_idx;
-    pending_del->io_cb_fn = cb;
-    pending_del->ctx = ctx;
+//     pending_del->slab = slab;
+//     pending_del->slot_idx = slot_idx;
+//     pending_del->io_cb_fn = cb;
+//     pending_del->ctx = ctx;
     
-    TAILQ_INSERT_TAIL(&rmgr->item_delete_head,pending_del,link);
-}
+//     TAILQ_INSERT_TAIL(&rmgr->item_delete_head,pending_del,link);
+// }

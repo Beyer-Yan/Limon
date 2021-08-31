@@ -148,7 +148,7 @@ _crc64(const char *s, int l) {
 }
 
 static uint32_t 
-_hash(uint64_t key,int numBuckets) {
+_random_hash(uint64_t key,int numBuckets) {
   int64_t b  = -1;
   int64_t j = 0;
 
@@ -163,7 +163,12 @@ _hash(uint64_t key,int numBuckets) {
 uint32_t 
 kv_hash(const uint8_t* key, uint32_t key_len, uint32_t num_buckets){
     uint64_t crc64 = _crc64(key,key_len);
-    return _hash(crc64,num_buckets);
+    return _random_hash(crc64,num_buckets);
+
+    //simple hash
+    //uint64_t prefix = *(uint64_t*)key;
+    //prefix =  (((uint64_t)htonl(prefix))<<32) + htonl(prefix>>32); 
+    //return _random_hash(prefix,num_buckets);
 }
 
 uint64_t kv_cycles_to_us(uint64_t cycles) {

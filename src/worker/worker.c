@@ -57,17 +57,18 @@ _worker_poll_business(struct worker_context *wctx){
     uint32_t a_reqs = wctx->kv_request_internal_pool->nb_frees;
 
     //The avalaible disk io.
-    uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
-                     (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
+    //uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
+    //                 (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
 
     /**
      * @brief Get the minimum value from the rquests queue, kv request internal pool
      * and disk io manager
      */
+    //uint32_t process_size = p_reqs < a_reqs ? p_reqs : a_reqs;
+    //process_size = process_size < a_ios ? process_size : a_ios;
     uint32_t process_size = p_reqs < a_reqs ? p_reqs : a_reqs;
-    process_size = process_size < a_ios ? process_size : a_ios;
 
-    //SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, a_ios:%u, process:%u\n",p_reqs,a_reqs, a_ios, process_size);
+    //SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, process:%u\n",p_reqs,a_reqs, process_size);
 
     struct kv_request_internal *req_internal,*tmp=NULL;
     /**
@@ -136,7 +137,6 @@ _worker_poll_reclaim(struct worker_context *wctx){
     int events = 0;
     events += worker_reclaim_process_pending_slab_migrate(wctx);
     events += worker_reclaim_process_pending_item_migrate(wctx);
-    events += worker_reclaim_process_pending_item_delete(wctx);
     return events;
 }
 
@@ -163,8 +163,14 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
         }
     }
 
+    //Test. Simulate to always trigger the first node
+    idx = 0;
+
+    uint64_t nb_total_slots = slab->reclaim.nb_chunks_per_node*slab->reclaim.nb_slots_per_chunk;
+
     req->node = slab->reclaim.node_array[idx];
     req->nb_processed = 0;
+    req->nb_valid_slots = nb_total_slots - req->node->nb_free_slots;
     req->nb_faults = 0;
     req->start_slot = slab_reclaim_get_start_slot(&slab->reclaim,req->node);
     req->cur_slot = req->start_slot;
@@ -172,7 +178,9 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
 
     //The node is not allowed to performing allocating.
     //If it is not in the free_node_tree, the deleting will no nothing.
-    rbtree_delete(slab->reclaim.free_node_tree,slab->reclaim.nb_reclaim_nodes-1,NULL);
+    //All the free slots in this node will be cleared.
+    rbtree_delete(slab->reclaim.free_node_tree,req->node->id,NULL);
+    slab->reclaim.nb_free_slots -= req->node->nb_free_slots;
 }
 
 //This poller shall be excecuted regularly, e.g. once a second.
@@ -182,12 +190,11 @@ _worker_slab_evaluation_poll(void* ctx){
     uint32_t i=0,j=0;
 
     int events = 0;
-    //do nothing
-    return 0;
+    //return 0;
 
     for(;i < wctx->nb_reclaim_shards;i++){
         struct slab_shard *shard = &wctx->shards[wctx->reclaim_shards_start_id + i];
-        for(;j < shard->nb_slabs;j++){
+        for(j=0;j < shard->nb_slabs;j++){
             if( !(shard->slab_set[j].flag & SLAB_FLAG_RECLAIMING) ){
                 struct slab* slab = &(shard->slab_set[j]);
                 if( slab_reclaim_evaluate_slab(slab) ){
@@ -195,6 +202,7 @@ _worker_slab_evaluation_poll(void* ctx){
                     assert(slab_migrate_req!=NULL);
 
                     _fill_slab_migrate_req(slab_migrate_req,slab);
+                    slab_migrate_req->wctx = wctx;
                     slab->flag |= SLAB_FLAG_RECLAIMING;
                     TAILQ_INSERT_TAIL(&wctx->rmgr->slab_migrate_head,slab_migrate_req,link);
 
@@ -320,12 +328,13 @@ _worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
     uint64_t common_header_size = pool_header_size(nb_max_reqs);
     uint64_t size;
 
-    pmgr->hit_times = 0;
+    pmgr->visit_times = 0;
     pmgr->miss_times = 0;
     pmgr->nb_used_chunks = 0;
     TAILQ_INIT(&pmgr->global_chunks);
     pmgr->chunkmgr_worker = opts->chunkmgr_worker;
     pmgr->water_mark  = opts->chunk_cache_water_mark;
+    pmgr->seed = rand();
 
     pmgr->kv_chunk_request_pool = (struct object_cache_pool*)(pmgr+1);
     uint8_t* req_pool_data = (uint8_t*)pmgr->kv_chunk_request_pool + common_header_size;
@@ -358,6 +367,7 @@ _worker_init_rmgr(struct reclaim_mgr* rmgr,struct worker_init_opts* opts){
 
     rmgr->migrating_batch = opts->reclaim_batch_size;
     rmgr->reclaim_percentage_threshold = opts->reclaim_percentage_threshold;
+    rmgr->nb_pending_slots = 0;
     TAILQ_INIT(&rmgr->item_delete_head);
     TAILQ_INIT(&rmgr->item_migrate_head);
     TAILQ_INIT(&rmgr->remigrating_head);
@@ -662,7 +672,7 @@ void worker_destroy(struct worker_context* wctx){
 void worker_get_statistics(struct worker_context* wctx, struct worker_statistics* ws_out){
     assert(wctx!=NULL);
     ws_out->chunk_miss_times = wctx->pmgr->miss_times;
-    ws_out->chunk_hit_times  = wctx->pmgr->hit_times;
+    ws_out->chunk_hit_times  = wctx->pmgr->visit_times;
     ws_out->nb_pending_reqs  = spdk_ring_count(wctx->req_used_ring);
     ws_out->nb_pending_ios   = wctx->imgr->nb_pending_io;
     ws_out->nb_used_chunks   = wctx->pmgr->nb_used_chunks;
