@@ -52,28 +52,29 @@ extern int hashmap_iterate(map_t in, PFany f, any_t item);
 /*
  * Add an element to the hashmap. Return MAP_OK or MAP_OMEM.
  */
-extern int hashmap_put(map_t in, uint8_t* key, int keylen, any_t value);
-
-/*
- * replace the old element to the hashmap. Return MAP_OK or MAP_MISSING.
- */
-extern int hashmap_replace(map_t in, uint8_t* key, int key_len, any_t old_value,any_t new_value);
+extern int hashmap_put(map_t in, uint64_t key, any_t value);
 
 /*
  * Get an element from the hashmap. Return MAP_OK or MAP_MISSING.
  */
-extern int hashmap_get(map_t in, uint8_t* key, int keylen, any_t *arg);
+extern int hashmap_get(map_t in, uint64_t key, any_t *arg);
 
 /*
  * Remove an element from the hashmap. Return MAP_OK or MAP_MISSING.
  */
-extern int hashmap_remove(map_t in, uint8_t* key, int keylen);
+extern int hashmap_remove(map_t in, uint64_t key, any_t *arg);
 
 /*
  * Get any element. Return MAP_OK or MAP_MISSING.
  * remove - should the element be removed from the hashmap
  */
 extern int hashmap_get_one(map_t in, any_t *arg, int remove);
+
+/**
+ * Replace the value of the given key with new value
+ * 
+ */
+int hashmap_replace(map_t in, uint64_t key, any_t old_value,any_t new_value);
 
 /*
  * Free the hashmap

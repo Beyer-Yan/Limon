@@ -10,12 +10,69 @@
 //10s
 #define DEFAULT_RECLAIM_POLLING_PERIOD_US 10000000
 
+#define CONFLICTS_CAPACITY 1024
+
+//A simple read-write "lock"
+struct req_conflict{
+    struct{
+        uint16_t reads:15;
+        uint16_t write:1;
+    }pendings[CONFLICTS_CAPACITY];
+};
+
+struct req_conflict* conflict_new(void){
+    struct req_conflict* conflicts = calloc(1,sizeof(struct req_conflict));
+    assert(conflicts);
+    return conflicts;
+}
+
+void conflict_destroy(struct req_conflict* conflicts){
+    assert(conflicts);
+    free(conflicts);
+}
+
+uint32_t conflict_check_or_enter(struct req_conflict* conflicts, struct kv_item *item,enum op_code op){
+    assert(conflicts);
+    assert(item);
+    //reserve bucket 0 
+    uint32_t bucket = kv_hash(item->data,item->meta.ksize,CONFLICTS_CAPACITY-1)+1;
+    int res = 0;
+
+    if(op==GET){
+        if(conflicts->pendings[bucket].write){
+            //There is a pending write for this slot
+            res = 1;
+        }else{
+            //No conflicts between reads
+            conflicts->pendings[bucket].reads++;
+        }
+    }else{
+        //Write have conflict with both write and read.
+        if(conflicts->pendings[bucket].write || conflicts->pendings[bucket].reads){
+            res = 1;
+        }else{
+            conflicts->pendings[bucket].write = 1;
+        }
+    }
+    return res ? 0 : bucket;
+}
+
+void conflict_leave(struct req_conflict* conflicts, uint32_t bucket,enum op_code op){
+    assert(conflicts);
+
+    if(op==GET){
+        assert(conflicts->pendings[bucket].write==0);
+        assert(conflicts->pendings[bucket].reads);
+        conflicts->pendings[bucket].reads--;
+    }else{
+        assert(conflicts->pendings[bucket].write==1);
+        conflicts->pendings[bucket].write = 0;
+    }
+}   
+
 static void 
 _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal *req){
-
-    memset(&req->pctx,0,sizeof(req->pctx));
     req->pctx.wctx = wctx;
-    *(uint64_t*)&req->pctx.new_entry = 0;
 
     switch(req->op_code){
         case GET:
@@ -26,18 +83,6 @@ _process_one_kv_request(struct worker_context *wctx, struct kv_request_internal 
             break;
         case DELETE:
             worker_process_delete(req);
-            break;
-        case RMW:
-            worker_process_rmw(req);
-            break;
-        case FIRST:
-            worker_process_first(req);
-            break;
-        case SEEK:
-            worker_process_seek(req);
-            break;
-        case NEXT:
-            worker_process_next(req);
             break;
         default:
             pool_release(wctx->kv_request_internal_pool,req);
@@ -51,21 +96,10 @@ _worker_poll_business(struct worker_context *wctx){
     int events = 0;
 
     // The pending requests in the worker context no-lock request queue
-    uint32_t p_reqs = spdk_ring_count(wctx->req_used_ring);
+    uint32_t p_reqs = spdk_ring_count(wctx->req_ring);
 
     // The avalaible pending requests in the worker request pool
     uint32_t a_reqs = wctx->kv_request_internal_pool->nb_frees;
-
-    //The avalaible disk io.
-    //uint32_t a_ios = (wctx->imgr->max_pending_io < wctx->imgr->nb_pending_io) ? 0 :
-    //                 (wctx->imgr->max_pending_io - wctx->imgr->nb_pending_io);
-
-    /**
-     * @brief Get the minimum value from the rquests queue, kv request internal pool
-     * and disk io manager
-     */
-    //uint32_t process_size = p_reqs < a_reqs ? p_reqs : a_reqs;
-    //process_size = process_size < a_ios ? process_size : a_ios;
     uint32_t process_size = p_reqs < a_reqs ? p_reqs : a_reqs;
 
     //SPDK_NOTICELOG("p_reqs:%u, a_reqs:%u, process:%u\n",p_reqs,a_reqs, process_size);
@@ -88,7 +122,7 @@ _worker_poll_business(struct worker_context *wctx){
      */
     if(process_size>0){
         struct kv_request *req_array[wctx->max_pending_kv_request];
-        uint64_t res = spdk_ring_dequeue(wctx->req_used_ring,(void**)&req_array,process_size);
+        uint64_t res = spdk_ring_dequeue(wctx->req_ring,(void**)&req_array,process_size);
         assert(res==process_size);
         
         uint32_t i = 0;
@@ -96,24 +130,16 @@ _worker_poll_business(struct worker_context *wctx){
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
 
-            req_internal->ctx = req_array[i]->ctx;
+            req_internal->shard = req_array[i]->shard;
             req_internal->item = req_array[i]->item;
             req_internal->op_code = req_array[i]->op_code;
+            req_internal->sid = req_array[i]->sid;
             req_internal->cb_fn = req_array[i]->cb_fn;
-            req_internal->shard = req_array[i]->shard;
-
-            req_internal->m_fn = req_array[i]->m_fn;
-
-            req_internal->scan_cb_fn = req_array[i]->scan_cb_fn;
-            req_internal->scan_batch = req_array[i]->scan_batch;
-            //I do not perform a lookup, since it is a new request.
-            req_internal->pctx.no_lookup = false;
+            req_internal->ctx = req_array[i]->ctx;
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
             free(req_array[i]);
         }
-        //res = spdk_ring_enqueue(wctx->req_free_ring,(void**)&req_array,process_size,NULL);
-        //assert(res==process_size);
     }
  
     TAILQ_FOREACH_SAFE(req_internal, &wctx->submit_queue,link,tmp){
@@ -126,7 +152,8 @@ _worker_poll_business(struct worker_context *wctx){
 }
 
 static int
-_worker_poll_io(struct worker_context *wctx){
+_worker_poll_io(void* ctx){
+    struct worker_context *wctx = ctx;
     int events = 0;
     events += iomgr_io_poll(wctx->imgr);
     return events;
@@ -214,38 +241,26 @@ _worker_slab_evaluation_poll(void* ctx){
     return events;
 }
 
-
 static struct kv_request*
 _get_free_req_buffer(struct worker_context* wctx){
-    /*
-    struct kv_request *req;
-    while(spdk_ring_dequeue(wctx->req_free_ring,(void**)&req,1) !=1 ){
-        spdk_pause();
-    }
-    return req;
-    */
    return malloc(sizeof(struct kv_request));
 }
 
 static void
 _submit_req_buffer(struct worker_context* wctx,struct kv_request *req){
-    //uint64_t res;
-    
-    while(spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL)!=1 ){
+    while(spdk_ring_enqueue(wctx->req_ring,(void**)&req,1,NULL)!=1 ){
         spdk_pause();
     }
-    
-    //res = spdk_ring_enqueue(wctx->req_used_ring,(void**)&req,1,NULL);
-    //assert(res==1);
 }
 
 static inline void
-_worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *item, 
+_worker_enqueue_common(struct kv_request* req, uint32_t shard,
+                       struct kv_item *item, uint64_t sid,
                        kv_cb cb_fn,void* ctx,
                        enum op_code op){
     
     //For debug only
-    if(op==GET || op==PUT || op==RMW){
+    if(op==GET || op==PUT){
         uint64_t tsc;
         rdtscll(tsc);
         memcpy(item->meta.cdt,&tsc,sizeof(tsc));
@@ -254,165 +269,130 @@ _worker_enqueue_common(struct kv_request* req, uint32_t shard,struct kv_item *it
     req->cb_fn = cb_fn;
     req->ctx = ctx;
     req->item = item;
+    req->sid = sid;
     req->op_code = op;
     req->shard = shard;
 }
 
-void worker_enqueue_get(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
-                        kv_cb cb_fn, void* ctx){
+void worker_enqueue_get(struct worker_context* wctx,struct kv_item *item,uint64_t sid, kv_cb cb_fn, void* ctx){
 
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,GET);
+
+    //the shard and item field will be ignored
+    _worker_enqueue_common(req,0,item,sid,cb_fn,ctx,GET);
     _submit_req_buffer(wctx,req);
 }
 
-void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
+void worker_enqueue_put(struct worker_context* wctx,uint32_t shard,
+                        struct kv_item *item, uint64_t sid,
                         kv_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,PUT);
+    _worker_enqueue_common(req,shard,item,sid,cb_fn,ctx,PUT);
     _submit_req_buffer(wctx,req);
 }
 
-void worker_enqueue_delete(struct worker_context* wctx,uint32_t shard,struct kv_item *item, 
+void worker_enqueue_delete(struct worker_context* wctx,
+                           struct kv_item *item, uint64_t sid, 
                            kv_cb cb_fn, void* ctx){
     assert(wctx!=NULL);
     struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,DELETE);
+
+    //the shard and item field will be ignored
+    _worker_enqueue_common(req,0,item,sid,cb_fn,ctx,DELETE);
     _submit_req_buffer(wctx,req);
 }
 
-void worker_enqueue_rmw(struct worker_context* wctx,uint32_t shard,struct kv_item *item,
-                        modify_fn m_fn, kv_cb cb_fn, void* ctx){
-    assert(wctx!=NULL);
-    struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,shard,item,cb_fn,ctx,RMW);
-    req->m_fn = m_fn;
-    _submit_req_buffer(wctx,req);
-}
+static struct pagechunk_mgr*
+_alloc_pmgr_context(struct worker_init_opts* opts){
+    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;  
 
-//interface implementation for scan operation.
-void worker_enqueue_seek(struct worker_context* wctx,struct kv_item *item, kv_cb cb_fn, void* ctx){
-    assert(wctx!=NULL);
-    struct kv_request *req = _get_free_req_buffer(wctx);
-    _worker_enqueue_common(req,UINT32_MAX,item,cb_fn,ctx,SEEK);
-    _submit_req_buffer(wctx,req);
-}
+    struct pagechunk_mgr* pmgr = malloc(sizeof(*pmgr));
+    assert(pmgr);
 
-void worker_enqueue_first(struct worker_context* wctx, scan_cb cb_fn, uint32_t scan_batch, void* ctx){
-    assert(wctx!=NULL);
-    struct kv_request *req = _get_free_req_buffer(wctx);
-    req->scan_cb_fn = cb_fn;
-    req->scan_batch = scan_batch;
-    req->item = NULL;
-    req->ctx = ctx;
-    req->op_code = FIRST;
-    _submit_req_buffer(wctx,req);
-}
-
-void worker_enqueue_next(struct worker_context* wctx,struct kv_item *item, scan_cb cb_fn, uint32_t scan_batch, void* ctx){
-    assert(wctx!=NULL);
-    struct kv_request *req = _get_free_req_buffer(wctx);
-    req->scan_cb_fn = cb_fn;
-    req->scan_batch = scan_batch;
-    req->item = item;
-    req->ctx = ctx;
-    req->op_code = NEXT;
-    _submit_req_buffer(wctx,req);
-}
-
-static void
-_worker_init_pmgr(struct pagechunk_mgr* pmgr,struct worker_init_opts* opts){
-    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker*5;
-    uint64_t common_header_size = pool_header_size(nb_max_reqs);
-    uint64_t size;
-
+    TAILQ_INIT(&pmgr->pages_head);
+    pmgr->nb_init_pages = opts->nb_init_pages;
+    pmgr->nb_used_pages = 0;
+    pmgr->water_mark  = opts->chunk_cache_water_mark;
     pmgr->visit_times = 0;
     pmgr->miss_times = 0;
-    pmgr->nb_used_chunks = 0;
-    TAILQ_INIT(&pmgr->global_chunks);
-    pmgr->chunkmgr_worker = opts->chunkmgr_worker;
-    pmgr->water_mark  = opts->chunk_cache_water_mark;
     pmgr->seed = rand();
 
-    pmgr->kv_chunk_request_pool = (struct object_cache_pool*)(pmgr+1);
-    uint8_t* req_pool_data = (uint8_t*)pmgr->kv_chunk_request_pool + common_header_size;
+    pmgr->page_map = hashmap_new();
+    assert(pmgr->page_map);
 
-    assert((uint64_t)pmgr->kv_chunk_request_pool%8==0);
-    assert((uint64_t)req_pool_data%8==0);
-    size = pool_header_init(pmgr->kv_chunk_request_pool,nb_max_reqs,sizeof(struct chunk_miss_callback),
-                     common_header_size,
-                     req_pool_data);
+    pmgr->meta_thread = opts->meta_thread;
 
-    assert(size%8==0);
-    pmgr->load_store_ctx_pool = (struct object_cache_pool*)((uint8_t*)pmgr->kv_chunk_request_pool+size);
-    uint8_t* ctx_pool_data = (uint8_t*)pmgr->load_store_ctx_pool + common_header_size;
+    pmgr->remote_page_request_pool = pool_create(nb_max_reqs,sizeof(struct remote_page_request));
     
-    assert((uint64_t)pmgr->load_store_ctx_pool%8==0);
-    assert((uint64_t)ctx_pool_data%8==0);
-    pool_header_init(pmgr->load_store_ctx_pool,nb_max_reqs,sizeof(struct chunk_load_store_ctx),
-                     common_header_size,
-                     ctx_pool_data);
+    uint32_t max_pages_per_req = MAX_SLAB_SIZE/KVS_PAGE_SIZE/2+1;
+    uint32_t max_load_stores = (nb_max_reqs+opts->reclaim_batch_size)*max_pages_per_req;
+    pmgr->load_store_ctx_pool = pool_create(max_load_stores,sizeof(struct page_load_store_ctx));
+    pmgr->item_ctx_pool = pool_create(nb_max_reqs+opts->reclaim_batch_size,sizeof(struct item_load_store_ctx));
+
+    assert(pmgr->remote_page_request_pool);
+    assert(pmgr->load_store_ctx_pool);
+    assert(pmgr->item_ctx_pool);
+
+    uint64_t cache_size = pmgr->nb_init_pages*KVS_PAGE_SIZE;
+    SPDK_NOTICELOG("Allocating page cache memory, worker:%u, size:%lu pages\n",opts->core_id,pmgr->nb_init_pages);
+
+    uint8_t* cache_addr = malloc(cache_size);
+    struct page_desc* pdesc_arr = malloc(pmgr->nb_init_pages*sizeof(struct page_desc));
+    assert(cache_addr);
+    assert(pdesc_arr);
+
+    for(uint64_t i=0;i<pmgr->nb_init_pages;i++){
+        pdesc_arr[i].data = cache_addr + i*KVS_PAGE_SIZE;
+    }
+    pmgr->cache_base_addr = cache_addr;
+    pmgr->pdesc_arr = pdesc_arr;
+
+    //allocate the DMA buffer
+    uint32_t nb_dma_buffers = nb_max_reqs+opts->reclaim_batch_size;
+    uint32_t dma_buffer_size = CHUNK_PAGES*KVS_PAGE_SIZE;
+    pmgr->dma_pool = dma_buffer_pool_create(nb_dma_buffers,dma_buffer_size);
+
+    assert(pmgr->dma_pool);
+
+    return pmgr;
 }
 
-static void
-_worker_init_rmgr(struct reclaim_mgr* rmgr,struct worker_init_opts* opts){
-
-    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
+static struct reclaim_mgr*
+_alloc_rmgr_context(struct worker_init_opts* opts){
     uint32_t nb_max_slab_reclaim = opts->nb_reclaim_shards*opts->shard[0].nb_slabs;
-    uint64_t del_header_size = pool_header_size(nb_max_reqs*3);
-    uint64_t mig_header_size = pool_header_size(nb_max_reqs);
-    uint64_t size;
+
+    struct reclaim_mgr* rmgr = malloc(sizeof(struct reclaim_mgr));
+    assert(rmgr);
 
     rmgr->migrating_batch = opts->reclaim_batch_size;
     rmgr->reclaim_percentage_threshold = opts->reclaim_percentage_threshold;
     rmgr->nb_pending_slots = 0;
-    TAILQ_INIT(&rmgr->item_delete_head);
+
     TAILQ_INIT(&rmgr->item_migrate_head);
     TAILQ_INIT(&rmgr->remigrating_head);
     TAILQ_INIT(&rmgr->slab_migrate_head);
 
-    rmgr->pending_delete_pool = (struct object_cache_pool*)(rmgr+1);
-    uint8_t *del_pool_data = (uint8_t*)rmgr->pending_delete_pool + del_header_size;
+    rmgr->pending_migrate_pool = pool_create(rmgr->migrating_batch,sizeof(struct pending_item_migrate));
+    rmgr->migrate_slab_pool = pool_create(nb_max_slab_reclaim,sizeof(struct slab_migrate_request));
 
-    assert((uint64_t)rmgr->pending_delete_pool%8==0);
-    assert((uint64_t)del_pool_data%8==0);
-    size = pool_header_init(rmgr->pending_delete_pool,nb_max_reqs*3,sizeof(struct pending_item_delete),
-                     del_header_size,
-                     del_pool_data);
+    assert(rmgr->pending_migrate_pool);
+    assert(rmgr->migrate_slab_pool);
 
-    assert(size%8==0);
-    rmgr->pending_migrate_pool = (struct object_cache_pool*)((uint8_t*)rmgr->pending_delete_pool + size);
-    uint8_t* mig_pool_data = (uint8_t*)rmgr->pending_migrate_pool + mig_header_size;
-
-    assert((uint64_t)rmgr->pending_migrate_pool%8==0);
-    assert((uint64_t)mig_pool_data%8==0);
-    size = pool_header_init(rmgr->pending_migrate_pool,nb_max_reqs,sizeof(struct pending_item_migrate),
-                            mig_header_size,
-                            mig_pool_data);
-
-    assert(size%8==0);            
-    rmgr->migrate_slab_pool = (struct object_cache_pool*)((uint8_t*)rmgr->pending_migrate_pool + size);
-    uint8_t* slab_pool_data = (uint8_t*)rmgr->migrate_slab_pool + pool_header_size(nb_max_slab_reclaim);
-
-    assert((uint64_t)rmgr->migrate_slab_pool%8==0);
-    assert((uint64_t)slab_pool_data%8==0);
-    pool_header_init(rmgr->migrate_slab_pool,nb_max_slab_reclaim,sizeof(struct slab_migrate_request),
-                     pool_header_size(nb_max_slab_reclaim),
-                     slab_pool_data);
+    return rmgr;
 }
 
-static void
-_worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
+static struct iomgr*
+_alloc_imgr_context(struct worker_init_opts* opts){
     uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
-    uint64_t cio_header_size = pool_header_size(nb_max_reqs*10);
-    uint64_t pio_header_size = pool_header_size(nb_max_reqs*20);
-    uint64_t size;
+
+    struct iomgr* imgr = malloc(sizeof(struct iomgr));
+    assert(imgr);
 
     imgr->meta_thread = opts->meta_thread;
     imgr->target = opts->target;
-    imgr->max_pending_io = opts->max_io_pending_queue_size_per_worker;
+    imgr->max_pending_io = opts->max_request_queue_size_per_worker;
     imgr->nb_pending_io = 0;
     imgr->io_unit_size = spdk_bs_get_io_unit_size(opts->target);
 
@@ -429,69 +409,55 @@ _worker_init_imgr(struct iomgr* imgr,struct worker_init_opts* opts){
     TAILQ_INIT(&imgr->pending_read_head);
     TAILQ_INIT(&imgr->pending_write_head);
 
-    imgr->cache_io_pool = (struct object_cache_pool*)(imgr+1);
-    uint8_t* cahe_pool_data = (uint8_t*)imgr->cache_io_pool + cio_header_size;
+    uint32_t max_pages_per_req = MAX_SLAB_SIZE/KVS_PAGE_SIZE/2+1;
+    uint32_t max_cache_reqs = (nb_max_reqs+opts->reclaim_batch_size)*max_pages_per_req;
+    imgr->cache_io_pool = pool_create(max_cache_reqs,sizeof(struct cache_io));
+    imgr->page_io_pool = pool_create(max_cache_reqs*2,sizeof(struct page_io));
 
-    assert((uint64_t)imgr->cache_io_pool%8==0);
-    assert((uint64_t)cahe_pool_data%8==0);
-    size = pool_header_init(imgr->cache_io_pool,nb_max_reqs*10,sizeof(struct cache_io),
-                     cio_header_size,
-                     cahe_pool_data);
+    assert(imgr->cache_io_pool);
+    assert(imgr->page_io_pool);
 
-    assert(size%8==0);
-    imgr->page_io_pool = (struct object_cache_pool*)((uint8_t*)imgr->cache_io_pool + size);
-    uint8_t* page_pool_data = (uint8_t*)imgr->page_io_pool + pio_header_size;
-
-    assert((uint64_t)imgr->page_io_pool%8==0);
-    assert((uint64_t)page_pool_data%8==0);
-    pool_header_init(imgr->page_io_pool,nb_max_reqs*20,sizeof(struct page_io),
-                     pio_header_size,
-                     page_pool_data);
+    return imgr;
 }
 
-static void
-_worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
-                    uint64_t pmgr_base_off,
-                    uint64_t rmgr_base_off,
-                    uint64_t imgr_base_off){
+struct worker_context* 
+worker_alloc(struct worker_init_opts* opts)
+{
+    struct worker_context *wctx = malloc(sizeof(*wctx));
+    assert(wctx!=NULL);
 
     uint32_t nb_max_reqs = opts->max_request_queue_size_per_worker;
 
     wctx->ready = false;
-    wctx->mem_index = mem_index_init();
     wctx->shards = opts->shard;
     wctx->nb_shards = opts->nb_shards;
+    wctx->core_id = opts->core_id;
+
+    wctx->global_index = opts->global_index;
+
     wctx->nb_reclaim_shards = opts->nb_reclaim_shards;
     wctx->reclaim_shards_start_id = opts->reclaim_shard_start_id;
     wctx->reclaim_percentage_threshold = opts->reclaim_percentage_threshold;
     wctx->io_cycle = opts->io_cycle;
-    wctx->request_queue = (struct kv_request*)(wctx + 1);
     wctx->max_pending_kv_request = nb_max_reqs;
-    
-    wctx->req_used_ring = spdk_ring_create(SPDK_RING_TYPE_MP_SC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
-    wctx->req_free_ring = spdk_ring_create(SPDK_RING_TYPE_MP_MC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
-    assert(wctx->req_used_ring!=NULL);
-    assert(wctx->req_free_ring!=NULL);
 
-    //Put all free kv_request into req_free_ring.
-    uint32_t i = 0;
-    struct kv_request* req;
-    for(;i<nb_max_reqs;i++){
-        req = &wctx->request_queue[i];
-        spdk_ring_enqueue(wctx->req_free_ring, (void**)&req,1,NULL);
-    }
+    wctx->kv_request_internal_pool = pool_create(nb_max_reqs,sizeof(struct kv_request_internal));
+    assert(wctx->kv_request_internal_pool);
+
+    wctx->req_ring = spdk_ring_create(SPDK_RING_TYPE_MP_SC,nb_max_reqs,SPDK_ENV_SOCKET_ID_ANY);
+    assert(wctx->req_ring!=NULL);
 
     TAILQ_INIT(&wctx->submit_queue);
     TAILQ_INIT(&wctx->resubmit_queue);
 
-    wctx->kv_request_internal_pool = (struct object_cache_pool*)(wctx->request_queue + nb_max_reqs);
-    uint8_t* req_pool_data = (uint8_t*)wctx->kv_request_internal_pool + pool_header_size(nb_max_reqs);
+    wctx->add_conflicts = conflict_new();
+    assert(wctx->add_conflicts);
 
-    assert((uint64_t)wctx->kv_request_internal_pool%8==0);
-    assert((uint64_t)req_pool_data%8==0);
-    pool_header_init(wctx->kv_request_internal_pool,nb_max_reqs,sizeof(struct kv_request_internal),
-                     pool_header_size(nb_max_reqs),
-                     req_pool_data);
+    wctx->mtable = mtable_new(opts->core_id,nb_max_reqs+opts->reclaim_batch_size);
+
+    wctx->pmgr = _alloc_pmgr_context(opts);
+    wctx->rmgr = _alloc_rmgr_context(opts);
+    wctx->imgr = _alloc_imgr_context(opts);
 
     struct spdk_cpuset cpumask;
     //The name will be copied. So the stack variable makes sense.
@@ -505,75 +471,46 @@ _worker_context_init(struct worker_context *wctx,struct worker_init_opts* opts,
     wctx->thread = spdk_thread_create(thread_name,&cpumask);
     //wctx->thread = spdk_thread_create(thread_name,NULL);
     assert(wctx->thread!=NULL);
-
-    assert(pmgr_base_off%8==0);
-    assert(rmgr_base_off%8==0);
-    assert(imgr_base_off%8==0);
-
-    wctx->pmgr = (struct pagechunk_mgr*)((uint8_t*)wctx + pmgr_base_off);
-    wctx->rmgr = (struct reclaim_mgr*)((uint8_t*)wctx + rmgr_base_off);
-    wctx->imgr = (struct iomgr*)((uint8_t*)wctx + imgr_base_off);
-
-    _worker_init_pmgr(wctx->pmgr,opts);
-    _worker_init_rmgr(wctx->rmgr,opts);
-    _worker_init_imgr(wctx->imgr,opts);
+    return wctx;
 }
 
-struct worker_context* 
-worker_alloc(struct worker_init_opts* opts)
-{
-    uint64_t size = 0;
-    uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
-    uint32_t nb_max_slab_reclaim = opts->nb_reclaim_shards*opts->shard[0].nb_slabs;
+static void _pmgr_destroy(struct pagechunk_mgr *pmgr){
+    assert(pmgr);
+    free(pmgr->cache_base_addr);
+    free(pmgr->pdesc_arr);
+    
+    for(uint32_t i=0;i<pmgr->nb_dma_buffers;i++){
+        spdk_dma_free(pmgr->dma_addr_arr[i]);
+    }
 
-    uint64_t pmgr_base_off;
-    uint64_t rmgr_base_off;
-    uint64_t imgr_base_off;
+    pool_destroy(pmgr->remote_page_request_pool);
+    pool_destroy(pmgr->load_store_ctx_pool);
+    pool_destroy(pmgr->item_ctx_pool);
+    pool_destroy(pmgr->dma_buffer_pool);
 
-    //worker context
-    size += sizeof(struct worker_context);
-    size += sizeof(struct kv_request)*nb_max_reqs;
-    size += pool_header_size(nb_max_reqs);
-    size += nb_max_reqs*sizeof(struct kv_request_internal); //one req produces one req_internal.
+    free(pmgr);
+}
 
-    //page chunk manager
-    //One kv request may produce one chunk request and ctx request
-    //One mig request may produce one chunk request and ctx request
-    //One post del may produce one chunk request and ctx request
-    pmgr_base_off = size;
-    size += sizeof(struct pagechunk_mgr);
-    size += pool_header_size(nb_max_reqs*5); //pmgr_req_pool.
-    size += pool_header_size(nb_max_reqs*5); //pmgr_ctx_pool.
-    size += nb_max_reqs*5*sizeof(struct chunk_miss_callback);
-    size += nb_max_reqs*5*sizeof(struct chunk_load_store_ctx);
+static void _rmgr_destroy(struct reclaim_mgr *rmgr){
+    assert(rmgr);
 
-    //recliam manager
-    //One kv put/delete req may produce one post del request
-    //One mig req may produce one post del request.
-    rmgr_base_off = size;
-    size += sizeof(struct reclaim_mgr);
-    size += pool_header_size(nb_max_reqs*3);        //del_pool;
-    size += pool_header_size(nb_max_reqs);          //mig_pool;
-    size += pool_header_size(nb_max_slab_reclaim);  //slab_reclaim_request_pool;
-    size += nb_max_reqs*3*sizeof(struct pending_item_delete);
-    size += nb_max_reqs*sizeof(struct pending_item_migrate);
-    size += nb_max_slab_reclaim*sizeof(struct slab_migrate_request);
+    free(rmgr->migrate_slab_pool);
+    free(rmgr->pending_migrate_pool);
+    free(rmgr);
+}
 
-    //io manager
-    //One pmgr ctx req may produce two cache io
-    //One cache io may produce two page io.
-    imgr_base_off = size;
-    size += sizeof(struct iomgr);
-    size += pool_header_size(nb_max_reqs*10);   //cache_pool; one req may produce 2 cache io.
-    size += pool_header_size(nb_max_reqs*20);   //page_pool; one cio may produce 2 page io.
-    size += nb_max_reqs*10*sizeof(struct cache_io);
-    size += nb_max_reqs*20*sizeof(struct page_io);
+static void _imgr_destroy(struct iomgr *imgr){
+    assert(imgr);
 
-    struct worker_context *wctx = malloc(size);
-    assert(wctx!=NULL);
+    free(imgr->cache_io_pool);
+    free(imgr->page_io_pool);
 
-    _worker_context_init(wctx,opts,pmgr_base_off,rmgr_base_off,imgr_base_off);
-    return wctx;
+    hashmap_free(imgr->read_hash.cache_hash);
+    hashmap_free(imgr->read_hash.page_hash);
+    hashmap_free(imgr->write_hash.cache_hash);
+    hashmap_free(imgr->write_hash.page_hash);
+
+    free(imgr);
 }
 
 static void
@@ -637,10 +574,14 @@ _do_worker_destroy_check_pollers(void*ctx){
         //spdk_thread_destroy(wctx->thread);
 
         //Free all the memory
-        spdk_ring_free(wctx->req_free_ring);
-        spdk_ring_free(wctx->req_used_ring);
+        spdk_ring_free(wctx->req_ring);
+        pool_destroy(wctx->kv_request_internal_pool);
+        conflict_destroy(wctx->add_conflicts);
+        mtable_destroy(wctx->mtable);
 
-        mem_index_destroy(wctx->mem_index);
+        _pmgr_destroy(wctx->pmgr);
+        _rmgr_destroy(wctx->rmgr);
+        _imgr_destroy(wctx->imgr);
 
         //Release the worker context memory.
         SPDK_NOTICELOG("Worker has been destroyed,w:%d\n",wctx->core_id);
@@ -657,7 +598,6 @@ _do_worker_destroy(void*ctx){
     spdk_poller_unregister(&wctx->slab_evaluation_poller);
 
     spdk_put_io_channel(wctx->imgr->channel);
-
     spdk_thread_send_msg(wctx->thread,_do_worker_destroy_check_pollers,wctx);
 }
 
@@ -673,7 +613,7 @@ void worker_get_statistics(struct worker_context* wctx, struct worker_statistics
     assert(wctx!=NULL);
     ws_out->chunk_miss_times = wctx->pmgr->miss_times;
     ws_out->chunk_hit_times  = wctx->pmgr->visit_times;
-    ws_out->nb_pending_reqs  = spdk_ring_count(wctx->req_used_ring);
+    ws_out->nb_pending_reqs  = spdk_ring_count(wctx->req_ring);
     ws_out->nb_pending_ios   = wctx->imgr->nb_pending_io;
-    ws_out->nb_used_chunks   = wctx->pmgr->nb_used_chunks;
+    ws_out->nb_used_pages   = wctx->pmgr->nb_used_pages;
 }

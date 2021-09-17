@@ -1,6 +1,8 @@
 #ifndef KVS_UTIL_H
 #define KVS_UTIL_H
 #include <stdint.h>
+#include <stdlib.h>
+#include <assert.h>
 
 #define CACHE_LINE_LENGTH 64
 
@@ -38,5 +40,14 @@ uint64_t kv_cycles_to_us(uint64_t cycles);
 
 uint32_t kv_hash(const uint8_t* key, uint32_t key_len, uint32_t num_buckets);
 void     kv_shuffle(uint64_t *array, uint64_t n);
+
+/*----------------------------------------------------*/
+//For dma buffer management to avoid frequent malloc/free for DMA buffers.
+
+struct dma_buffer_pool;
+struct dma_buffer_pool* dma_buffer_pool_create(uint32_t nb_buffers, uint32_t buffer_size);
+void dma_buffer_pool_destroy(struct dma_buffer_pool* pool);
+uint8_t* dma_buffer_pool_pop(struct dma_buffer_pool* pool);
+void dma_buffer_pool_push(struct dma_buffer_pool* pool, uint8_t* addr);
 
 #endif

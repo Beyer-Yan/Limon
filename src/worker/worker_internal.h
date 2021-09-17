@@ -5,31 +5,58 @@
 #include "index.h"
 #include "worker.h"
 #include "slab.h"
-#include "uthash.h"
 #include "pool.h"
 #include "io.h"
 #include "pagechunk.h"
 #include "kvutil.h"
+#include "mtable.h"
 
 #include "spdk/thread.h"
 #include "spdk/env.h"
 
-enum op_code { GET=0, PUT, DELETE, RMW, FIRST, SEEK, NEXT,};
+enum op_code { GET=0, PUT, DELETE};
+
+struct worker_context;
+
+
+/*----------------------------------------------------*/
+//Resolving for conflicts operation for the same item.
+
+struct req_conflict;
+
+struct req_conflict* conflict_new(void);
+void conflict_destroy(struct req_conflict* conflicts);
+
+/**
+ * @brief Check the conflict state for the given item
+ * 
+ * @param conflicts  the conflicts object
+ * @param item       the given item
+ * @param op         the op code, GET,PUT,DELETE
+ * @return uint32_t  0 for conflict, otherwise the allocated conflict bucket
+ */
+uint32_t conflict_check_or_enter(struct req_conflict* conflicts, struct kv_item *item,enum op_code op);
+
+void conflict_leave(struct req_conflict* conflicts, uint32_t bucket,enum op_code op);
+
+
+/*----------------------------------------------------*/
+//For normal KV operations
 
 struct process_ctx{
     struct worker_context *wctx;
-    struct index_entry* entry;
-    struct chunk_desc* desc;
     struct slab* slab;
-    
-    //When an item is updated not in place, this field will be used to states
-    int slab_changed;
-    struct index_entry new_entry;
-    struct chunk_desc* new_desc;
-    struct slab* new_slab;
+    struct chunk_desc* desc;
+    struct slot_entry* entry;
 
-    //For resubmit request, it is unnecessary to re-lookup in the mem index.
-    uint32_t no_lookup;
+    //used for add new item.
+    uint32_t conflict_bucket;
+    
+    //When an item is updated not in place, this field will be used to state
+    int slab_changed;
+    struct slab* new_slab;
+    struct chunk_desc* new_desc;
+    struct slot_entry new_entry;
 };
 
 /**
@@ -43,33 +70,22 @@ struct process_ctx{
 struct kv_request{
     uint32_t op_code;
     uint32_t shard;
+
     struct kv_item* item;
+    uint64_t sid;
     kv_cb cb_fn;
-
-    //For read-modify-write equest
-    modify_fn m_fn;
-
-    //used when issue scan reuest.
-    scan_cb scan_cb_fn;
-    uint32_t scan_batch;
-
     void* ctx;
+
 } __attribute__(( aligned(CACHE_LINE_LENGTH) ));
 
 struct kv_request_internal{
     TAILQ_ENTRY(kv_request_internal) link;
-
     uint32_t op_code;
     uint32_t shard;
 
     struct kv_item* item;
+    uint64_t sid;
     kv_cb cb_fn;
-
-    modify_fn m_fn;
-
-    scan_cb scan_cb_fn;
-    uint32_t scan_batch;
-
     void* ctx;
 
     struct process_ctx pctx;
@@ -78,12 +94,14 @@ struct kv_request_internal{
 
 struct worker_context{
     volatile bool ready;
-    struct mem_index *mem_index;
-    
+
     //The shards points to the shards field of kvs structure.
     struct slab_shard *shards;
     uint32_t nb_shards;
     uint32_t core_id;
+
+    //this is a global index handle of g_kvs;
+    struct mem_index* global_index;
 
     //The migrating of shards below are processed by this worker. 
     uint32_t nb_reclaim_shards;
@@ -91,26 +109,23 @@ struct worker_context{
     uint32_t reclaim_percentage_threshold;
 
     uint32_t io_cycle; //us
-
-    //simple thread safe mp-sc queue
-    struct kv_request *request_queue;  // kv_request mempool for this worker
-    uint32_t max_pending_kv_request;   // Maximum number of enqueued requests 
-
+    
+    uint32_t max_pending_kv_request;
+    struct spdk_ring *req_ring;  
+    struct object_cache_pool *kv_request_internal_pool;
     // thread unsafe queue, but we do not care the unsafety in single thread program
     TAILQ_HEAD(, kv_request_internal) submit_queue;
     TAILQ_HEAD(, kv_request_internal) resubmit_queue;
 
-    //User thread get a free kv_req and enqueue it to req_used_ring.
-    //worker thread get a used kv_req and enqueu a free req to req_free_ring.
-    struct spdk_ring *req_used_ring;  
-    struct spdk_ring *req_free_ring;
+    //Resolve add conflicts for the same item.
+    struct req_conflict* add_conflicts;
+
+    struct mtable* mtable;
     
     //poller to process internal requests, the poller will be run 
     struct spdk_poller *request_poller;
     struct spdk_poller *io_poller;
     struct spdk_poller* slab_evaluation_poller;
-
-    struct object_cache_pool *kv_request_internal_pool;
 
     struct pagechunk_mgr *pmgr;
     struct reclaim_mgr   *rmgr;
@@ -125,12 +140,6 @@ void worker_process_put(struct kv_request_internal *req);
 void worker_process_delete(struct kv_request_internal *req);
 void worker_process_rmw(struct kv_request_internal *req);
 
-//For range scan operation
-void worker_process_first(struct kv_request_internal *req);
-void worker_process_seek(struct kv_request_internal *req);
-void worker_process_next(struct kv_request_internal *req);
-
-
 /*----------------------------------------------------*/
 //page chunk related
 /**
@@ -141,21 +150,18 @@ void worker_process_next(struct kv_request_internal *req);
  * 
  */
 
-struct chunkmgr_worker_context{
+struct meta_worker_context{
     struct worker_context **wctx_array;
-
-    uint64_t nb_max_chunks;
-    uint64_t nb_used_chunks;
-    uint32_t nb_pages_per_chunk;
-
     uint32_t nb_business_workers;
-    struct spdk_thread *thread;
+    struct spdk_thread *meta_thread;
+    struct spdk_poller* stat_poller;
+    uint32_t core_id;
 };
 
 struct pagechunk_mgr{
-    TAILQ_HEAD(,chunk_desc) global_chunks; 
-    uint64_t nb_used_chunks;
-
+    TAILQ_HEAD(,page_desc) pages_head;
+    uint64_t nb_init_pages;
+    uint64_t nb_used_pages;
     //suggested mem chunks that I can use. Normally, I shoud not 
     //request mem chunks larger than the water_mark. But If the
     //work is busy enough, I should try to apply more mem chunks from 
@@ -163,26 +169,32 @@ struct pagechunk_mgr{
     uint64_t water_mark;
     uint64_t visit_times;
     uint64_t miss_times;
-
     uint32_t seed; //for remote eviction
 
-    struct chunkmgr_worker_context *chunkmgr_worker;
-    struct object_cache_pool *kv_chunk_request_pool;
+    map_t page_map;
+    uint8_t* cache_base_addr;
+    struct page_desc* pdesc_arr;
+
+    struct spdk_thread *meta_thread;
+
+    struct dma_buffer_pool* dma_pool;
+    struct object_cache_pool *remote_page_request_pool;
     struct object_cache_pool *load_store_ctx_pool;
+    struct object_cache_pool* item_ctx_pool;
 };
 
-struct chunk_miss_callback{
+struct remote_page_request{
     // The requestor shaell fill the field.
     struct pagechunk_mgr *requestor_pmgr;
 
     // The page chunk manager shall fill the field and
     // send the callback to the executor.
     struct pagechunk_mgr *executor_pmgr;
-    struct chunk_desc* desc;
 
     // The executor shall fill the field by performing LRU. Or the 
     // page chunk manager worker mallocs new chunk memory directly.
-    struct chunk_mem *mem;
+    uint32_t nb_pages;
+    struct page_desc** pdesc_arr;
     int kverrno;
 
     // The executor shall call this calback function when it finishes the
@@ -196,73 +208,38 @@ struct chunk_miss_callback{
     TAILQ_ENTRY(chunk_miss_callback) link;
 };
 
-struct chunk_load_store_ctx{
-    struct pagechunk_mgr *pmgr;
-    struct chunk_desc *desc;
-    uint64_t slot_idx;
-    uint32_t first_page;
-    uint32_t last_page;
-
-    //For shared page loading only
-    uint32_t cnt;
-    uint32_t nb_segs;
-    int kverrno;
-
-    void(*user_cb)(void*ctx, int kverrno);
-    void* user_ctx;
-};
-
-void chunkmgr_request_one_aysnc(struct chunk_miss_callback *cb_obj);
-
-//sync processing
-struct chunk_mem*  chunkmgr_request_one(struct pagechunk_mgr* pmgr);
-
-// I needn't care when and where the mem is released by page chunk manager
-// worker, so the function is designed as a sync function.
-// The only thing I need to do is telling the manager worker that I want to
-// release a chunk memory. The concret releasing will be posted to background.
-void chunkmgr_release_one(struct pagechunk_mgr* pmgr,struct chunk_mem* mem);
+void meta_request_remote_pages_aysnc(struct remote_page_request *req);
 
 /*----------------------------------------------------*/
 //Reclaim related
 
 typedef void (*reclaim_io_cb)(void* ctx, int kverrno);
 
-struct reclaim_ctx{
-    struct worker_context* wctx;
-    struct chunk_desc *desc;
-    uint32_t no_lookup;
-};
-
-struct pending_item_delete{
-    uint64_t slot_idx;
-    struct slab *slab;
-
-    reclaim_io_cb io_cb_fn;
-    void *ctx;
-
-    struct reclaim_ctx rctx;
-    TAILQ_ENTRY(pending_item_delete) link;
-};
-
 struct pending_item_migrate{
-    uint64_t slot_idx;
+    struct worker_context* wctx;
     struct slab *slab;
-    struct index_entry* entry;
+    uint64_t sid;
 
-    //Variables below will be used when I allocate a new slot.
-    uint64_t new_slot;
-    struct chunk_desc* new_desc;
+    struct chunk_desc *desc;
+    struct slot_entry* entry;
+    uint32_t shard_idx;
+    uint32_t slab_idx;
+    uint64_t slot_idx;
+
+    //slot migration is only allowed intra slab
+    struct chunk_desc* new_desc; 
+    uint32_t new_slot_idx;
 
     reclaim_io_cb io_cb_fn;
     void *ctx;
 
-    struct reclaim_ctx rctx;
     TAILQ_ENTRY(pending_item_migrate) link;
 };
 
 //Each pending_slab_migrate operations includes multi pending_item_migrate operations.
 struct slab_migrate_request{
+    uint32_t shard_id;
+    uint32_t slab_idx;
     struct slab* slab;
     struct reclaim_node* node;
     struct worker_context *wctx;
@@ -283,12 +260,6 @@ struct reclaim_mgr{
     uint32_t migrating_batch;
     uint32_t reclaim_percentage_threshold;
     uint32_t nb_pending_slots;
-    /**
-     * @brief Construct a new tailq head object.
-     * Each background item deleting will be appended to the list. The reclaim thread
-     * poll will process these pending deleting.
-     */
-    TAILQ_HEAD(,pending_item_delete) item_delete_head;
 
     /**
      * @brief Construct a new tailq head object.
@@ -307,7 +278,6 @@ struct reclaim_mgr{
      */
     TAILQ_HEAD(,slab_migrate_request) slab_migrate_head;
 
-    struct object_cache_pool *pending_delete_pool;
     struct object_cache_pool *pending_migrate_pool;
     struct object_cache_pool *migrate_slab_pool;
 };

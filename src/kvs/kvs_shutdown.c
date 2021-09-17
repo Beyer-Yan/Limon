@@ -5,6 +5,8 @@
 #include "spdk/blob.h"
 #include "spdk/log.h"
 
+#include "../worker/worker_internal.h"
+
 static void
 _kvs_shutdown_errno(int bserrno){
     spdk_app_stop(bserrno);
@@ -85,26 +87,23 @@ static void
 _kvs_start_close_all_blobs(void){
     //I have to send this operaiton to meta thread.
     struct slab* slab = &g_kvs->shards[0].slab_set[0];
-    spdk_thread_send_msg(g_kvs->meta_thread,_close_all_blobs,slab);   
+    spdk_thread_send_msg(g_kvs->meta_worker->meta_thread,_close_all_blobs,slab);   
 }
 
 static void
-_kvs_shutdown_all_worker(void){
+_kvs_shutdown_worker(void){
     uint32_t i=0;
     for(;i<g_kvs->nb_workers;i++){
         worker_destroy(g_kvs->workers[i]);
     }
-    // Bug in spdk v20. When I  destroy the chunkmkr thread without 
-    //io channels, the reactor will report a coredump that says the 
-    //chunkmgr thread still has io channel. But in fact, the chunkmgr
-    //has no any io channel.
-    //chunkmgr_worker_destroy();
 }
 
 void
 kvs_shutdown(void){
     //Close all the slab blob, and unload the blobstore.
     SPDK_NOTICELOG("Shutdowning kvs:%s\n",g_kvs->kvs_name);
-    _kvs_shutdown_all_worker();
+    _kvs_shutdown_worker();
+
     _kvs_start_close_all_blobs();
+    meta_worker_destroy(g_kvs->meta_worker);
 }

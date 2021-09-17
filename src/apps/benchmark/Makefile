@@ -9,11 +9,14 @@ CFLAGS += -I$(KVS_ROOT_DIR)/include
 CFLAGS += -I$(KVS_ROOT_DIR)/indexes/include
 CFLAGS += -I$(KVS_ROOT_DIR)/utils/include
 
+LDFLAGS += -L$(KVS_ROOT_DIR)/lib
+LDFLAGS += -Wl,-rpath=$(KVS_ROOT_DIR)/lib
+
 SYS_LIBS += -lm
 SYS_LIBS += -ljemalloc
+SYS_LIBS += -lcart
 
 APP = kvs_bench
-
 C_SRCS := kvs_bench.c
 C_SRCS += $(shell ls ycsb/*.c)
 

@@ -258,7 +258,7 @@ static int leaf_matches(const art_leaf *n, const unsigned char *key, int key_len
  * @return NULL if the item was not found, otherwise
  * the value pointer is returned.
  */
-struct index_entry* art_search(const art_tree *t, const unsigned char *key, int key_len) {
+uint64_t art_search(const art_tree *t, const unsigned char *key, int key_len) {
     art_node **child;
     art_node *n = t->root;
     int prefix_len, depth = 0;
@@ -268,16 +268,16 @@ struct index_entry* art_search(const art_tree *t, const unsigned char *key, int 
             n = (art_node*)LEAF_RAW(n);
             // Check if the expanded path matches
             if (!leaf_matches((art_leaf*)n, key, key_len, depth)) {
-                return &((art_leaf*)n)->value;
+                return ((art_leaf*)n)->value;
             }
-            return NULL;
+            return 0;
         }
 
         // Bail if the prefix does not match
         if (n->partial_len) {
             prefix_len = check_prefix(n, key, key_len, depth);
             if (prefix_len != min(MAX_PREFIX_LEN, n->partial_len))
-                return NULL;
+                return 0;
             depth = depth + n->partial_len;
         }
 
@@ -286,7 +286,7 @@ struct index_entry* art_search(const art_tree *t, const unsigned char *key, int 
         n = (child) ? *child : NULL;
         depth++;
     }
-    return NULL;
+    return 0;
 }
 
 // Find the minimum leaf under a node
@@ -355,9 +355,9 @@ art_leaf* art_maximum(art_tree *t) {
     return maximum((art_node*)t->root);
 }
 
-static art_leaf* make_leaf(const unsigned char *key, int key_len, struct index_entry *value) {
+static art_leaf* make_leaf(const unsigned char *key, int key_len, uint64_t value) {
     art_leaf *l = (art_leaf*)calloc(1, sizeof(art_leaf)+key_len);
-    l->value = *value;
+    l->value = value;
     l->key_len = key_len;
     memcpy(l->key, key, key_len);
     return l;
@@ -545,12 +545,12 @@ static int prefix_mismatch(const art_node *n, const unsigned char *key, int key_
     return idx;
 }
 
-static struct index_entry*  recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_len, struct index_entry* value, int depth, int *old) {
+static uint64_t recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_len, uint64_t value, int depth, int *old) {
     // If we are at a NULL node, inject a leaf
     if (!n) {
         art_leaf *leaf = make_leaf(key, key_len, value);
         *ref = (art_node*)SET_LEAF(leaf);
-        return &(leaf->value);
+        return (leaf->value);
     }
 
     // If we are at a leaf, we need to replace it with a node
@@ -560,8 +560,8 @@ static struct index_entry*  recursive_insert(art_node *n, art_node **ref, const 
         // Check if we are updating an existing value
         if (!leaf_matches(l, key, key_len, depth)) {
             *old = 1;
-            l->value = *value;
-            return &l->value;
+            l->value = value;
+            return l->value;
         }
 
         // New value, we must split the leaf into a node4
@@ -578,7 +578,7 @@ static struct index_entry*  recursive_insert(art_node *n, art_node **ref, const 
         *ref = (art_node*)new_node;
         add_child4(new_node, ref, l->key[depth+longest_prefix], SET_LEAF(l));
         add_child4(new_node, ref, l2->key[depth+longest_prefix], SET_LEAF(l2));
-        return &l2->value;
+        return l2->value;
     }
 
     // Check if given node has a prefix
@@ -613,7 +613,7 @@ static struct index_entry*  recursive_insert(art_node *n, art_node **ref, const 
         // Insert the new leaf
         art_leaf *l = make_leaf(key, key_len, value);
         add_child4(new_node, ref, key[depth+prefix_diff], SET_LEAF(l));
-        return &l->value;
+        return l->value;
     }
 
 RECURSE_SEARCH:;
@@ -627,7 +627,7 @@ RECURSE_SEARCH:;
     // No child, node goes within us
     art_leaf *l = make_leaf(key, key_len, value);
     add_child(n, ref, key[depth], SET_LEAF(l));
-    return &l->value;
+    return l->value;
 }
 
 /**
@@ -635,13 +635,11 @@ RECURSE_SEARCH:;
  * @param t The tree
  * @param key The key
  * @param key_len The length of the key
- * @param value index entry value pointer. The value will be wholy copied into art node. 
- * @return the pointer for the index entry in art node. If the key exists, the
- * old value will be replaced.
+ * @param value  If the key exists, the old value will be replaced.
  */
-struct index_entry* art_insert(art_tree *t, const unsigned char *key, int key_len, struct index_entry *value) {
+uint64_t art_insert(art_tree *t, const unsigned char *key, int key_len, uint64_t value) {
     int old_val = 0;
-    struct index_entry* rt_value= recursive_insert(t->root, &t->root, key, key_len, value, 0, &old_val);
+    uint64_t rt_value= recursive_insert(t->root, &t->root, key, key_len, value, 0, &old_val);
     if (!old_val) t->size++;
     return rt_value;
 }
@@ -817,7 +815,7 @@ static int recursive_iter(art_node *n, art_callback cb, void *data) {
     if (!n) return 0;
     if (IS_LEAF(n)) {
         art_leaf *l = LEAF_RAW(n);
-        return cb(data, (const unsigned char*)l->key, l->key_len, &l->value);
+        return cb(data, (const unsigned char*)l->key, l->key_len, l->value);
     }
 
     int idx, res;
@@ -909,7 +907,7 @@ int art_iter_prefix(art_tree *t, const unsigned char *key, int key_len, art_call
             // Check if the expanded path matches
             if (!leaf_prefix_matches((art_leaf*)n, key, key_len)) {
                 art_leaf *l = (art_leaf*)n;
-                return cb(data, (const unsigned char*)l->key, l->key_len, &l->value);
+                return cb(data, (const unsigned char*)l->key, l->key_len, l->value);
             }
             return 0;
         }
@@ -961,7 +959,7 @@ static int _art_iter_next(art_node *n, const unsigned char* key, int key_len, in
     if (!n) return 0;
     if (IS_LEAF(n)) {
         art_leaf *l = LEAF_RAW(n);
-        return x ? cb(data, (const unsigned char*)l->key, l->key_len, &l->value) : 0;
+        return x ? cb(data, (const unsigned char*)l->key, l->key_len, l->value) : 0;
     }
 
     if(n->partial_len){

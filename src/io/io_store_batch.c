@@ -50,8 +50,9 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 static void
 _store_pages_phase2(struct page_io *pio){
     pio->imgr->nb_pending_io++;
-    _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,pio->buf,pio->start_page,pio->len,
-                _store_pages_complete_cb,pio);
+    _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
+                 pio->buf,pio->start_page,pio->len,
+                 _store_pages_complete_cb,pio);
 }
 
 static void
@@ -93,7 +94,7 @@ iomgr_store_pages_async(struct iomgr* imgr,
     cio->cnt=0;
     cio->nb_segments = nb_pages>1 ? 2 : 1;
     cio->blob = blob;
-    _make_cache_key128(key_prefix,nb_pages,cio->key);
+    cio->key = _make_cache_key(key_prefix,nb_pages);
 
     //submit cio
     TAILQ_INSERT_TAIL(&imgr->pending_write_head,cio,link);
@@ -106,7 +107,7 @@ int iomgr_io_write_poll(struct iomgr* imgr){
     struct cache_io *cio, *ctmp=NULL;
     TAILQ_FOREACH_SAFE(cio,&imgr->pending_write_head,link,ctmp){
         struct cache_io *val;
-        hashmap_get(cmap,(uint8_t*)cio->key, sizeof(cio->key),&val);
+        hashmap_get(cmap,cio->key,&val);
         if(val){
             //They are writing the same pages, just link them.
             TAILQ_REMOVE(&imgr->pending_write_head,cio,link);
@@ -114,22 +115,23 @@ int iomgr_io_write_poll(struct iomgr* imgr){
         }
         else{
             TAILQ_INIT(&cio->cio_head);
-            hashmap_put(cmap,(uint8_t*)cio->key,sizeof(cio->key),cio);
+            hashmap_put(cmap,cio->key,cio);
         }
     }
 
     TAILQ_HEAD(,page_io) pio_head;
     TAILQ_INIT(&pio_head);
 
+    uint64_t del_tmp;
     //Process the requests that have interleaved pages
     TAILQ_FOREACH_SAFE(cio,&imgr->pending_write_head,link,ctmp){
         TAILQ_REMOVE(&imgr->pending_write_head,cio,link);
-        hashmap_remove(cmap,(uint8_t*)cio->key,sizeof(cio->key));
+        hashmap_remove(cmap,cio->key,&del_tmp);
 
         struct page_io *pio1 = pool_get(imgr->page_io_pool);
         assert(pio1!=NULL);
         pio1->cache_io = cio;
-        pio1->key = cio->key[0];
+        pio1->key = cio->key-1;
         pio1->imgr = imgr;
         pio1->io_link = NULL;
         pio1->buf = cio->buf;
@@ -143,7 +145,7 @@ int iomgr_io_write_poll(struct iomgr* imgr){
             assert(pio2!=NULL);
             uint32_t pages = cio->nb_pages - 1;
             pio2->cache_io = cio;
-            pio2->key = cio->key[0] + pages;
+            pio2->key = cio->key;
             pio2->imgr = imgr;
             pio2->io_link = NULL;
             pio2->buf = cio->buf + KVS_PAGE_SIZE*pages;
@@ -162,8 +164,9 @@ int iomgr_io_write_poll(struct iomgr* imgr){
         TAILQ_REMOVE(&pio_head,pio,link);
         events++;
         imgr->nb_pending_io++;
-        _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,pio->buf,pio->start_page,pio->len,
-                    _store_pages_complete_cb,pio);
+        _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
+                     pio->buf,pio->start_page,pio->len,
+                     _store_pages_complete_cb,pio);
     }
     return events;
 }

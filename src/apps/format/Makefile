@@ -10,8 +10,14 @@ CFLAGS += -I$(KVS_ROOT_DIR)/indexes/include
 CFLAGS += -I$(KVS_ROOT_DIR)/utils/include
 #LDFLAGS += -Wl,--gc-sections
 
-APP = kvs_format
+LDFLAGS += -L$(KVS_ROOT_DIR)/lib
+LDFLAGS += -Wl,-rpath=$(KVS_ROOT_DIR)/lib
 
+SYS_LIBS += -lm
+SYS_LIBS += -ljemalloc
+SYS_LIBS += -lcart
+
+APP = kvs_format
 C_SRCS := kvs_format.c
 
 SPDK_LIB_LIST = $(ALL_MODULES_LIST)

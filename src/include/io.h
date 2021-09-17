@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include "spdk/queue.h"
-#include "uthash.h"
 #include "pool.h"
 #include "hashmap.h"
 
@@ -39,10 +38,10 @@ struct page_io{
 };
 
 struct cache_io{
-    uint64_t key[2];
+    uint64_t key;
     struct iomgr *imgr;
 
-    //cnt means how many page_ios for the cache_io
+    //nb_segments means how many page_ios for the cache_io
     uint32_t cnt;
     uint32_t nb_segments;
     uint32_t nb_pages;
@@ -85,16 +84,14 @@ struct iomgr{
     struct object_cache_pool *page_io_pool;
 };
 
-static inline void 
-_make_cache_key128(uint64_t base_key, uint64_t n, uint64_t *key_out){
-
-    key_out[0] = base_key;
-    key_out[1] = n;
-}
-
 static inline uint64_t 
-_make_page_key64(uint64_t base_key,uint64_t off){
-    return base_key + off;
+_make_cache_key(uint64_t base_key, uint64_t n){
+    //We reserve the most significant 16 bytes.
+    //This the most significant 16 bytes should not
+    //be used. Otherwise the keys may not uniquely identify
+    //the pages.
+    assert(n<UINT16_MAX);
+    return (base_key<<16)+n;
 }
 
 /**

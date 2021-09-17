@@ -27,7 +27,7 @@ struct kvs_start_ctx{
 	struct spdk_blob *super_blob;
 	uint64_t io_unit_size;
     uint64_t bs_page_size;
-    uint64_t io_unit_per_page;
+    uint64_t io_unit_per_bs_page;
 	int rc;
 
     struct kvs_start_opts *opts;
@@ -120,50 +120,53 @@ _kvs_worker_ready_poller(void*ctx){
 static void
 _kvs_worker_init(struct kvs_start_ctx *kctx){
 
-    struct chunkmgr_worker_init_opts chunk_opts;
+    struct meta_init_opts meta_opts;
     struct kvs* kvs = kctx->kvs;
     struct worker_context** wctx = kvs->workers;
 
-    chunk_opts.nb_business_workers = kctx->opts->nb_works;
-    chunk_opts.wctx_array = wctx;
-    chunk_opts.nb_pages_per_chunk = kctx->sl->nb_pages_per_chunk;
-    chunk_opts.nb_max_cache_chunks = kctx->opts->max_cache_chunks;
-    chunk_opts.core_id  = 0;
-    //Distribute the chunk manager thread in master core
-    kctx->kvs->chunkmgr_worker = chunkmgr_worker_alloc(&chunk_opts);
+    meta_opts.nb_business_workers = kctx->opts->nb_works;
+    meta_opts.wctx_array = wctx;
+    meta_opts.core_id  = 0;
+    meta_opts.meta_thread = spdk_get_thread();
+
+    //Distribute the meta worker in this core
+    kctx->kvs->meta_worker = meta_worker_alloc(&meta_opts);
 
     struct worker_init_opts worker_opts;
-    
-    worker_opts.chunkmgr_worker = kctx->kvs->chunkmgr_worker;
-    worker_opts.chunk_cache_water_mark = kctx->opts->max_cache_chunks/kctx->opts->nb_works;
 
-    worker_opts.max_io_pending_queue_size_per_worker = kvs->max_io_pending_queue_size_per_worker;
     worker_opts.max_request_queue_size_per_worker = kvs->max_request_queue_size_per_worker;
+    //worker_opts.max_io_pending_queue_size_per_worker = kvs->max_io_pending_queue_size_per_worker;
 
-    worker_opts.nb_reclaim_shards = kvs->nb_shards/kvs->nb_workers;
-    worker_opts.nb_shards = kvs->nb_shards;
+
     worker_opts.reclaim_batch_size = kvs->reclaim_batch_size;
     worker_opts.reclaim_percentage_threshold = kvs->reclaim_percentage_threshold;
     worker_opts.io_cycle = kctx->opts->io_cycle;
-    
-    worker_opts.shard = kvs->shards;
-    worker_opts.target = kctx->bs;
-    worker_opts.meta_thread = spdk_get_thread();
 
-    uint32_t i = 0;
-    for(;i<kctx->opts->nb_works;i++){
+    worker_opts.nb_init_pages = kctx->opts->max_cache_pages/kctx->opts->nb_works;
+    worker_opts.global_index = kctx->kvs->global_index;
+
+    worker_opts.nb_shards = kvs->nb_shards;
+    worker_opts.shard = kvs->shards;
+
+    worker_opts.target = kctx->bs;
+
+    worker_opts.meta_thread = meta_opts.meta_thread;
+
+    worker_opts.chunk_cache_water_mark = kctx->opts->max_cache_pages/kctx->opts->nb_works;
+
+    worker_opts.nb_reclaim_shards = kvs->nb_shards/kvs->nb_workers;
+    for( uint32_t i=0;i<kctx->opts->nb_works;i++){
         worker_opts.reclaim_shard_start_id = i*worker_opts.nb_reclaim_shards;
         worker_opts.core_id = i+1;
         //The last worker may have less shards.
         if(i==kctx->opts->nb_works-1 ){
             worker_opts.nb_reclaim_shards = kvs->nb_shards - i*worker_opts.nb_reclaim_shards;
         }
-
         wctx[i] = worker_alloc(&worker_opts);
     }
     
-    chunkmgr_worker_start();
-    for(i=0;i<kctx->opts->nb_works;i++){
+    meta_worker_start(kctx->kvs->meta_worker);
+    for(uint32_t i=0;i<kctx->opts->nb_works;i++){
         worker_start(wctx[i]);
     }
 
@@ -187,19 +190,20 @@ _kvs_start_create_kvs_runtime(struct kvs_start_ctx *kctx){
     assert(kvs!=NULL);
 
     kvs->kvs_name = kctx->opts->kvs_name;
-    kvs->max_cache_chunks = kctx->opts->max_cache_chunks;
+    kvs->max_cache_pages = kctx->opts->max_cache_pages;
     kvs->max_key_length = kctx->sl->max_key_length;
     kvs->nb_workers = nb_workers;
     kvs->nb_shards = nb_shards;
     kvs->reclaim_batch_size = kctx->opts->reclaim_batch_size;
     kvs->reclaim_percentage_threshold = kctx->opts->reclaim_percentage_threshold;
     kvs->max_request_queue_size_per_worker = kctx->opts->max_request_queue_size_per_worker;
-    kvs->max_io_pending_queue_size_per_worker = kctx->opts->max_io_pending_queue_size_per_worker;
+    //kvs->max_io_pending_queue_size_per_worker = kctx->opts->max_io_pending_queue_size_per_worker;
+
+    kvs->global_index = mem_index_init();
 
     kvs->super_blob = kctx->super_blob;
     kvs->bs_target = kctx->bs;
     kvs->meta_channel = kctx->channel;
-    kvs->meta_thread = spdk_get_thread();
 
     kvs->workers = (struct worker_context**)(kvs+1);
     kvs->shards = (struct slab_shard*)(kvs->workers + nb_workers);
@@ -315,7 +319,7 @@ _blob_read_super_page_complete(void* ctx, int bserrno){
     assert(kctx->sl!=NULL);
 
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
-    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_page;
+    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_bs_page;
 
     spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_read_all_super_pages_complete,kctx);
 }
@@ -339,7 +343,7 @@ _kvs_start_super_open_complete(void*ctx, struct spdk_blob *blob, int bserrno){
     assert(kctx->sl!=NULL);
 
     //read one page from the super.
-    uint64_t nb_blocks = 1*kctx->io_unit_per_page;
+    uint64_t nb_blocks = 1*kctx->io_unit_per_bs_page;
     spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_read_super_page_complete,kctx);
 }
 
@@ -366,24 +370,14 @@ _kvs_start_load_bs_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     SPDK_NOTICELOG("Loading blobstore completes\n");
 
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(bs);
-    if(io_unit_size!=KVS_PAGE_SIZE){
-        SPDK_WARNLOG("IO unit size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
-    }
-
     struct kvs_start_ctx* kctx = malloc(sizeof(struct kvs_start_ctx));
     kctx->bs = bs;
     kctx->opts = ctx;
     kctx->io_unit_size = io_unit_size;
 
     uint64_t bs_page_size = spdk_bs_get_page_size(kctx->bs);
-    if(bs_page_size!=KVS_PAGE_SIZE){
-        SPDK_ERRLOG("Blobstore page size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
-        spdk_app_stop(-1);
-        return;
-    }
-
     kctx->bs_page_size = bs_page_size;
-    kctx->io_unit_per_page = bs_page_size/io_unit_size;
+    kctx->io_unit_per_bs_page = bs_page_size/io_unit_size;
     assert(kctx->bs_page_size%kctx->io_unit_size==0);
     
     spdk_bs_get_super(bs,_kvs_start_get_super_complete,kctx);
@@ -408,10 +402,10 @@ _kvs_start(void* ctx){
 	}
 
     uint64_t block_size = spdk_bdev_get_block_size(bdev);
-    if(block_size!=KVS_PAGE_SIZE){
-        SPDK_WARNLOG("Block size is not 4KB!! Yours:%lu\n",block_size);
-        //spdk_app_stop(-1);
-		//return;
+    if((block_size>KVS_PAGE_SIZE) || (KVS_PAGE_SIZE%block_size)!=0){
+        SPDK_ERRLOG("Block sizes mismatch!! Yours:%lu, sopported:%u\n",block_size,KVS_PAGE_SIZE);
+        spdk_app_stop(-1);
+		return;
     }
 
     //deprecated
@@ -465,16 +459,6 @@ _get_cpu_mask(uint32_t nb_works){
     return (const char*)mask;
 }
 
-static void
-_parameter_check(struct kvs_start_opts *opts){
-    uint32_t num = opts->max_io_pending_queue_size_per_worker;
-    assert( (num&(num-1))==0 );
-
-    num = opts->max_request_queue_size_per_worker;
-    assert( (num&(num-1))==0 );
-
-    assert(opts->startup_fn!=NULL);
-}
 
 void 
 kvs_start_loop(struct kvs_start_opts *opts){
@@ -483,8 +467,6 @@ kvs_start_loop(struct kvs_start_opts *opts){
     opts->spdk_opts->reactor_mask = _get_cpu_mask(opts->nb_works);
     assert(opts->spdk_opts->reactor_mask!=NULL);
     assert(opts->startup_fn!=NULL);
-
-    _parameter_check(opts);
 
     assert(!atomic_load(&g_started));
     atomic_store(&g_started,1);

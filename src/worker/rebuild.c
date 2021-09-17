@@ -18,7 +18,7 @@ struct rebuild_ctx{
 
     //A temporary mem index for shard recovery. When the shard is rebuilt, the mem index
     //will be destroyed. The index_entry is the timestamp.
-    struct mem_index *index_for_one_shard;
+    map_t hash_tsmp;
 
     LIST_HEAD(,list_slab) slab_head;
     struct list_slab* cur;
@@ -68,6 +68,9 @@ _node_read_complete(void* ctx, int bserrno){
     struct reclaim_node* node = slab_reclaim_alloc_one_node(slab,rctx->reclaim_node_idx);
     assert(node!=NULL);
 
+    assert(rctx->reclaim_node_idx<slab->reclaim.nb_reclaim_nodes);
+    slab->reclaim.node_array[rctx->reclaim_node_idx] = node;
+
     uint64_t slot_base = rctx->reclaim_node_idx*slab->reclaim.nb_chunks_per_node*
                           slab->reclaim.nb_slots_per_chunk;
     uint32_t idx = 0;
@@ -86,8 +89,7 @@ _node_read_complete(void* ctx, int bserrno){
                 continue;
             }
 
-            uint64_t tsc0;
-            uint64_t tsc1;
+            uint64_t tsc0, tsc1;
             memcpy(&tsc0,raw_data,sizeof(tsc0));
             memcpy(&tsc1,raw_data + item_get_size(item) + 8,sizeof(tsc1));
             //It may not be a correct item.
@@ -101,85 +103,70 @@ _node_read_complete(void* ctx, int bserrno){
                 continue;
             }
 
+            //It is a valid slot
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
-            struct index_entry* entry_slab   = mem_index_lookup(rctx->index_for_one_shard,item);
-            struct index_entry* entry_worker = mem_index_lookup(wctx->mem_index,item);
-            if(entry_slab){
-                assert(entry_worker!=NULL);
+            uint64_t sid = mem_index_lookup(wctx->global_index,item);
+            
+            if(sid){
                 //The item has been built, but I find another one because of a system crash when
                 //the item is updated not-in-place and it's original slot is being reclaimed.
                 //I should compare the timestamp to decide which one I should rebuild.
-                //The index_entry field is used as the timestamp field for reducing memory usage.
-                uint64_t tsmp = *(uint64_t*)entry_slab;
-                if(tsmp<tsc0){
+                uint64_t old_tsmp = 0;
+                hashmap_get(rctx->hash_tsmp,sid,&old_tsmp);
+                struct slot_entry* entry = mtable_get(wctx->mtable,sid);
+                assert(entry);
+
+                if(old_tsmp<tsc0){
                     //This item is newer.
-                    struct slab* ori_slab = &(wctx->shards[entry_worker->shard].slab_set[entry_worker->slab]);
-                    uint32_t ori_node_id = entry_worker->slot_idx/nb_slots_per_node;
-                    uint32_t ori_desc_offset = (entry_worker->slot_idx/ori_slab->reclaim.nb_slots_per_chunk)%ori_slab->reclaim.nb_chunks_per_node;
-                    struct reclaim_node* ori_node = NULL;
-                    struct chunk_desc *ori_desc   = NULL;
+                    struct slab* old_slab = &(wctx->shards[entry->shard].slab_set[entry->slab]);
+                    struct reclaim_node* old_node = NULL;
+                    struct chunk_desc *old_desc   = NULL;
+                    uint64_t old_slot_off         = 0;
 
-                    if(ori_slab==slab && ori_node_id==node->id){
-                        //they are in the same slab and same node, but the node has not been inserted
-                        //into reclaim of the slab.
-                        ori_node = node;
-                    }else{
-                        ori_node = ori_slab->reclaim.node_array[ori_node_id];
-                    }
-                    ori_desc = ori_node->desc_array[ori_desc_offset];
+                    pagechunk_get_hints(old_slab,entry->slot_idx,&old_node,&old_desc,&old_slot_off);
 
-                    if(ori_slab!=slab || ori_node_id!=node->id){
-                        //Ether the are in different slabs or different nodes of the same slab.
-                        if(ori_node->nb_free_slots==0){
-                            //Since we have empty slot now.
-                            rbtree_insert(ori_slab->reclaim.free_node_tree,ori_node->id,ori_node,NULL);
-                        }
-                        ori_slab->reclaim.nb_free_slots++;
-                        ori_node->nb_free_slots++;
-                        ori_desc->nb_free_slots++;
-                        bitmap_clear_bit(ori_desc->bitmap,
-                                     entry_worker->slot_idx%ori_slab->reclaim.nb_slots_per_chunk);
+                    if(old_node->nb_free_slots==0){
+                        //Since we have empty slot now.
+                        rbtree_insert(old_slab->reclaim.free_node_tree,old_node->id,old_node,NULL);
                     }
-                    else if(idx - (entry_worker->slot_idx-slot_base) >= slab->reclaim.nb_slots_per_chunk){
-                        //they are not in the same chunk
-                        ori_desc->nb_free_slots++;
-                        bitmap_clear_bit(ori_desc->bitmap,
-                                     entry_worker->slot_idx%ori_slab->reclaim.nb_slots_per_chunk);
-                    }
+                    old_slab->reclaim.nb_free_slots++;
+                    old_node->nb_free_slots++;
+                    old_desc->nb_free_slots++;
+                    bitmap_clear_bit(old_desc->bitmap,old_slot_off);
 
                     SPDK_NOTICELOG("Find newer item,slab:%u,slot:%lu, tsc:%lu ,ori_slab:%u,ori_slot:%lu, ori_tsc:%lu\n",
-                                    slab->slab_size,idx+slot_base,tsc0,ori_slab->slab_size,entry_worker->slot_idx,tsmp);
+                                    slab->slab_size,idx+slot_base,tsc0,old_slab->slab_size,entry->slot_idx,old_tsmp);
                     //process the newer item
-                    bitmap_set_bit(desc->bitmap,idx%slab->reclaim.nb_slots_per_chunk);
                     desc->nb_free_slots--;
                     node->nb_free_slots--;
                     slab->reclaim.nb_free_slots--;
-                    *entry_slab = *(struct index_entry*)&tsc0;
-                    entry_worker->slot_idx = slot_base + idx;
-                    entry_worker->slab = slab_find_slab(slab->slab_size);
+                    bitmap_set_bit(desc->bitmap,idx%slab->reclaim.nb_slots_per_chunk);
+
+                    //replace the slot entry;
+                    entry->slab = slab_find_slab(slab->slab_size);
+                    entry->slot_idx = slot_base + idx;
+                    hashmap_replace(rctx->hash_tsmp,sid,(any_t)old_tsmp,(any_t)tsc0);
                 }
             }
             else{
-                //This is a new item to be built.
-                //I use the stack variable here because the entry will be copied.
-                struct index_entry entry = {0};
-                entry.shard = rctx->cur->shard_idx;
-                entry.slab = slab_find_slab(slab->slab_size);
-                entry.slot_idx = slot_base + idx;
-
-                mem_index_add(wctx->mem_index,item,&entry);
-                mem_index_add(rctx->index_for_one_shard,item,(struct index_entry*)&tsc0);
-                bitmap_set_bit(desc->bitmap,idx%desc->nb_slots);
+                //This is a new valid item to be built.
+                struct slot_entry new_entry = {0};
+                new_entry.shard = rctx->cur->shard_idx;
+                new_entry.slab = slab_find_slab(slab->slab_size);
+                new_entry.slot_idx = slot_base + idx;;
+                
+                uint64_t new_sid = mtable_alloc_sid(wctx->mtable,new_entry);
+                mem_index_add(wctx->global_index,item,new_sid);
+                hashmap_put(rctx->hash_tsmp,new_sid,tsc0);
 
                 desc->nb_free_slots--;
                 node->nb_free_slots--;
                 slab->reclaim.nb_free_slots--;
+                bitmap_set_bit(desc->bitmap,idx%slab->reclaim.nb_slots_per_chunk);
             }
         }
     }
 
-    assert(rctx->reclaim_node_idx<slab->reclaim.nb_reclaim_nodes);
-    slab->reclaim.node_array[rctx->reclaim_node_idx] = node;
     if(node->nb_free_slots){
         rbtree_insert(slab->reclaim.free_node_tree,node->id,node,NULL);
     }
@@ -214,8 +201,8 @@ _rebuild_exit(struct rebuild_ctx* rctx,int kverrno){
     if(rctx->recovery_node_buffer){
         spdk_free(rctx->recovery_node_buffer);
     }
-    if(rctx->index_for_one_shard){
-        mem_index_destroy(rctx->index_for_one_shard);
+    if(rctx->hash_tsmp){
+        hashmap_free(rctx->hash_tsmp);
     }
 
     struct list_slab* s,*tmp;
@@ -240,15 +227,15 @@ _slab_rebuild_complete(struct rebuild_ctx* rctx,int kverrno){
         _rebuild_exit(rctx,-KV_ESUCCESS);
         return;
     }
-    //I should continue the next slab;
+    //I should continue the next shard;
     if(s->shard_idx!=rctx->cur->shard_idx){
         //I am going to rebuld the next shard.
         //And now, I should destroy the mem index for reducing memory usage.
         //As the item will never be stored across shard.
         SPDK_NOTICELOG("Rebuild completes, worker:%u, shard:%u\n", spdk_env_get_current_core(),s->shard_idx);
 
-        mem_index_destroy(rctx->index_for_one_shard);
-        rctx->index_for_one_shard = mem_index_init();
+        hashmap_free(rctx->hash_tsmp);
+        rctx->hash_tsmp = hashmap_new();
     }
     rctx->cur = s;
     _rebuild_one_slab(rctx);
@@ -286,7 +273,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     rctx->ctx = ctx;
     rctx->nb_buffer_pages=0;
     rctx->wctx = wctx;
-    rctx->index_for_one_shard = NULL;
+    rctx->hash_tsmp = NULL;
     rctx->recovery_node_buffer = NULL;
     rctx->slab_rebuild_complete = _slab_rebuild_complete;
     LIST_INIT(&rctx->slab_head);
@@ -316,7 +303,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     }
 
     rctx->cur = LIST_FIRST(&rctx->slab_head);
-    rctx->index_for_one_shard = mem_index_init();
+    rctx->hash_tsmp= hashmap_new();
     rctx->nb_buffer_pages = rctx->cur->slab->reclaim.nb_chunks_per_node * 
                             rctx->cur->slab->reclaim.nb_pages_per_chunk;
 
@@ -324,7 +311,7 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     rctx->recovery_node_buffer = spdk_malloc(rctx->nb_buffer_pages*KVS_PAGE_SIZE,0x1000,NULL,socket_id,SPDK_MALLOC_DMA);
     
     assert(rctx->recovery_node_buffer!=NULL);
-    assert(rctx->index_for_one_shard);
+    assert(rctx->hash_tsmp);
     
     _rebuild_one_slab(rctx);
 }

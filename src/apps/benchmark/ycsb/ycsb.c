@@ -63,8 +63,6 @@ struct get_callback{
 
 static void
 _ycsb_get_complete(void*ctx, struct kv_item* item, int kverrno){
-   //struct get_callback* cb = ctx;
-   //struct kv_item *ori_item = cb->item;
    struct kv_item *ori_item =ctx;
    if(kverrno){
       printf("Get error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
@@ -106,11 +104,18 @@ _launch_ycsb_d(int test, int nb_requests, int zipfian,uint64_t* processed, int i
    }
 }
 
+static void
+_ycsb_scan_get_complete(void*ctx, struct kv_item* item, int kverrno){
+   uint64_t sid = (uint64_t)ctx;
+   if(kverrno){
+      printf("Scan get error %d for sid:%lu\n",kverrno,sid);
+   }
+}
+
 // YCSB E
 static void 
 _launch_ycsb_e(int test, int nb_requests, int zipfian,uint64_t* processed, int id) {
    random_gen_t rand_next = zipfian?zipf_next:uniform_next;
-   struct kv_iterator *it = kv_iterator_alloc(16);
 
    for(int i = 0; i < nb_requests; i++) {
       if(random_get_put(test)) { 
@@ -122,59 +127,24 @@ _launch_ycsb_e(int test, int nb_requests, int zipfian,uint64_t* processed, int i
          //scan
          struct kv_item* item = _create_unique_item_ycsb(rand_next());
          uint32_t scan_length = uniform_next()%99+1;
-
-         if(!kv_iterator_seek(it,item)){
-            printf("Error in seek item, key:%lu\n",*(uint64_t*)item->data);
-            //exit(-1);
-         }
-
-         for(uint64_t i = 0; i < scan_length; i++) {
-            if(kv_iterator_next(it)){
-               item = create_item_from_item(kv_iterator_item(it));
-               kv_get_async(item, _ycsb_get_complete, item);
+         uint64_t sid_array[scan_length];
+         uint64_t found = kv_scan(item,scan_length,sid_array);
+         if(found){
+            for(uint64_t i=0;i<found;i++){
+               kv_get_with_sid_async(sid_array[i],_ycsb_scan_get_complete,sid_array[i]);
             }
          }
+         free(item);
+
       }
       *processed = i;
    }
-   kv_iterator_release(it);
-}
-
-static void
-_ycsb_rmw_complete(void*ctx, struct kv_item* item, int kverrno){
-   struct kv_item *ori_item = ctx;
-   if(kverrno){
-      printf("RMW error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
-   }
-   _update_stat(ori_item);
-   free(ori_item);
-}
-
-static int
-_ysc_rmw_modify_fn(struct kv_item* item){
-   char tmp[10];
-
-   //dummy modify.
-   memcpy(tmp,&item->meta,4);
-   return 0;
 }
 
 // YCSB F
 static void
 _launch_ycsb_f(int test, int nb_requests, int zipfian, uint64_t* processed,int id) {
-   for(int i = 0; i < nb_requests; i++) {
-      long next = zipfian ? zipf_next() : uniform_next();
-      struct kv_item *item = _create_unique_item_ycsb(next);
-      // In these tests we update with a given probability
-      if(random_get_put(test)) {
-         // read-modify-write
-         kv_rmw_async(item,_ysc_rmw_modify_fn,_ycsb_rmw_complete,item);
-      } 
-      else { // or we read
-         kv_get_async(item,_ycsb_get_complete,item);
-      }
-      *processed = i;
-   }
+   //the same as YCSB A
 }
 
 /* Generic interface */

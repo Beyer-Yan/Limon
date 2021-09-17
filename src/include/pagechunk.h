@@ -14,38 +14,48 @@
 
 #define CHUNK_PIN  1u
 
-//chunk memory descriptor.
-struct chunk_mem {
-    uint8_t* page_base;
-    struct bitmap bitmap[0];
+struct item_load_store_ctx{
+    //For shared page loading only
+    uint32_t cnt;
+    uint32_t nb_segs;
+
+    //used for storing pages
+    uint64_t slot_addr_offset; 
+    uint32_t size;
+
+    int kverrno;
+    void(*user_cb)(void*ctx, int kverrno);
+    void* user_ctx;
+};
+
+struct page_load_store_ctx{
+    struct pagechunk_mgr *pmgr;
+    struct chunk_desc *desc;
+    struct item_load_store_ctx* item_ctx;
+    uint32_t page_offset;
+
+    //used for storing pages
+    uint32_t nb_pages;
+};
+
+struct page_desc{
+    TAILQ_ENTRY(page_desc) link;
+    uint64_t key;
+    uint8_t* data;
 };
 
 struct chunk_desc {
-
-    TAILQ_ENTRY(chunk_desc) link; 
-    TAILQ_HEAD(, chunk_miss_callback) chunk_miss_callback_head;
-
-    struct slab*slab;
     uint32_t id;
-    uint32_t nb_pages;
-    //Variables below are for fast memory access. Otherwise, I have to get 
-    //the information by derefering the slab pointer.
-    uint32_t slab_size;
-    uint32_t nb_slots;
     uint32_t nb_free_slots;
-
-    struct chunk_mem *chunk_mem;
     uint32_t nb_pendings;
-    uint32_t flag;
-    
+    uint8_t* dma_buffer;
+    struct slab* slab;
     //bitmap to record the slot occupation
     struct bitmap bitmap[0];
 };
 
 struct pagechunk_mgr;
-
-static_assert(sizeof(struct chunk_mem)==8, "incorrect size");
-static_assert(sizeof(struct chunk_desc)==80,"incorrect size");
+static_assert(sizeof(struct chunk_desc)==32,"incorrect size");
 
 /**
  * @brief Get the hints of the given slot.
@@ -86,27 +96,18 @@ static inline struct chunk_desc* pagechunk_get_desc(struct slab* slab, uint64_t 
 }
 
 /**
- * @brief Occupy the desc, says that the desc mem shall not be evicted.
+ * @brief Occupy the desc.
  * 
  * @param desc   the pagechunk description
  */
-static inline void pagechunk_mem_lift(struct chunk_desc* desc){
-    desc->flag |= CHUNK_PIN;
-    desc->nb_pendings++;
-}
+void pagechunk_mem_lift(struct pagechunk_mgr *pmgr,struct chunk_desc* desc);
 
 /**
  * @brief Release the occupation
  * 
  * @param desc   the pagechunk description
  */
-static inline void pagechunk_mem_lower(struct chunk_desc* desc){
-    assert(desc->nb_pendings>0);
-    desc->nb_pendings--;
-    if(desc->nb_pendings==0){
-        desc->flag &=~ CHUNK_PIN;
-    }
-}
+void pagechunk_mem_lower(struct pagechunk_mgr *pmgr,struct chunk_desc* desc);
 
 /**
  * @brief Judge whether the given slot is cached in the page chunk cache
@@ -116,14 +117,6 @@ static inline void pagechunk_mem_lower(struct chunk_desc* desc){
  * @return bool      true: the slot is already cached, false:the slot is not cached
  */
 bool pagechunk_is_cached(struct chunk_desc *desc, uint64_t slot_idx);
-
-/**
- * @brief Invalidate the cache state for the given slot
- * 
- * @param  desc      The page chunk description
- * @param  slot_idx  The slot index in the slab
- */
-void pagechunk_cache_invalidate(struct chunk_desc *desc, uint64_t slot_idx);
 
 /**
  * @brief Check whether the item is stored into multi pages.
@@ -239,7 +232,7 @@ void pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
  * @param imgr     The iomanager
  * @param desc     page chunk description
  * @param slot_idx the slot index in the slab
- * @param cb       tuser callback
+ * @param cb       user callback
  * @param ctx      parameter of user callback
  */
 void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
@@ -250,42 +243,11 @@ void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
                            void* ctx);
 
 /**
- * @brief Initialize the page chunk runtime object.
- * 
- * @param init_size  initial number of pagechunks.
- * @return true      init failed
- * @return false     init sucessful
- */
-//bool pagechunk_init(int init_chunks);
-
-/**
- * @brief Request a new page chunk memory. The new chunk memory will be attached in
- * the chunk description
- * 
- * @param pmgr   The page chunk manager.
- * @param desc   the page chunk description
- * @param cb     user callback function when request is processed
- * @param ctx    parameters of user callback function
- */
-void pagechunk_request_one_async(struct pagechunk_mgr *pmgr,
-                                 struct chunk_desc* desc,
-                                 void(*cb)(void*ctx,int kverrno), 
-                                 void* ctx);
-/**
- * @brief Release the chunk memory to the page chunk manager. When a slab successes in
- * shrinking its size, it will call the function to release its chunk memory.
- * 
- * @param mem   The chunk memory pointer.
- */
-void pagechunk_release_one(struct pagechunk_mgr *pmgr,
-                            struct chunk_mem* mem);
-
-/**
- * @brief Evict one page chunk belong to the pmgr.
+ * @brief Evict one page belong to the pmgr.
  * 
  * @param pmgr                 The page chunk manager.
- * @return struct chunk_mem*   The evicted chunk memory.
+ * @return struct page_desc*   The evicted page descriptor.
  */
-struct chunk_mem* pagechunk_evict_one_chunk(struct pagechunk_mgr *pmgr);
+struct page_desc* pagechunk_evict_one_page(struct pagechunk_mgr *pmgr);
 
 #endif

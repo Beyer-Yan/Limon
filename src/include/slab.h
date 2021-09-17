@@ -17,12 +17,11 @@
  * MULTI_PAGE_SLAB_SIZE will alway be put into only one page.
  */
 #define MULTI_PAGE_SLAB_SIZE   128u
-#define CHUNK_SIZE             16u
-#define KVS_PAGE_SIZE          4096u
-#define MAX_SLAB_SIZE          14624u
+#define CHUNK_PAGES            2048u
+#define KVS_PAGE_SIZE          512u
+#define MAX_SLAB_SIZE          212032u
 
 //In disk layout
-
 struct slab_layout{
     uint32_t slab_size;
     uint64_t blob_id;

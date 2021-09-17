@@ -10,10 +10,10 @@ import "fmt"
 var gOpt = 10000
 
 var B = 0.25
-var PS = 4096
-var CS = 64*1024
-var MS = 32
-var s0 = 128
+var PS = 512
+var CS = 1024*1024
+var MS = 24
+var s0 = 256
 
 var g_Gs = 0
 
@@ -60,7 +60,7 @@ func gcd(iptA int, iptB int) int{
 
 func calc_Gs() int {
 	var m = int(B*float64(CS));
-	for ;m%4==0;m-- {}
+	for ;m%4!=0;m-- {}
 	return m
 }
 
@@ -83,7 +83,7 @@ func treaceSolution(node *searchNode) {
 	fmt.Printf("%d: ",len(node.path))
 	fmt.Print("[ ")
 	for _, val := range(node.path){
-		fmt.Print(val," ")
+		fmt.Print(val,",")
 	}
 	fmt.Println("]")
 }

@@ -260,7 +260,7 @@ void* do_workload_thread(void *pdata) {
    return NULL;
 }
 
-void* compute_stat(void* pdata){
+static void* compute_stat(void* pdata){
    struct thread_data *thread_data = pdata;
    const char* w_name = thread_data[0].workload->api->name(thread_data[0].benchmark);
    int nb_threads = thread_data[0].workload->nb_load_injectors;

@@ -8,12 +8,10 @@
 #include "spdk/event.h"
 
 struct kvs_start_opts{
-    // nb_worker should be 1,2,4,8,16... and less than nb_shards
     char* kvs_name;
     uint32_t nb_works;
     uint32_t max_request_queue_size_per_worker;
-    uint32_t max_io_pending_queue_size_per_worker;
-    uint32_t max_cache_chunks;
+    uint32_t max_cache_pages;
 
     uint32_t reclaim_batch_size;
     uint32_t reclaim_percentage_threshold;
@@ -34,30 +32,24 @@ bool kvs_is_started(void);
 // The key filed of item  shall be filed
 void kv_get_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
+//Get with no item.
+void kv_get_with_sid_async(uint64_t sid, kv_cb cb_fn, void* ctx);
+
 // The whole item shall be filled
 void kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
 // The key field of item shall be filled
 void kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
-void kv_rmw_async(struct kv_item *item, modify_fn m_fn, kv_cb cb_fn, void*ctx);
-
-struct kv_iterator;
-
-//The seek and next and kv_iterator_item operations iterate only the key of a item. If you want to load the
-//whole item data, you can issue a kv_get_async command.
-//seek to first element.
-//All scan interfaces are designed as sync interfaces, as any one of the scan operations 
-//will not issue disk IO. They just performing lookuping in in-mem index.
-struct kv_iterator* kv_iterator_alloc(uint32_t batch_size);
-void kv_iterator_release(struct kv_iterator *it);
-bool kv_iterator_first(struct kv_iterator *it);
-bool kv_iterator_seek(struct kv_iterator *it, struct kv_item *item);
-
-//Its a sync operation, since we can not get the next before we get the current item.
-bool kv_iterator_next(struct kv_iterator *it);
-
-struct kv_item* kv_iterator_item(struct kv_iterator *it);
+/**
+ * @brief  Scan from the global index sychronuously
+ * 
+ * @param item        The start item
+ * @param maxLen      The max scan length
+ * @param sid_array   The result array of sid
+ * @return uint64_t   The number actual found items;
+ */
+uint64_t kv_scan(struct kv_item *item, uint64_t maxLen,uint64_t* sid_array);
 
 struct slab_statistics{
     uint64_t nb_shards;

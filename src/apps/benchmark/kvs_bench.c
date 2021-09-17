@@ -29,8 +29,8 @@ static struct option _g_app_long_cmdline_options[] = {
     {"injectors",required_argument,NULL,INJECTORS_OPT_IDX},
 #define QUEUE_DEPTH_OPT_IDX     'Q'
     {"queue-depth",required_argument,NULL,QUEUE_DEPTH_OPT_IDX},
-#define CHUNKS_IDX              'C'
-    {"chunks",required_argument,NULL,CHUNKS_IDX},
+#define CACHES_IDX              'C'
+    {"caches",required_argument,NULL,CACHES_IDX},
 #define ITMES_OPT_IDX           'N'
     {"items",required_argument,NULL,ITMES_OPT_IDX},
 #define IO_OPT_IDX              'T'
@@ -45,19 +45,19 @@ struct kvs_bench_opts{
 	uint32_t nb_injectors;
 
 	uint32_t queue_size;
-	uint32_t cache_chunks;
+	uint32_t caches; //GB
 	uint64_t nb_items;
 
-    uint64_t io_cyle_us; //
+    uint64_t io_cyle_us; 
 };
 
 static struct kvs_bench_opts _g_default_opts = {
 	.devname = "Nvme0n1",
 	.bench_name = "kvs_ycsb",
-	.nb_workers = 4,
-	.nb_injectors = 8,
-	.queue_size = 64,
-	.cache_chunks = 32768,
+	.nb_workers = 1,
+	.nb_injectors = 2,
+	.queue_size = 16,
+	.caches = 5, /* 10GB */
 	.nb_items = 26000000,
     .io_cyle_us = 0
 };
@@ -72,9 +72,9 @@ _bench_usage(void){
                                           _g_default_opts.nb_injectors);
     printf(" -Q, --queue-size <num>       queue size(default:%u)\n",
 										  _g_default_opts.queue_size);
-    printf(" -C, --chunks <num>           number of cache chunks(default:%u)\n",
-                                          _g_default_opts.cache_chunks);
-    printf(" -N, --items  <num>           total items in db(default:%lu)\n",
+    printf(" -C, --caches <num>           number of cache chunks(default:%uGB)\n",
+                                          _g_default_opts.caches);
+    printf(" -N, --items  <numGB>         total items in db(default:%lu)\n",
                                           _g_default_opts.nb_items);
     printf(" -T, --io-cycle <num>         io polling cycle(default:%lu)\n",
                                           _g_default_opts.io_cyle_us);
@@ -121,9 +121,9 @@ _bench_parse_arg(int ch, char *arg){
             break;
         }
 		case 'C':{
-            long chunks = spdk_strtol(arg,0);
-            if(chunks>0){
-                _g_default_opts.cache_chunks = chunks;
+            long caches = spdk_strtol(arg,0);
+            if(caches>0){
+                _g_default_opts.caches = caches;
             }
             else{
                 fprintf(stderr,"The cache chunks shall be a positive number\n");
@@ -207,14 +207,14 @@ _do_start_benchmark(void*ctx){
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 3600000LU; 
 		} else {
-			w.nb_requests = 130000000LU;
+			w.nb_requests = 13000000LU;
 		}
 		histogram_reset();
         uint64_t start = spdk_get_ticks();
 		run_workload(&w, workloads[i]);
         uint32_t us = kv_cycles_to_us(spdk_get_ticks()-start);
         uint64_t qps = (uint64_t)((double)w.nb_requests/((double)us/1000000.0));
-        printf("Workload %s, requests (%d/s)\n",w.api->name(workloads[i]),qps);
+        printf("Workload %s, requests (%lu/s)\n",w.api->name(workloads[i]),qps);
 		histogram_print();
 	}
 	printf("All workloads complete, ctrl+c to stop the program\n");
@@ -243,8 +243,10 @@ static void
 _kvs_opts_init(struct kvs_start_opts *opts){
     opts->devname = _g_default_opts.devname;
     opts->kvs_name = _g_default_opts.bench_name;
-    opts->max_cache_chunks = _g_default_opts.cache_chunks;
-    opts->max_io_pending_queue_size_per_worker = 128;
+    
+    uint64_t pages_per_GB = 1024u*1024u*1024u/KVS_PAGE_SIZE;
+    opts->max_cache_pages = _g_default_opts.caches*pages_per_GB;
+
     opts->max_request_queue_size_per_worker = _g_default_opts.queue_size;
     opts->nb_works = _g_default_opts.nb_workers;
     opts->reclaim_batch_size = 4;
@@ -260,7 +262,7 @@ _kvs_print_parameters(void){
     printf("number of workers \t:%u\n",_g_default_opts.nb_workers);
     printf("number of injectors \t:%u\n",_g_default_opts.nb_injectors);
     printf("queue size        \t:%u\n",_g_default_opts.queue_size);
-    printf("number of cache chunks \t:%u\n",_g_default_opts.cache_chunks);
+    printf("cache size (GB)   \t:%u\n",_g_default_opts.caches);
     printf("total items in db \t:%lu\n",_g_default_opts.nb_items);	
     printf("io cycle \t:%lu\n",_g_default_opts.io_cyle_us);	
 }

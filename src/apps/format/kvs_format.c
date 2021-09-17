@@ -13,7 +13,7 @@
 #include "spdk/log.h"
 #include "spdk/string.h"
 
-static char *_g_kvs_name = "kvs_v1.0";
+static char *_g_kvs_name = "kvs_v2.0";
 
 static const char *_g_kvs_getopt_string = "K:S:C:fD:N:E"; 
 
@@ -46,13 +46,13 @@ struct kvs_create_opts{
 };
 
 static struct kvs_create_opts _g_default_opts = {
-    .nb_shards = 64,
+    .nb_shards = 4,
     .max_key_length = 256,
     .nb_chunks_per_reclaim_node = 4,
-    .nb_init_nodes_per_slab = 10,
+    .nb_init_nodes_per_slab = 1,
     .force_format = false,
     .dump_only = false,
-    .devname = "bdev0"
+    .devname = "Nvme0n1"
 };
 
 struct kvs_format_ctx{
@@ -61,7 +61,7 @@ struct kvs_format_ctx{
 	struct spdk_blob *super_blob;
 	uint64_t io_unit_size;
     uint64_t bs_page_size;
-    uint64_t io_unit_per_page;
+    uint64_t io_unit_per_bs_page;
     uint32_t nb_init_nodes_per_slab;
 	int rc;
 
@@ -187,7 +187,7 @@ _slab_iter_foreach_zero_cb(void* ctx,int bserrno){
 
     if (bserrno) {
         free(iter);
-        _unload_bs(kctx, "Error in blob resize callback", bserrno);
+        _unload_bs(kctx, "Error in blob zero-write callback", bserrno);
         return;
     }
 
@@ -221,13 +221,14 @@ _slab_iter_do_op(struct slab_layout* slab,int op_type, struct _blob_iter *iter){
         }
         case KVS_OP_RESIZE:{
             uint32_t chunks = iter->kctx->nb_init_nodes_per_slab*iter->kctx->sl->nb_chunks_per_reclaim_node;
+            //SPDK_NOTICELOG("Resize blob %p to %u, slab:%u\n",(void*)slab->resv,chunks,iter->slab_idx);
             spdk_blob_resize(slab->resv,chunks,_slab_iter_foreach_resize_cb,iter);
             break;
         }
         case KVS_OP_ZERO:{
             uint32_t chunks = iter->kctx->nb_init_nodes_per_slab*iter->kctx->sl->nb_chunks_per_reclaim_node;
             uint32_t nb_pages = chunks * iter->kctx->sl->nb_pages_per_chunk;
-            uint64_t nb_blocks = nb_pages*iter->kctx->io_unit_per_page;
+            uint64_t nb_blocks = nb_pages*(KVS_PAGE_SIZE/iter->kctx->io_unit_size);
             spdk_blob_io_write_zeroes(slab->resv,iter->kctx->channel,0,nb_blocks,_slab_iter_foreach_zero_cb,iter);
             break;
         }
@@ -315,9 +316,11 @@ _kvs_dump_real_data(struct kvs_format_ctx *kctx){
     printf("\tslabs per shard:%u\n",kctx->sl->nb_slabs_per_shard);
     printf("\tchunks per reclaim node:%u\n",kctx->sl->nb_chunks_per_reclaim_node);
     printf("\tpages per chunk:%u\n",kctx->sl->nb_pages_per_chunk);
-    printf("\tpage size:%" PRIu64 "\n",kctx->bs_page_size);
+    printf("\tbs page size:%" PRIu64 "\n",kctx->bs_page_size);
+    printf("\tkvs page size:%" PRIu64 "\n",KVS_PAGE_SIZE);
     printf("\tio size:%u\n",kctx->io_unit_size);
-    printf("\tio per page:%u\n",kctx->io_unit_per_page);
+    printf("\tio per bs page:%u\n",kctx->io_unit_per_bs_page);
+    printf("\tio per kvs page:%u\n",KVS_PAGE_SIZE/kctx->io_unit_size);
     printf("\tmax key length:%u\n",kctx->sl->max_key_length);
 
     uint64_t total_chunks = spdk_bs_total_data_cluster_count(kctx->bs);
@@ -369,7 +372,7 @@ _blob_dump_read_super_page_complete(void* ctx, int bserrno){
     assert(kctx->sl!=NULL);
 
     uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/0x1000u;
-    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_page;
+    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_bs_page;
 
     spdk_blob_io_read(kctx->super_blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_dump_super_complete,kctx);
 }
@@ -388,7 +391,7 @@ _kvs_dump_super_complete(void*ctx, struct spdk_blob *blob, int bserrno){
     assert(kctx->sl!=NULL);
 
     //read one page from the start
-    uint64_t nb_blocks = 1*kctx->io_unit_per_page;
+    uint64_t nb_blocks = 1*kctx->io_unit_per_bs_page;
 
     spdk_blob_io_read(blob,kctx->channel,kctx->sl,0,nb_blocks,_blob_dump_read_super_page_complete,kctx);
 }
@@ -420,9 +423,9 @@ _kvs_dump_load_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
     kctx->bs_page_size = spdk_bs_get_page_size(bs);
 
     assert(kctx->bs_page_size%kctx->io_unit_size==0);
-    assert(kctx->bs_page_size==KVS_PAGE_SIZE);
+    assert(kctx->bs_page_size==4096u);
 
-    kctx->io_unit_per_page = kctx->bs_page_size/kctx->io_unit_size;
+    kctx->io_unit_per_bs_page = kctx->bs_page_size/kctx->io_unit_size;
     
     spdk_bs_get_super(bs,_kvs_dump_get_super_complete,kctx);
 }
@@ -504,8 +507,8 @@ _super_write_complete(void *ctx, int bserrno){
 
 static void
 _do_super_write(struct kvs_format_ctx *kctx){
-    uint32_t nb_pages = KV_ALIGN(kctx->super_size,0x1000u)/0x1000u;
-    uint64_t nb_blocks = nb_pages*kctx->io_unit_per_page;
+    uint32_t nb_bs_pages = KV_ALIGN(kctx->super_size,0x1000u)/0x1000u;
+    uint64_t nb_blocks = nb_bs_pages*kctx->io_unit_per_bs_page;
     spdk_blob_io_write(kctx->super_blob,kctx->channel,kctx->sl,0,nb_blocks,_super_write_complete,kctx);
 }
 
@@ -564,9 +567,9 @@ _super_blob_open_complete(void *ctx, struct spdk_blob *blob, int bserrno){
 	}
 
     uint32_t super_size = kctx->super_size;
-    uint32_t nb_pages = KV_ALIGN(super_size,0x1000u)/KVS_PAGE_SIZE;
-    uint32_t chunk_pages = kctx->sl->nb_pages_per_chunk;
-    uint32_t nb_clusters = nb_pages/chunk_pages + (!!(nb_pages%chunk_pages));
+    uint32_t nb_bs_pages = KV_ALIGN(super_size,0x1000u)/kctx->bs_page_size;
+    uint64_t cluster_bs_pages = spdk_bs_get_cluster_size(kctx->bs)/kctx->bs_page_size;
+    uint32_t nb_clusters = nb_bs_pages/cluster_bs_pages + 1;
 
     spdk_blob_resize(kctx->super_blob, nb_clusters, _super_resize_complete, kctx);
 }
@@ -619,20 +622,19 @@ bs_init_complete(void *ctx, struct spdk_blob_store *bs, int bserrno){
 
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(kctx->bs);
     if(io_unit_size!=KVS_PAGE_SIZE){
-        SPDK_WARNLOG("IO unit size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
-        //spdk_app_stop(-1);
-		//return;
-    }
-    kctx->io_unit_size = io_unit_size;
-
-    uint64_t bs_page_size = spdk_bs_get_page_size(kctx->bs);
-    if(bs_page_size!=KVS_PAGE_SIZE){
-        SPDK_ERRLOG("Blobstore page size is not 4KB!! Yours:%" PRIu64 "\n",io_unit_size);
+        SPDK_WARNLOG("IO unit size is not %lu!! Yours:%" PRIu64 "\n",KVS_PAGE_SIZE,io_unit_size);
         spdk_app_stop(-1);
-        return;
+		return;
     }
+
+    kctx->io_unit_size = io_unit_size;
+    uint64_t bs_page_size = spdk_bs_get_page_size(kctx->bs);
+    assert(bs_page_size==4096);
+
+    //The page size of blobstore is 4KB, which is not compatible with
+    //LiKV. LiKV uses 512 page size.
     kctx->bs_page_size = bs_page_size;
-    kctx->io_unit_per_page = bs_page_size/io_unit_size;
+    kctx->io_unit_per_bs_page = bs_page_size/io_unit_size;
 
     assert(kctx->bs_page_size%kctx->io_unit_size==0);
 
@@ -694,11 +696,11 @@ _kvs_create(void*ctx){
 		return;
 	}
 
-    uint32_t block_size = spdk_bdev_get_block_size(bdev);
-    if(block_size!=KVS_PAGE_SIZE){
-        SPDK_WARNLOG("Block size is not 4KB!! Yours:%u\n",block_size);
-        //spdk_app_stop(-1);
-		//return;
+    uint64_t block_size = spdk_bdev_get_block_size(bdev);
+    if((block_size>KVS_PAGE_SIZE) || (KVS_PAGE_SIZE%block_size)!=0){
+        SPDK_ERRLOG("Block sizes mismatch!! Yours:%lu, sopported:%lu\n",block_size,KVS_PAGE_SIZE);
+        spdk_app_stop(-1);
+		return;
     }
 
     //deprecated
@@ -713,7 +715,11 @@ _kvs_create(void*ctx){
 
     spdk_bs_opts_init(&bs_opts,sizeof(bs_opts));
     memcpy(bs_opts.bstype.bstype,_g_kvs_name,strlen(_g_kvs_name));
-    bs_opts.cluster_sz = kctx->sl->nb_pages_per_chunk * KVS_PAGE_SIZE;
+    uint32_t chunk_size = kctx->sl->nb_pages_per_chunk * KVS_PAGE_SIZE;
+
+    //the blobstore requires 4KB-aligned cluster size.
+    assert(chunk_size%4096==0);
+    bs_opts.cluster_sz = chunk_size;
 
 	spdk_bs_init(bs_dev, &bs_opts, bs_init_complete, kctx);
 }

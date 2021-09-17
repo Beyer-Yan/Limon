@@ -7,86 +7,54 @@ _process_get_load_data_cb(void* ctx, int kverrno){
     struct kv_request_internal *req = ctx;
     struct process_ctx *pctx = &req->pctx;
 
-    struct worker_context *wctx     = pctx->wctx;
-    struct index_entry* entry       = pctx->entry;
-    struct chunk_desc *desc         = pctx->desc;
-
-    pool_release(wctx->kv_request_internal_pool,req);
-    pagechunk_mem_lower(desc);
-    entry->getting =  0;
+    struct worker_context *wctx   = pctx->wctx;
+    struct slot_entry *entry      = pctx->entry;
+    struct chunk_desc *desc       = pctx->desc;
 
     if(kverrno){
         //Error hits when load data from disk
         req->cb_fn(req->ctx,NULL,-KV_EIO);
     }
     else{
-        assert(pagechunk_is_cached(desc,entry->slot_idx));
         //Now we load the data into the page chunk cache. Just read it out happily.
         struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,entry->slot_idx);
         req->cb_fn(req->ctx, item, -KV_ESUCCESS);
     }
-}
-
-static void 
-_process_get_pagechunk_cb(void* ctx, int kverrno){
-    struct kv_request_internal *req = ctx;
-    struct process_ctx *pctx = &req->pctx;
-    // We do not care the kverrno, because it must success.
-    // Now, load the data from disk.
-    assert(!kverrno);
-
-    pagechunk_load_item_async(pctx->wctx->pmgr,
-                              pctx->wctx->imgr, 
-                              pctx->desc,
-                              pctx->entry->slot_idx,
-                              _process_get_load_data_cb,
-                              req);
+    entry->getting = 0;
+    pagechunk_mem_lower(wctx->pmgr,desc);
+    pool_release(wctx->kv_request_internal_pool,req);
 }
 
 void worker_process_get(struct kv_request_internal *req){
+    assert(req);
+    assert(req->sid);
     struct worker_context *wctx = req->pctx.wctx;
 
-    if(!req->pctx.no_lookup){
-        req->pctx.entry = mem_index_lookup(wctx->mem_index,req->item);
-    }
-    
-    struct index_entry *entry = req->pctx.entry;
-
-    if(!entry){
-        //item does not exist
-        pool_release(wctx->kv_request_internal_pool,req);
+    if(!mtable_check_valid(wctx->mtable,req->sid)){
+        //It may be deleted
         req->cb_fn(req->ctx, NULL, -KV_EITEM_NOT_EXIST);
+        pool_release(wctx->kv_request_internal_pool,req);
         return;
     }
-    else if(entry->writing|entry->deleting){
+
+    req->pctx.entry = mtable_get(wctx->mtable,req->sid);
+    struct slot_entry* entry = req->pctx.entry;
+
+    if(entry->putting || entry->deleting){
         //There is already a modifying operation for this item.
         //It should be resubmited.
-        //For the entry in deleting state, it has to be re-lookuped, since its
-        //entry may be deleted.
-        entry->writing ? req->pctx.no_lookup = true : 0;
-
         TAILQ_INSERT_TAIL(&wctx->resubmit_queue,req,link);
-        return;
+        return;       
     }
+
+    entry->getting = 1;
     req->pctx.slab = &(wctx->shards[entry->shard].slab_set[entry->slab]);
     req->pctx.desc = pagechunk_get_desc(req->pctx.slab,entry->slot_idx);
     struct chunk_desc* desc = req->pctx.desc;
 
     assert(desc!=NULL);
 
-    entry->getting = 1;
-    pagechunk_mem_lift(desc);
-    
-    if(!desc->chunk_mem){
-        //Page chunk is evicted , Now request a new page chunk memory
-        pagechunk_request_one_async(wctx->pmgr,desc,_process_get_pagechunk_cb,req);
-    }
-    else if(pagechunk_is_cached(desc,entry->slot_idx)){
-        //Wonderful! The item is in the page chunk cache.
-        _process_get_load_data_cb(req,-KV_ESUCCESS);
-    }
-    else{
-        //load the data from disk into page chunk
-        pagechunk_load_item_async(wctx->pmgr,wctx->imgr, desc,entry->slot_idx,_process_get_load_data_cb,req);
-    }
+    pagechunk_mem_lift(wctx->pmgr,desc);
+    pagechunk_load_item_async(wctx->pmgr,wctx->imgr,desc,entry->slot_idx,
+                              _process_get_load_data_cb,req);
 }

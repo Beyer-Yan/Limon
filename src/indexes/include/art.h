@@ -26,7 +26,7 @@ extern "C" {
 # endif
 #endif
 
-typedef int(*art_callback)(void *data, const unsigned char *key, uint32_t key_len, void *value);
+typedef int(*art_callback)(void *data, const unsigned char *key, uint32_t key_len, uint64_t value);
 
 /**
  * This struct is included as part
@@ -80,7 +80,7 @@ typedef struct {
  * of arbitrary size, as they include the key.
  */
 typedef struct {
-    struct index_entry value;
+    uint64_t value;
     uint32_t key_len;
     unsigned char key[];
 } art_leaf;
@@ -135,11 +135,10 @@ inline uint64_t art_size(art_tree *t) {
  * @param t The tree
  * @param key The key
  * @param key_len The length of the key
- * @param value index entry value pointer.
- * @return the pointer for the index entry in art node. If the key exists, the
+ * @param value. If the key exists, the
  * old value will be replaced.
  */
-struct index_entry* art_insert(art_tree *t, const unsigned char *key, int key_len, struct index_entry *value);
+uint64_t art_insert(art_tree *t, const unsigned char *key, int key_len, uint64_t value);
 
 /**
  * Deletes a value from the ART tree. If the key exists, it will be deleted, otherwise nothing 
@@ -158,7 +157,7 @@ void art_delete(art_tree *t, const unsigned char *key, int key_len);
  * @return NULL if the item was not found, otherwise
  * the value pointer is returned.
  */
-struct index_entry* art_search(const art_tree *t, const unsigned char *key, int key_len);
+uint64_t art_search(const art_tree *t, const unsigned char *key, int key_len);
 
 /**
  * Returns the minimum valued leaf

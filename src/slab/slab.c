@@ -10,19 +10,25 @@
 #define MIN_ALLOC_SIZE_UNIT (64*1024*1024)
 
 //All slab sizes are 4-bytes-aligment.
-static const uint32_t _g_slab_chunk_pages = 16;
-static uint32_t slab_sizes[]={
-    32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, /* wrapped in one page */
-    128, 160, 192, 224, 256, 320, 384, 480, 576, 704, 864, 1056, 1312, 1632, 2016, 2496, 3104, 3872, 4832, 6016, 7520, 9376, 11712, 14624
+// static uint32_t slab_sizes[]={
+//     32, 36, 40,48, 56, 64, 72, 88, 96, 104, 124, /* wrapped in one page */
+//     128, 160, 192, 224, 256, 320, 384, 480, 576, 704, 864, 1056, 1312, 1632, 2016, 2496, 3104, 3872, 4832, 6016, 7520, 9376, 11712, 14624
+// };
+
+static uint32_t slab_sizes[] = {
+    256,320,384,480,576,704,864,1056,1312,1632,2016,2496,3104,3872,4832,6016,7520,9376,11712,14624,18272,22816,28512,35616,44512,55616,69504,86880,108576,135712,169632,212032
 };
 
 
 uint32_t 
 slab_find_slab(uint32_t item_size){
     uint32_t len = sizeof(slab_sizes)/sizeof(slab_sizes[0]);
+    assert(item_size<=slab_sizes[len-1] );
 
-    //User passes an invalid item size, so the program shall crash forcely.
-    assert( item_size>=slab_sizes[0] && item_size<=slab_sizes[len-1] );
+    if(item_size <= slab_sizes[0]){
+        //Warning, too small item size potentially cause large fragmentation
+        return 0;
+    }
 
     int i = 0;
     int j = len-1;
@@ -43,7 +49,7 @@ void slab_get_slab_conf(uint32_t **slab_size_array, uint32_t *nb_slabs, uint32_t
     uint32_t _nb_slabs = sizeof(slab_sizes)/sizeof(slab_sizes[0]);
     *slab_size_array = slab_sizes;
     *nb_slabs = _nb_slabs;
-    *chunk_pages = _g_slab_chunk_pages;
+    *chunk_pages = CHUNK_PAGES;
 }
 
 bool 

@@ -187,3 +187,80 @@ void kv_shuffle(uint64_t *array, uint64_t n) {
    }
 }
 
+#define DMA_BUFFER_KEY 135797531
+
+struct dma_buffer_pool{
+   uint64_t key;
+   uint32_t nb_buffers;
+   uint32_t top;
+   uint8_t** stack;
+   uint8_t** addr_array;
+};
+
+struct dma_buffer_pool* dma_buffer_pool_create(uint32_t nb_buffers, uint32_t buffer_size){
+   struct dma_buffer_pool* dma_pool = malloc(sizeof(*dma_pool) + sizeof(uint8_t*)*2*nb_buffers);
+   assert(dma_pool);
+
+   dma_pool->stack = (uint8_t**)(dma_pool+1);
+   dma_pool->addr_array = (uint8_t**)(dma_pool->stack + nb_buffers);
+
+   //Allocate nb_bufers dma buffers
+   for(uint32_t i=0;i<nb_buffers;i++){
+      dma_pool->addr_array[i] = spdk_dma_malloc(buffer_size,4096,NULL);
+      assert(dma_pool->addr_array[i]);
+
+      dma_pool->stack[i] = dma_pool->addr_array[i];
+   }
+
+   dma_pool->key = DMA_BUFFER_KEY;
+   dma_pool->nb_buffers = nb_buffers;
+   dma_pool->top = nb_buffers;
+
+   return dma_pool;
+}
+
+void dma_buffer_pool_destroy(struct dma_buffer_pool* pool){
+	assert(pool);
+	assert(pool->key==DMA_BUFFER_KEY);
+	free(pool);
+}
+
+uint8_t* dma_buffer_pool_pop(struct dma_buffer_pool* pool){
+	assert(pool);
+	assert(pool->key==DMA_BUFFER_KEY);
+	assert(pool->top);
+
+	uint8_t* buf = pool->stack[pool->top-1];
+	pool->top--;
+
+	return buf;
+}
+
+void dma_buffer_pool_push(struct dma_buffer_pool* pool, uint8_t* addr){
+	assert(pool);
+	assert(addr);
+	assert(pool->key==DMA_BUFFER_KEY);
+	assert(pool->top<pool->nb_buffers);
+
+#ifdef DEBUG
+	int flag = -1;
+	for(uint32_t i=0;i<pool->nb_buffers;i++){
+		if(pool->addr_array[i]==addr){
+			flag = 1;
+			break;
+		}
+	}
+	assert(flag == 1);
+
+	for(uint32_t i=0;i<pool->top;i++){
+		if(pool->stack[i]==addr){
+			flag = 0;
+			break;
+		}
+	}
+	assert(flag != 0);
+#endif
+	pool->stack[pool->top] = addr;
+	pool->top++;
+}
+

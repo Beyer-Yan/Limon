@@ -5,68 +5,65 @@
 #include "pool.h"
 #include "kvutil.h"
 
-uint64_t pool_header_size(uint64_t count){
-    //The pool size is designed less than UINT64_MAX;
-    assert(count<UINT64_MAX);
+#define POOL_FINGERPTINR (123456787654321)
 
-    uint64_t size;
-    size  = sizeof(struct object_cache_pool) + (count+1)*sizeof(struct object_node);
-    return size;
-}
+static_assert(sizeof(struct object_cache_pool)==48,"incorrect size");
 
-uint64_t pool_header_init(struct object_cache_pool *pool, uint64_t count,uint64_t object_size,
-                      uint64_t header_size,uint8_t *object_data){
-    assert(pool!=NULL);
-    assert(object_data!=NULL);
-    assert((uint64_t)object_data%8==0);
-    assert(header_size>=pool_header_size(count));
 
+struct object_cache_pool* pool_create(uint32_t count, uint32_t object_size){
+    struct object_cache_pool* pool;
+    pool = malloc(sizeof(*pool) + count*sizeof(uint64_t) + count*object_size);
+    assert(pool);
+
+    pool->key = POOL_FINGERPTINR;
     pool->count = count;
     pool->object_size = object_size;
-
-    pool->free_node_array[count].object = NULL;
-    pool->free_node_array[count].next = 0;
-
-    pool->cache_data = object_data;
-
-    uint32_t i = 0;
-    for(;i<count;i++){
-         pool->free_node_array[i].next = i+1;
-         pool->free_node_array[i].object = (void*)(&pool->cache_data[i*pool->object_size]);
-    }
-    //The header always point the first free node.
-    pool->free_node_array[count-1].next = UINT64_MAX;
-    pool->free_node_array[count].next   = 0;
     pool->nb_frees = count;
 
-    return header_size + count*object_size;
+    pool->cache_data = (uint8_t*)(pool+1) + count*sizeof(uint64_t);
+    pool->head = 0;
+
+    for(uint32_t i=0;i<count;i++){
+         pool->free_node_array[i] = i+1;
+    } 
+    pool->free_node_array[count-1] = UINT64_MAX;
+
+    return pool;
 }
+
+void pool_destroy(struct object_cache_pool* pool){
+    assert(pool);
+    assert(pool->key==POOL_FINGERPTINR);
+    free(pool);
+}
+
 
 void* pool_get(struct object_cache_pool *pool){
-    uint64_t head = pool->count;
-    void* object;
+    assert(pool);
+    assert(pool->key==POOL_FINGERPTINR);
+
     if(!pool->nb_frees){
-        object =  NULL;
-    }else{
-        uint64_t free_idx = pool->free_node_array[head].next;
-        pool->free_node_array[head].next = pool->free_node_array[free_idx].next;
-        pool->free_node_array[free_idx].next = UINT64_MAX;
-        pool->nb_frees--;
-        object = pool->free_node_array[free_idx].object;
+        return NULL;
     }
-    return object;
+
+    uint64_t head = pool->head;
+    pool->head = pool->free_node_array[head];
+    pool->free_node_array[head] = UINT64_MAX;
+    pool->nb_frees--;
+    
+    return pool->cache_data + head*pool->object_size;
 }
 
-bool pool_release(struct object_cache_pool *pool, void* object){
+
+void pool_release(struct object_cache_pool *pool, void* object){
+    assert(pool);
+    assert(pool->key==POOL_FINGERPTINR);    
+
     uint64_t object_idx = ((uint64_t)object-(uint64_t)pool->cache_data)/pool->object_size;
-    uint64_t head = pool->count;
+    uint64_t head = pool->head;
+    assert(object_idx<pool->count && pool->free_node_array[object_idx]==UINT64_MAX);
 
-    // object is not valid.
-    assert(object_idx<pool->count && pool->free_node_array[object_idx].next==UINT64_MAX);
-     
-    pool->free_node_array[object_idx].next = pool->free_node_array[head].next;
-    pool->free_node_array[head].next = object_idx;
+    pool->free_node_array[object_idx] = head;
+    pool->head = object_idx;
     pool->nb_frees++;
-
-    return true;
 }

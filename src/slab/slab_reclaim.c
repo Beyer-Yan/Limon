@@ -31,14 +31,9 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
         desc                 = (struct chunk_desc*)(desc_base + chunk_size*i/sizeof(struct chunk_desc*));
         desc->id             = node->id * slab->reclaim.nb_chunks_per_node + i;
         desc->nb_free_slots  = slab->reclaim.nb_slots_per_chunk;
-        desc->nb_pages       = slab->reclaim.nb_pages_per_chunk;
-        desc->nb_slots       = slab->reclaim.nb_slots_per_chunk;
         desc->slab           = slab;
-        desc->slab_size      = slab->slab_size;
         desc->nb_pendings    = 0;
         desc->bitmap[0].length = slab->reclaim.nb_slots_per_chunk;
-        TAILQ_INIT(&desc->chunk_miss_callback_head);
-        
         node->desc_array[i]  = desc;
     }
     return node;
@@ -64,8 +59,8 @@ void slab_free_slot(struct reclaim_mgr* rmgr,
     struct chunk_desc* desc = pagechunk_get_desc(slab,slot_idx);
     assert(desc!=NULL);
 
-    uint32_t slot_offset      = slot_idx%desc->nb_slots;
-    uint32_t node_id          = slot_idx/desc->nb_slots/slab->reclaim.nb_chunks_per_node;
+    uint32_t slot_offset      = slot_idx%slab->reclaim.nb_slots_per_chunk;
+    uint32_t node_id          = slot_idx/slab->reclaim.nb_slots_per_chunk/slab->reclaim.nb_chunks_per_node;
 
     assert(node_id<slab->reclaim.nb_reclaim_nodes);
     struct reclaim_node *node = slab->reclaim.node_array[node_id];
