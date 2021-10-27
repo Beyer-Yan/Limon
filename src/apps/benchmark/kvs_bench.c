@@ -58,7 +58,7 @@ static struct kvs_bench_opts _g_default_opts = {
 	.nb_injectors = 2,
 	.queue_size = 16,
 	.caches = 1, /* 5GB */
-	.nb_items = 1000000,
+	.nb_items = 10000000,
     .io_cyle_us = 0
 };
 

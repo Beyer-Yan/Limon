@@ -66,6 +66,7 @@ static_assert(sizeof(struct sid_internal)==8,"incorrect size for sid_internal");
 struct mtable_block{
     struct bitmap* bitmap;
     uint64_t nb_free_slots;
+    uint64_t alloc_position;
     uint64_t slots[NB_SLOTS_PER_BLOCK];
 };
 
@@ -102,6 +103,7 @@ static inline struct mtable_block*  _alloc_one_block(void){
     assert(block->bitmap);
     block->bitmap->length = NB_SLOTS_PER_BLOCK;
     block->nb_free_slots = NB_SLOTS_PER_BLOCK;
+    block->alloc_position = 0;
 }
 
 static inline void _release_one_block(struct mtable_block* block){
@@ -109,6 +111,44 @@ static inline void _release_one_block(struct mtable_block* block){
     assert(block->bitmap);
     free(block->bitmap);
     free(block);
+}
+
+static inline uint32_t _alloc_slot_from_block(struct mtable_block* block){
+    assert(block);
+    assert(block->bitmap);
+    assert(block->nb_free_slots);
+    uint32_t off = UINT32_MAX;
+
+    if(block->alloc_position<NB_SLOTS_PER_BLOCK){
+        //just allocate slot from current postion
+        off = block->alloc_position;
+        block->alloc_position++;
+    }
+    else{
+        //May be very slow if it scans all bits
+        off = bitmap_get_first_clear_bit(block->bitmap);
+    }
+
+    block->nb_free_slots--;
+    bitmap_set_bit(block->bitmap,off);
+    
+    return off;
+}
+
+static inline void _release_slot_to_block(struct mtable_block* block, uint32_t off){
+    assert(block);
+    assert(block->bitmap);   
+    assert(!bitmap_get_bit(block->bitmap,off) && "Release an empty old slot");
+
+    if(off==block->alloc_position){
+        block->alloc_position--;
+        while(block->alloc_position && !bitmap_get_bit(block->bitmap,block->alloc_position)){
+            block->alloc_position--;
+        }
+    }
+
+    bitmap_clear_bit(block->bitmap,off);
+    block->nb_free_slots--;
 }
 
 uint32_t mtable_get_worker_from_sid(uint64_t sid){
@@ -202,20 +242,18 @@ uint64_t mtable_alloc_sid(struct mtable* mt, struct slot_entry new_entry){
     assert(block);
     assert(block_id<(TABLE_CAPACITY));
     struct sid_internal _sid;
-    uint64_t offset = bitmap_get_first_clear_bit(block->bitmap);
+    uint64_t offset = _alloc_slot_from_block(block);
     assert(offset!=UINT32_MAX);
 
     _sid.id = mt->id;
     _sid.block_id = block_id;
     _sid.offset = offset;
 
-    block->nb_free_slots--;
     mt->nb_free_slots--;
 
     //reinterpreted as the uint64_t type;
     uint64_t sid = *((uint64_t*)(&_sid));
     *(struct slot_entry*)(&block->slots[offset]) = new_entry;
-    bitmap_set_bit(block->bitmap,offset);
 
     return sid;
 }
@@ -231,12 +269,8 @@ void mtable_release(struct mtable* mt,uint64_t sid){
         struct mtable_block* block = mt->blocks[_sid->block_id];
         struct slot_entry* entry = (struct slot_entry*)(&block->slots[_sid->offset]);
 
-        //check wether the slot is occupied;
-        assert(!bitmap_get_bit(block->bitmap,_sid->offset) && "Release an empty old slot");
+        _release_slot_to_block(block,_sid->offset);
 
-        //Now, release the old slot;
-        bitmap_clear_bit(block->bitmap,_sid->offset);
-        block->nb_free_slots--;
         mt->nb_free_slots++;
     }
 }

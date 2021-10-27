@@ -153,8 +153,12 @@ void worker_process_rmw(struct kv_request_internal *req);
 struct meta_worker_context{
     struct worker_context **wctx_array;
     uint32_t nb_business_workers;
+
     struct spdk_thread *meta_thread;
+    struct spdk_io_channel* channel;
+    struct spdk_blob_store* target;
     struct spdk_poller* stat_poller;
+    
     uint32_t core_id;
 };
 

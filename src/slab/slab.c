@@ -103,11 +103,13 @@ slab_create_async(struct iomgr* imgr,
 
 struct resize_ctx{
     struct slab* slab;
+    uint64_t old_size;
     uint64_t new_size; //chunks
     uint32_t nb_nodes;
     int kverrno;
 
     struct spdk_thread *thread;
+    struct spdk_blob_store *target;
 
     //Callback when the blob is resized. The ctx is the resize_ctx self.
     void (*resize_cb)(void*ctx);
@@ -129,14 +131,33 @@ _slab_blob_md_sync_complete(void*ctx, int bserrno){
         SPDK_NOTICELOG("blob md sync error:%d\n",bserrno);
     }
 
+    SPDK_NOTICELOG("slab %p zero-resized, slab size:%u old size:%u,new size:%lu\n",rctx->slab,rctx->slab->slab_size,rctx->old_size,rctx->new_size);
+
     rctx->kverrno =  bserrno ? -KV_EIO : -KV_ESUCCESS;
     spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
+}
+
+static void
+_slab_blob_resize_write_zeroes_cb(void*ctx, int bserrno){
+    struct resize_ctx *rctx = ctx;
+    struct spdk_blob *blob = rctx->slab->blob;
+    struct slab* slab = rctx->slab;
+    if(bserrno){
+        //Resize error;
+        SPDK_NOTICELOG("blob resize write zeroes error:%d\n",bserrno);
+        rctx->kverrno = -KV_EIO;
+        spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
+        return;
+    }
+
+    spdk_blob_sync_md(blob, _slab_blob_md_sync_complete, rctx);
 }
 
 static void
 _slab_blob_resize_complete(void*ctx, int bserrno){
     struct resize_ctx *rctx = ctx;
     struct spdk_blob *blob = rctx->slab->blob;
+    struct slab* slab = rctx->slab;
     if(bserrno){
         //Resize error;
         SPDK_NOTICELOG("blob resize error:%d\n",bserrno);
@@ -144,9 +165,23 @@ _slab_blob_resize_complete(void*ctx, int bserrno){
         spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
         return;
     }
-    spdk_blob_sync_md(blob, _slab_blob_md_sync_complete, rctx);
+
+    //Now the newly allocated disk space should be zero-filled.
+    //Since the kvs always scans all chunks belonging to a slab,
+    //so if I do not zero-fill the newly allocated chunk, the 
+    //recovery may get 'correct' invalid slots from the unitialized chunk.
+    uint64_t io_unit = spdk_bs_get_io_unit_size(rctx->target);
+    assert(io_unit==KVS_PAGE_SIZE);
+
+    uint64_t off = rctx->old_size*slab->reclaim.nb_pages_per_chunk;
+    uint64_t len = (rctx->new_size - rctx->old_size)*slab->reclaim.nb_pages_per_chunk;
+
+    struct spdk_io_channel* ch = spdk_bs_alloc_io_channel(rctx->target);
+    
+    spdk_blob_io_write_zeroes(blob,ch,off,len,_slab_blob_resize_write_zeroes_cb,rctx);
 }
 
+//This function shall be called in meta worker.
 static void
 _slab_blob_resize(void* ctx){
     struct resize_ctx *rctx = ctx;
@@ -358,9 +393,11 @@ void slab_request_slot_async(struct iomgr* imgr,
     }
     uint32_t old_size = slab->reclaim.nb_reclaim_nodes * slab->reclaim.nb_chunks_per_node;
     rctx->slab = slab;
+    rctx->old_size = old_size;
     rctx->new_size = old_size + slab->reclaim.nb_chunks_per_node * nb_nodes;
     rctx->nb_nodes = nb_nodes;
     rctx->thread = spdk_get_thread();
+    rctx->target = imgr->target;
     rctx->user_slot_cb = cb;
     rctx->user_ctx = ctx;
     rctx->kverrno = 0;
