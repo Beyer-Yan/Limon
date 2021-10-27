@@ -68,7 +68,7 @@ slab_is_valid_size(uint32_t slab_size, uint32_t item_size){
     uint32_t min_slab = slab_sizes[0];
     uint32_t max_slab = slab_sizes[len-1];
 
-    if(item_size<min_slab || item_size>max_slab){
+    if(item_size>max_slab){
         return false;
     }
 

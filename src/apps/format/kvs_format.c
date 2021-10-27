@@ -49,7 +49,7 @@ static struct kvs_create_opts _g_default_opts = {
     .nb_shards = 4,
     .max_key_length = 256,
     .nb_chunks_per_reclaim_node = 4,
-    .nb_init_nodes_per_slab = 1,
+    .nb_init_nodes_per_slab = 16,
     .force_format = false,
     .dump_only = false,
     .devname = "Nvme0n1"
@@ -143,8 +143,8 @@ _slab_iter_foreach_create_cb(void* ctx, spdk_blob_id blobid,int bserrno){
 
     slab_base->slab_size = iter->kctx->slab_size_array[iter->slab_idx%nb_slabs_per_shard];
     slab_base->blob_id = blobid;
-    SPDK_NOTICELOG("new blob id %" PRIu64 " for shard:%u,slab:%u,\n", 
-                           blobid,iter->slab_idx/nb_slabs_per_shard,iter->slab_idx%nb_slabs_per_shard);
+    SPDK_NOTICELOG("new blob id %" PRIu64 " for shard:%u,slab:%u, size:%u\n", 
+                           blobid,iter->slab_idx/nb_slabs_per_shard,iter->slab_idx%nb_slabs_per_shard,slab_base->slab_size);
     
     _slab_iter_foreach_next(iter);
 }

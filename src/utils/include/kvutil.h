@@ -43,11 +43,33 @@ void     kv_shuffle(uint64_t *array, uint64_t n);
 
 /*----------------------------------------------------*/
 //For dma buffer management to avoid frequent malloc/free for DMA buffers.
-
 struct dma_buffer_pool;
-struct dma_buffer_pool* dma_buffer_pool_create(uint32_t nb_buffers, uint32_t buffer_size);
+
+struct dma_buffer {
+   uint64_t key;  
+   uint8_t* dma_base;
+   uint32_t nb_pages;
+
+   //should >= the page numbers of the chunk size.
+   uint64_t bitmap[32];
+};
+
+struct dma_buffer_pool{
+   uint64_t key;
+   uint32_t nb_buffers;
+   uint32_t top;
+   struct dma_buffer** stack;
+   struct dma_buffer buf_array[0];
+};
+
+struct dma_buffer_pool* dma_buffer_pool_create(uint32_t nb_buffers, uint32_t nb_buffer_pages);
 void dma_buffer_pool_destroy(struct dma_buffer_pool* pool);
-uint8_t* dma_buffer_pool_pop(struct dma_buffer_pool* pool);
-void dma_buffer_pool_push(struct dma_buffer_pool* pool, uint8_t* addr);
+
+struct dma_buffer* dma_buffer_pool_pop(struct dma_buffer_pool* pool);
+void dma_buffer_pool_push(struct dma_buffer_pool* pool, struct dma_buffer* buf);
+
+//check whether the given data is valid
+int dma_buffer_check_page(struct dma_buffer* buf, uint32_t page_off);
+void dma_buffer_charge_page(struct dma_buffer* buf, uint32_t page_off);
 
 #endif

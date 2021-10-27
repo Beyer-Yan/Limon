@@ -57,8 +57,8 @@ static struct kvs_bench_opts _g_default_opts = {
 	.nb_workers = 1,
 	.nb_injectors = 2,
 	.queue_size = 16,
-	.caches = 5, /* 10GB */
-	.nb_items = 26000000,
+	.caches = 1, /* 5GB */
+	.nb_items = 1000000,
     .io_cyle_us = 0
 };
 
@@ -72,9 +72,9 @@ _bench_usage(void){
                                           _g_default_opts.nb_injectors);
     printf(" -Q, --queue-size <num>       queue size(default:%u)\n",
 										  _g_default_opts.queue_size);
-    printf(" -C, --caches <num>           number of cache chunks(default:%uGB)\n",
+    printf(" -C, --caches <numGB>         number of cache chunks(default:%uGB)\n",
                                           _g_default_opts.caches);
-    printf(" -N, --items  <numGB>         total items in db(default:%lu)\n",
+    printf(" -N, --items  <num>           total items in db(default:%lu)\n",
                                           _g_default_opts.nb_items);
     printf(" -T, --io-cycle <num>         io polling cycle(default:%lu)\n",
                                           _g_default_opts.io_cyle_us);
@@ -207,7 +207,7 @@ _do_start_benchmark(void*ctx){
 			//requests for YCSB E are longer (scans) so we do less
 			w.nb_requests = 3600000LU; 
 		} else {
-			w.nb_requests = 13000000LU;
+			w.nb_requests = 130000000LU;
 		}
 		histogram_reset();
         uint64_t start = spdk_get_ticks();

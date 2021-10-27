@@ -5,6 +5,7 @@
 #include "hashmap.h"
 
 #include "spdk/thread.h"
+#include "spdk/log.h"
 
 static inline void _read_pages(struct spdk_blob *blob, uint64_t io_unit_size, struct spdk_io_channel *channel,
 		       void *payload, uint64_t offset, uint64_t length,
@@ -13,7 +14,7 @@ static inline void _read_pages(struct spdk_blob *blob, uint64_t io_unit_size, st
     uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
     uint64_t io_unit_offset = offset*io_unit_per_page;
     uint64_t io_uint_length = length*io_unit_per_page;
-
+    //SPDK_NOTICELOG("\tLoading pages, buf:%p, off:%lu,nb_pages:%lu\n",payload,io_unit_offset,io_uint_length);
     spdk_blob_io_read(blob,channel,payload,io_unit_offset,io_uint_length,cb_fn,cb_arg);
 }
 

@@ -250,7 +250,7 @@ slab_release_complete(void*ctx,int kverrno){
         struct chunk_desc *desc = node->desc_array[i];
         assert(desc!=NULL);
         assert(!desc->nb_pendings);
-        assert(!desc->dma_buffer);
+        assert(!desc->dma_buf);
 
         bitmap_clear_bit_all(node->desc_array[i]->bitmap);
     }

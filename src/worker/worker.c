@@ -217,7 +217,7 @@ _worker_slab_evaluation_poll(void* ctx){
     uint32_t i=0,j=0;
 
     int events = 0;
-    //return 0;
+    return 0;
 
     for(;i < wctx->nb_reclaim_shards;i++){
         struct slab_shard *shard = &wctx->shards[wctx->reclaim_shards_start_id + i];
@@ -351,8 +351,7 @@ _alloc_pmgr_context(struct worker_init_opts* opts){
 
     //allocate the DMA buffer
     uint32_t nb_dma_buffers = nb_max_reqs+opts->reclaim_batch_size;
-    uint32_t dma_buffer_size = CHUNK_PAGES*KVS_PAGE_SIZE;
-    pmgr->dma_pool = dma_buffer_pool_create(nb_dma_buffers,dma_buffer_size);
+    pmgr->dma_pool = dma_buffer_pool_create(nb_dma_buffers,CHUNK_PAGES);
 
     assert(pmgr->dma_pool);
 
@@ -479,14 +478,10 @@ static void _pmgr_destroy(struct pagechunk_mgr *pmgr){
     free(pmgr->cache_base_addr);
     free(pmgr->pdesc_arr);
     
-    for(uint32_t i=0;i<pmgr->nb_dma_buffers;i++){
-        spdk_dma_free(pmgr->dma_addr_arr[i]);
-    }
-
+    dma_buffer_pool_destroy(pmgr->dma_pool);
     pool_destroy(pmgr->remote_page_request_pool);
     pool_destroy(pmgr->load_store_ctx_pool);
     pool_destroy(pmgr->item_ctx_pool);
-    pool_destroy(pmgr->dma_buffer_pool);
 
     free(pmgr);
 }

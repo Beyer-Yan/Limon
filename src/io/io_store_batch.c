@@ -6,6 +6,7 @@
 #include "hashmap.h"
 
 #include "spdk/thread.h"
+#include "spdk/log.h"
 
 static inline void _write_pages(struct spdk_blob *blob,uint64_t io_unit_size, struct spdk_io_channel *channel,
 		       void *payload, uint64_t offset, uint64_t length,
@@ -50,6 +51,7 @@ _process_cache_io(struct cache_io *cio,int kverrno){
 static void
 _store_pages_phase2(struct page_io *pio){
     pio->imgr->nb_pending_io++;
+    //SPDK_NOTICELOG("\tStoring pages2, buf:%p, off:%lu,nb_pages:%lu\n",pio->buf,pio->start_page,pio->len);
     _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
                  pio->buf,pio->start_page,pio->len,
                  _store_pages_complete_cb,pio);
@@ -164,6 +166,7 @@ int iomgr_io_write_poll(struct iomgr* imgr){
         TAILQ_REMOVE(&pio_head,pio,link);
         events++;
         imgr->nb_pending_io++;
+        //SPDK_NOTICELOG("\tStoring pages1, buf:%p, off:%lu,nb_pages:%lu\n",pio->buf,pio->start_page,pio->len);
         _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
                      pio->buf,pio->start_page,pio->len,
                      _store_pages_complete_cb,pio);

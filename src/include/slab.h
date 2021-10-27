@@ -16,7 +16,7 @@
  * it is allowed to storage in multi pages. Items less than 
  * MULTI_PAGE_SLAB_SIZE will alway be put into only one page.
  */
-#define MULTI_PAGE_SLAB_SIZE   128u
+#define MULTI_PAGE_SLAB_SIZE   12u
 #define CHUNK_PAGES            2048u
 #define KVS_PAGE_SIZE          512u
 #define MAX_SLAB_SIZE          212032u
@@ -147,7 +147,7 @@ static inline uint32_t slab_get_chunk_slots(uint32_t chunk_pages, uint32_t slab_
  * @brief Find the best slab for given item size.
  * 
  * @param item_size   The item size
- * @return uint32_t        Return the slab index. Crash if no situable slab is found.
+ * @return uint32_t   Return the slab index. Crash if no situable slab is found.
  */
 uint32_t slab_find_slab(uint32_t item_size);
 

@@ -17,7 +17,7 @@ SYS_LIBS += -lm
 SYS_LIBS += -ljemalloc
 SYS_LIBS += -lcart
 
-APP = kvs_format
+APP = mkfs.kvs
 C_SRCS := kvs_format.c
 
 SPDK_LIB_LIST = $(ALL_MODULES_LIST)

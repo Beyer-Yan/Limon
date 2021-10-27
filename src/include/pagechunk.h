@@ -48,9 +48,9 @@ struct chunk_desc {
     uint32_t id;
     uint32_t nb_free_slots;
     uint32_t nb_pendings;
-    uint8_t* dma_buffer;
+    struct dma_buffer* dma_buf;
     struct slab* slab;
-    //bitmap to record the slot occupation
+    //bitmap to record the slot allocation
     struct bitmap bitmap[0];
 };
 

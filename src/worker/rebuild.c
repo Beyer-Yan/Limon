@@ -77,7 +77,7 @@ _node_read_complete(void* ctx, int bserrno){
     uint32_t nb_slots_per_node = slab->reclaim.nb_chunks_per_node * slab->reclaim.nb_slots_per_chunk;
     for(;idx<nb_slots_per_node;idx++){
         uint8_t *raw_data = rctx->recovery_node_buffer + slab_slot_offset_of_node(slab,idx);
-        struct kv_item *item = (struct kv_item*)(raw_data + 8);
+        struct kv_item *item = (struct kv_item*)(raw_data + 8); 
 
         if(item->meta.ksize!=0){
             //It may be a valid item.
@@ -106,15 +106,24 @@ _node_read_complete(void* ctx, int bserrno){
             //It is a valid slot
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
             uint64_t sid = mem_index_lookup(wctx->global_index,item);
-            
+
+            //for debug
+            uint64_t item_key = *(uint64_t*)item->data;
+            item_key = (((uint64_t)htonl(item_key))<<32) + htonl(item_key>>32); 
+
             if(sid){
                 //The item has been built, but I find another one because of a system crash when
                 //the item is updated not-in-place and it's original slot is being reclaimed.
                 //I should compare the timestamp to decide which one I should rebuild.
                 uint64_t old_tsmp = 0;
-                hashmap_get(rctx->hash_tsmp,sid,&old_tsmp);
+
+                int get_res = hashmap_get(rctx->hash_tsmp,sid,&old_tsmp);
                 struct slot_entry* entry = mtable_get(wctx->mtable,sid);
+
+                //SPDK_NOTICELOG("hashmap get shard:%u slab:%u sid:%lu tsmp:%lu key:%lu\n",rctx->cur->shard_idx,slab->slab_size,sid,old_tsmp,item_key);
+                
                 assert(entry);
+                //assert(!get_res);
 
                 if(old_tsmp<tsc0){
                     //This item is newer.
@@ -154,10 +163,11 @@ _node_read_complete(void* ctx, int bserrno){
                 new_entry.shard = rctx->cur->shard_idx;
                 new_entry.slab = slab_find_slab(slab->slab_size);
                 new_entry.slot_idx = slot_base + idx;;
-                
+
                 uint64_t new_sid = mtable_alloc_sid(wctx->mtable,new_entry);
                 mem_index_add(wctx->global_index,item,new_sid);
                 hashmap_put(rctx->hash_tsmp,new_sid,tsc0);
+                //SPDK_NOTICELOG("hashmap put, shard:%u slab:%u slot:%lu sid:%lu tsmp:%lu key:%lu\n",new_entry.shard,slab->slab_size,slot_base + idx,new_sid,tsc0,item_key);
 
                 desc->nb_free_slots--;
                 node->nb_free_slots--;

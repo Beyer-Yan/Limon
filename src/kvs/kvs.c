@@ -4,10 +4,10 @@
 
 static inline uint32_t
 _hash_item_to_shard(struct kv_item *item){
-    //uint64_t prefix = *(uint64_t*)item->data;
-    //prefix =  (((uint64_t)htonl(prefix))<<32) + htonl(prefix>>32); 
-    //return prefix%g_kvs->nb_shards;
-    return kv_hash(item->data, item->meta.ksize,g_kvs->nb_shards);
+    uint64_t prefix = *(uint64_t*)item->data;
+    prefix =  (((uint64_t)htonl(prefix))<<32) + htonl(prefix>>32); 
+    return prefix%g_kvs->nb_shards;
+    //return kv_hash(item->data, item->meta.ksize,g_kvs->nb_shards);
 }
 
 static inline void
