@@ -131,7 +131,7 @@ _slab_blob_md_sync_complete(void*ctx, int bserrno){
         SPDK_NOTICELOG("blob md sync error:%d\n",bserrno);
     }
 
-    SPDK_NOTICELOG("slab %p zero-resized, slab size:%u old size:%u,new size:%lu\n",rctx->slab,rctx->slab->slab_size,rctx->old_size,rctx->new_size);
+    //SPDK_NOTICELOG("slab %p zero-resized, slab size:%u old size:%u,new size:%lu\n",rctx->slab,rctx->slab->slab_size,rctx->old_size,rctx->new_size);
 
     rctx->kverrno =  bserrno ? -KV_EIO : -KV_ESUCCESS;
     spdk_thread_send_msg(rctx->thread,rctx->resize_cb,rctx);
