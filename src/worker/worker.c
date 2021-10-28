@@ -139,6 +139,8 @@ _worker_poll_business(struct worker_context *wctx){
 
             TAILQ_INSERT_TAIL(&wctx->submit_queue,req_internal,link);
             free(req_array[i]);
+
+            req_internal->pctx.phase = 0;
         }
     }
  
@@ -319,7 +321,7 @@ _alloc_pmgr_context(struct worker_init_opts* opts){
     pmgr->miss_times = 0;
     pmgr->seed = rand();
 
-    pmgr->page_map = hashmap_new();
+    pmgr->page_map = hashmap_new(pmgr->nb_init_pages);
     assert(pmgr->page_map);
 
     pmgr->meta_thread = opts->meta_thread;
@@ -395,10 +397,10 @@ _alloc_imgr_context(struct worker_init_opts* opts){
     imgr->nb_pending_io = 0;
     imgr->io_unit_size = spdk_bs_get_io_unit_size(opts->target);
 
-    imgr->read_hash.cache_hash  = hashmap_new();
-    imgr->read_hash.page_hash   = hashmap_new();
-    imgr->write_hash.cache_hash = hashmap_new();
-    imgr->write_hash.page_hash  = hashmap_new();
+    imgr->read_hash.cache_hash  = hashmap_new(0);
+    imgr->read_hash.page_hash   = hashmap_new(0);
+    imgr->write_hash.cache_hash = hashmap_new(0);
+    imgr->write_hash.page_hash  = hashmap_new(0);
 
     assert(imgr->read_hash.cache_hash);
     assert(imgr->read_hash.page_hash);

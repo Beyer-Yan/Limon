@@ -104,6 +104,8 @@ static inline struct mtable_block*  _alloc_one_block(void){
     block->bitmap->length = NB_SLOTS_PER_BLOCK;
     block->nb_free_slots = NB_SLOTS_PER_BLOCK;
     block->alloc_position = 0;
+
+    return block;
 }
 
 static inline void _release_one_block(struct mtable_block* block){

@@ -59,9 +59,10 @@ _process_one_pending_migrate_new_store_data_cb(void* ctx, int kverrno){
         //Now write tombstone to the previous slot.
         struct kv_item* item = pagechunk_get_item(wctx->pmgr,mig->desc,mig->slot_idx);
         item->meta.ksize = 0;
+        _process_one_pending_migrate_write_tombstone_cb(mig,-KV_ESUCCESS);
 
-        pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,mig->desc,mig->slot_idx,
-                                        _process_one_pending_migrate_write_tombstone_cb,mig);
+        //pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,mig->desc,mig->slot_idx,
+        //                                _process_one_pending_migrate_write_tombstone_cb,mig);
     }
 }
 

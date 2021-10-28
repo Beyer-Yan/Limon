@@ -5,6 +5,8 @@
 #include "spdk/queue.h"
 #include "spdk/log.h"
 
+#include "bloomfilter.h"
+
 #define INIT_NODE_CAP 256
 
 struct list_slab{
@@ -19,6 +21,9 @@ struct rebuild_ctx{
     //A temporary mem index for shard recovery. When the shard is rebuilt, the mem index
     //will be destroyed. The index_entry is the timestamp.
     map_t hash_tsmp;
+
+    //filter to reduce the searching from global index
+    BaseBloomFilter filter;
 
     LIST_HEAD(,list_slab) slab_head;
     struct list_slab* cur;
@@ -104,12 +109,18 @@ _node_read_complete(void* ctx, int bserrno){
             }
 
             //It is a valid slot
+            uint64_t sid = 0;
             struct chunk_desc *desc = node->desc_array[idx/slab->reclaim.nb_slots_per_chunk];
-            uint64_t sid = mem_index_lookup(wctx->global_index,item);
+
+            //if(!BloomFilter_Check(&rctx->filter,item->data,item->meta.ksize)){
+                //The filter tells me that the item may exist in the shard
+                //So I should search from the global index to perfrom the further checking
+                sid = mem_index_lookup(wctx->global_index,item);
+            //}
 
             //for debug
-            uint64_t item_key = *(uint64_t*)item->data;
-            item_key = (((uint64_t)htonl(item_key))<<32) + htonl(item_key>>32); 
+            //uint64_t item_key = *(uint64_t*)item->data;
+            //item_key = (((uint64_t)htonl(item_key))<<32) + htonl(item_key>>32); 
 
             if(sid){
                 //The item has been built, but I find another one because of a system crash when
@@ -173,6 +184,9 @@ _node_read_complete(void* ctx, int bserrno){
                 node->nb_free_slots--;
                 slab->reclaim.nb_free_slots--;
                 bitmap_set_bit(desc->bitmap,idx%slab->reclaim.nb_slots_per_chunk);
+
+                //Add new item to bloomfilter
+                //BloomFilter_Add(&rctx->filter,item->data,item->meta.ksize);
             }
         }
     }
@@ -215,6 +229,8 @@ _rebuild_exit(struct rebuild_ctx* rctx,int kverrno){
         hashmap_free(rctx->hash_tsmp);
     }
 
+    FreeBloomFilter(&rctx->filter);
+
     struct list_slab* s,*tmp;
     LIST_FOREACH_SAFE(s,&rctx->slab_head,link,tmp){
         LIST_REMOVE(s,link);
@@ -245,7 +261,9 @@ _slab_rebuild_complete(struct rebuild_ctx* rctx,int kverrno){
         SPDK_NOTICELOG("Rebuild completes, worker:%u, shard:%u\n", spdk_env_get_current_core(),s->shard_idx);
 
         hashmap_free(rctx->hash_tsmp);
-        rctx->hash_tsmp = hashmap_new();
+        rctx->hash_tsmp = hashmap_new(0);
+
+        ResetBloomFilter(&rctx->filter);
     }
     rctx->cur = s;
     _rebuild_one_slab(rctx);
@@ -313,7 +331,8 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
     }
 
     rctx->cur = LIST_FIRST(&rctx->slab_head);
-    rctx->hash_tsmp= hashmap_new();
+    rctx->hash_tsmp= hashmap_new(0);
+    InitBloomFilter(&rctx->filter,0,10000000,0.00001);
     rctx->nb_buffer_pages = rctx->cur->slab->reclaim.nb_chunks_per_node * 
                             rctx->cur->slab->reclaim.nb_pages_per_chunk;
 

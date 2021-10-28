@@ -14,6 +14,17 @@
 
 #include "../worker/worker_internal.h"
 
+static inline uint64_t _make_page_key(void* addr, uint32_t off){
+    //Only low 48-bits are used for virtual address in x64 achitecture
+    assert(off<UINT16_MAX);
+    return ((uint64_t)addr << 16) + off;
+}
+
+static inline uint64_t _make_page_prefix(void* addr, uint32_t off){
+    assert(off<UINT16_MAX);
+    return (uint64_t)addr + off;
+}
+
 static uint64_t 
 _calc_tsc(void){
     //44 bits second, 20 bits microsecond
@@ -164,28 +175,21 @@ pagechunk_put_item(struct pagechunk_mgr *chunk_mgr,struct chunk_desc *desc, uint
 }
 
 static void
-_load_fill_cache(struct pagechunk_mgr *pmgr,struct chunk_desc *desc,uint32_t page_off,uint32_t nb_pages){
+_load_fill_cache(struct pagechunk_mgr *pmgr,struct chunk_desc *desc,uint32_t page_off){
 
-    struct page_desc* pdesc[nb_pages];
+    struct page_desc* pdesc;
+    uint64_t page_key = _make_page_key(desc,page_off);
 
-    for(uint32_t i=0;i<nb_pages;i++){
-        uint32_t page_off = page_off+i;
-        uint64_t page_key = (uint64_t)desc + page_off;
+    //allocate a page descriptor, then put it into page hash index
+    pdesc = pagechunk_evict_one_page(pmgr);
+    pdesc->key = page_key;
+    hashmap_put(pmgr->page_map,page_key,pdesc);
 
-        hashmap_get(pmgr->page_map,page_key,&pdesc[i]); 
-        if(!pdesc[i]){
-            //allocate a page descriptor, then put it into page hash index
-            pdesc[i] = pagechunk_evict_one_page(pmgr);
-            pdesc[i]->key = page_key;
-            hashmap_put(pmgr->page_map,page_key,pdesc[i]);
+    //bump the LRU cache
+    TAILQ_INSERT_TAIL(&pmgr->pages_head,pdesc,link);
 
-            //bump the LRU cache
-            TAILQ_INSERT_TAIL(&pmgr->pages_head,pdesc[i],link);
-
-            //copy the data into page cache;
-            memcpy(pdesc[i]->data,desc->dma_buf->dma_base+page_off*KVS_PAGE_SIZE, KVS_PAGE_SIZE);
-        }       
-    }
+    //copy the data into page cache;
+    memcpy(pdesc->data,desc->dma_buf->dma_base+page_off*KVS_PAGE_SIZE, KVS_PAGE_SIZE);   
 }
 
 static void
@@ -207,10 +211,12 @@ _page_load_complete_cb_fn(void* ctx, int kverrno){
     }
 
     for(uint32_t i=0;i<nb_pages;i++){
-        dma_buffer_charge_page(desc->dma_buf,page_offset+i);
+        if(!dma_buffer_check_page(desc->dma_buf,page_offset+i)){
+            //Other requests may charge the same page, so recheck it.
+            dma_buffer_charge_page(desc->dma_buf,page_offset+i);
+            //_load_fill_cache(pmgr,desc,page_offset+i);
+        }
     }
-    
-    //_load_fill_cache(pmgr,desc,page_offset,nb_pages);
 
     //SPDK_NOTICELOG("Loading pages completes, desc:%u, slab:%lu, off:%lu,nb_pages:%lu\n",desc->id,desc->slab->slab_size,page_offset,page_ctx->nb_pages);
 
@@ -255,21 +261,21 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
 
     for(uint32_t i=0;i<nb_pages;i++){
         uint32_t page_off = first_page+i;
-        uint64_t page_key = (uint64_t)desc + page_off;
-        int dma_check = 0;
+        uint64_t page_key = _make_page_key(desc,page_off);
 
-        hashmap_get(pmgr->page_map,page_key,&pdesc[i]); 
-        dma_check = dma_buffer_check_page(desc->dma_buf,page_off);
+        if(dma_buffer_check_page(desc->dma_buf,page_off)){
+            continue;
+        }
         
-        //the data is in the page cache, so just copy it
-        if( !dma_check && pdesc[i]){
+        hashmap_get(pmgr->page_map,page_key,&pdesc[i]); 
+        if(pdesc[i]){
             //Just copy the data buffer from the page cache.
             memcpy(desc->dma_buf->dma_base+page_off*KVS_PAGE_SIZE,pdesc[i]->data,KVS_PAGE_SIZE);
             _bump_page(pmgr,pdesc[i]);
             //mark that the page has been loaded in dma buffer.
             dma_buffer_charge_page(desc->dma_buf,page_off);
         }
-        else if(!dma_check && !pdesc[i]){
+        else{
             //I should load it from disk
             if(nb_segs==0){
                 scatter_array[0].start_page = page_off;
@@ -324,7 +330,7 @@ pagechunk_load_item_async(struct pagechunk_mgr *pmgr,
         uint32_t nb_chunk_pages = desc->slab->reclaim.nb_pages_per_chunk;
         uint64_t start_page_in_slab = nb_chunk_pages * desc->id + page_offset;
         uint8_t* buf = desc->dma_buf->dma_base + page_offset*KVS_PAGE_SIZE;
-        uint64_t key_prefix = (uint64_t)desc + page_offset;
+        uint64_t key_prefix = _make_page_prefix(desc->dma_buf->dma_base,page_offset);
 
         //SPDK_NOTICELOG("Loading pages, desc:%u, dma:%p, slab:%lu, slot:%lu, off:%lu,nb_pages:%lu\n",desc->id,buf,slab->slab_size,slot_idx,page_offset,nb_pages);
 
@@ -348,19 +354,54 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //No more than 2 shared pages for an slot.
-    uint32_t nb_segs = 2;
+    uint32_t nb_segs = 0;
 
     if( !_is_shared_page(desc,slot_idx,true)){
         first_page=UINT32_MAX;
-        nb_segs--;
     }
     if( !_is_shared_page(desc,slot_idx,false)) {
         last_page=UINT32_MAX;
-        nb_segs--;
+    }
+
+    struct scatter_loader{
+        uint16_t start_page;
+        uint16_t nb_pages;
+    }scatter_array[2];
+
+    for(int i=0;i<2;i++){
+        uint32_t page_off = (i==0? first_page : last_page);
+        if(page_off==UINT32_MAX){
+            //It is not a shared page
+            continue;
+        }
+
+        if(dma_buffer_check_page(desc->dma_buf,page_off)){
+            //It is in dma buffer, just ignore it
+            continue;
+        }
+
+        struct page_desc* pdesc = NULL;
+        uint64_t page_key = _make_page_key(desc,page_off);
+        hashmap_get(pmgr->page_map,page_key,&pdesc);
+
+        if(pdesc){
+            //It is in page cache, load it from page cache
+            memcpy(desc->dma_buf->dma_base+page_off*KVS_PAGE_SIZE,pdesc->data,KVS_PAGE_SIZE);
+            _bump_page(pmgr,pdesc);
+            dma_buffer_charge_page(desc->dma_buf,page_off);
+        }
+        else{
+            //Now i should load it from disk
+            scatter_array[nb_segs].start_page = page_off;
+            scatter_array[nb_segs].nb_pages = 1;
+            nb_segs++;
+            pmgr->miss_times++;
+        }
+        pmgr->visit_times++;
     }
 
     if(!nb_segs){
-        //Wonderful! No shared pages should be loaded.
+        //Wonderful! No pages should be loaded from disk.
         cb(ctx,-KV_ESUCCESS);
         return;
     }
@@ -373,49 +414,25 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
     item_ctx->user_cb = cb;
     item_ctx->user_ctx = ctx;
 
-    for(int i=0;i<2;i++){
-        uint32_t page_off = (i==0? first_page : last_page);
-        if(page_off==UINT32_MAX){
-            //It is not a shared page, ignore it.
-            continue;
-        }
+    for(int i=0;i<nb_segs;i++){
+        uint32_t page_off = scatter_array[i].start_page;
+        struct page_load_store_ctx* page_ctx = pool_get(pmgr->load_store_ctx_pool);
+        assert(page_ctx!=NULL);
 
-        struct page_desc* pdesc = NULL;
-        uint64_t page_key = (uint64_t)desc + page_off;
-        int dma_check = 0;
+        page_ctx->pmgr = pmgr;
+        page_ctx->desc = desc;
+        page_ctx->page_offset = page_off;
+        page_ctx->item_ctx = item_ctx;
+        page_ctx->nb_pages = 1;
 
-        dma_check = dma_buffer_check_page(desc->dma_buf,page_off);
-        hashmap_get(pmgr->page_map,page_key,&pdesc);
+        uint32_t nb_chunk_pages = desc->slab->reclaim.nb_pages_per_chunk;
+        uint64_t start_page_in_slab = nb_chunk_pages * desc->id + page_off;
+        uint8_t* buf = desc->dma_buf->dma_base + page_off*KVS_PAGE_SIZE;
+        uint64_t key_prefix = _make_page_prefix(desc->dma_buf->dma_base,page_off);
 
-        if( !dma_check && pdesc ){
-            //Just copy the data buffer from the page cache.
-            memcpy(desc->dma_buf->dma_base+page_off*KVS_PAGE_SIZE,pdesc->data,KVS_PAGE_SIZE);
-            _bump_page(pmgr,pdesc);
-            //mark that the page has been loaded in dma buffer.
-            dma_buffer_charge_page(desc->dma_buf,page_off);
-        }
-        else if(!dma_check && !pdesc){
-            //Load it from disk
-            struct page_load_store_ctx* page_ctx = pool_get(pmgr->load_store_ctx_pool);
-            assert(page_ctx!=NULL);
-
-            page_ctx->pmgr = pmgr;
-            page_ctx->desc = desc;
-            page_ctx->page_offset = page_off;
-            page_ctx->item_ctx = item_ctx;
-            page_ctx->nb_pages = 1;
-
-            uint32_t nb_chunk_pages = desc->slab->reclaim.nb_pages_per_chunk;
-            uint64_t start_page_in_slab = nb_chunk_pages * desc->id + page_off;
-            uint8_t* buf = desc->dma_buf->dma_base + page_off*KVS_PAGE_SIZE;
-            uint64_t key_prefix = (uint64_t)desc + page_off;
-
-            iomgr_load_pages_async(imgr,slab->blob,key_prefix,
-                                   buf,start_page_in_slab,1,
-                                   _page_load_complete_cb_fn,page_ctx);
-            pmgr->miss_times++;
-        }
-        pmgr->visit_times++;
+        iomgr_load_pages_async(imgr,slab->blob,key_prefix,
+                                buf,start_page_in_slab,1,
+                                _page_load_complete_cb_fn,page_ctx); 
     }
 }
 
@@ -432,22 +449,26 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
     _get_page_position(desc,slot_idx,&first_page,&last_page);
 
     //The design guarantees that only one page should be loaded for item meta
-    struct page_desc* pdesc = NULL;
-    uint64_t page_key = (uint64_t)desc + first_page;
-    int dma_check = 0;
+    if(dma_buffer_check_page(desc->dma_buf,first_page)){
+        //Nothing should be done
+        cb(ctx,-KV_ESUCCESS);
+        return;
+    }
 
-    dma_check = dma_buffer_check_page(desc->dma_buf,first_page);
+    struct page_desc* pdesc = NULL;
+    uint64_t page_key = _make_page_key(desc,first_page);
     hashmap_get(pmgr->page_map,page_key,&pdesc);
 
-    if(!dma_check && pdesc){
+    if(pdesc){
         //Copy from page cache
         memcpy(desc->dma_buf->dma_base+first_page*KVS_PAGE_SIZE,pdesc->data,KVS_PAGE_SIZE);
         _bump_page(pmgr,pdesc);
-        cb(ctx,-KV_ESUCCESS);
         pmgr->visit_times++;
+
+        cb(ctx,-KV_ESUCCESS);
         return;
     }
-    else if(!dma_check && !pdesc){
+    else{
         //Load it from disk
         struct item_load_store_ctx* item_ctx = pool_get(pmgr->item_ctx_pool);
         item_ctx->kverrno = -KV_ESUCCESS;
@@ -468,18 +489,18 @@ void pagechunk_load_item_meta_async(struct pagechunk_mgr *pmgr,
         uint32_t nb_chunk_pages = desc->slab->reclaim.nb_pages_per_chunk;
         uint64_t start_page_in_slab = nb_chunk_pages * desc->id + first_page;
         uint8_t* buf = desc->dma_buf->dma_base + first_page*KVS_PAGE_SIZE;
-        uint64_t key_prefix = (uint64_t)desc + first_page;
+        uint64_t key_prefix = _make_page_prefix(desc->dma_buf->dma_base,first_page);
 
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,
                                 buf,start_page_in_slab,1,
                                 _page_load_complete_cb_fn,page_ctx);
+        pmgr->miss_times++;
     }
 
-    pmgr->miss_times++;
     pmgr->visit_times++;
 }
 
-static void _copy_data_to_cache(struct pagechunk_mgr *pmgr,
+static void _copy_data_to_cache(struct pagechunk_mgr *pmgr, struct chunk_desc* desc,
                          struct page_desc* pdesc,uint8_t* buffer_base,
                          uint64_t offset,uint32_t size){
     //SPDK_NOTICELOG("buffer_base:%p, off:%lu, size:%u\n",buffer_base,offset,size);
@@ -489,7 +510,7 @@ static void _copy_data_to_cache(struct pagechunk_mgr *pmgr,
         pdesc = pagechunk_evict_one_page(pmgr);
         uint32_t page_off = (offset/KVS_PAGE_SIZE);
         uint32_t page_base = page_off*KVS_PAGE_SIZE;
-        pdesc->key = (uint64_t)pdesc + page_off;
+        pdesc->key = _make_page_key(desc,page_off);
 
         hashmap_put(pmgr->page_map,pdesc->key,pdesc);
         memcpy(pdesc->data,buffer_base+page_base,KVS_PAGE_SIZE);
@@ -501,13 +522,13 @@ static void _copy_data_to_cache(struct pagechunk_mgr *pmgr,
         //Just copy the delta data
         uint32_t cache_off = offset%KVS_PAGE_SIZE;
         memcpy(pdesc->data+cache_off,buffer_base+offset,size);
+        _bump_page(pmgr,pdesc);
     }
-    _bump_page(pmgr,pdesc);
     pmgr->visit_times++;
 }
 
 static void 
-_store_update_cache( struct pagechunk_mgr *pmgr,
+_store_update_cache( struct pagechunk_mgr *pmgr, struct chunk_desc* desc,
                   struct page_desc** pdesc, uint32_t nb_pages, 
                   uint8_t* buffer_base, uint64_t offset,uint32_t size){
     assert(pmgr);
@@ -517,23 +538,23 @@ _store_update_cache( struct pagechunk_mgr *pmgr,
 
     uint32_t gap = KVS_PAGE_SIZE - (offset%KVS_PAGE_SIZE);
     if(size <= gap){
-        _copy_data_to_cache(pmgr,pdesc[0],buffer_base,offset,size);
+        _copy_data_to_cache(pmgr,desc,pdesc[0],buffer_base,offset,size);
     }else{
         //first page
-        _copy_data_to_cache(pmgr,pdesc[0],buffer_base,offset,gap);
+        _copy_data_to_cache(pmgr,desc,pdesc[0],buffer_base,offset,gap);
         offset += gap;
         size -= gap;
 
         //middle pages if it has
         for(uint32_t i=1;i<nb_pages-1;i++){
-            _copy_data_to_cache(pmgr,pdesc[i],buffer_base,offset,KVS_PAGE_SIZE);
+            _copy_data_to_cache(pmgr,desc,pdesc[i],buffer_base,offset,KVS_PAGE_SIZE);
             offset += KVS_PAGE_SIZE;
             size -= KVS_PAGE_SIZE;
         }
 
         //last page
         if(size){
-            _copy_data_to_cache(pmgr,pdesc[nb_pages-1],buffer_base,offset,size);
+            _copy_data_to_cache(pmgr,desc,pdesc[nb_pages-1],buffer_base,offset,size);
         }
     }
 }
@@ -562,11 +583,11 @@ _item_store_complete_cb_fn(void* ctx, int kverrno){
 
     struct page_desc* pdesc[nb_pages];
     for(uint32_t i=0;i<nb_pages;i++){
-        uint64_t page_key = (uint64_t)desc + page_offset + i;
+        uint64_t page_key = _make_page_key(desc,page_offset+i);
         hashmap_get(pmgr->page_map,page_key,&pdesc[i]);
     }
     
-    //_store_update_cache(pmgr,pdesc,nb_pages,dma_base,offset,item_ctx->size);
+    //_store_update_cache(pmgr,desc,pdesc,nb_pages,dma_base,offset,item_ctx->size);
 
     item_ctx->user_cb(item_ctx->user_ctx,kverrno);
     pool_release(pmgr->load_store_ctx_pool,page_ctx);
@@ -610,7 +631,7 @@ pagechunk_store_item_async(struct pagechunk_mgr *pmgr,
     uint64_t start_page_in_slab = nb_chunk_pages * desc->id + first_page;
     uint64_t nb_pages = last_page - first_page + 1;
     uint8_t* buf = desc->dma_buf->dma_base + first_page*KVS_PAGE_SIZE;
-    uint64_t key_prefix = (uint64_t)desc + first_page;
+    uint64_t key_prefix = _make_page_prefix(desc->dma_buf->dma_base,first_page);
 
     //SPDK_NOTICELOG("Storing pages, desc:%u, dma:%p, slab:%lu,slot:%lu, off:%lu,nb_pages:%lu\n",desc->id,buf,slab->slab_size,slot_idx,first_page,nb_pages);
 
@@ -655,7 +676,7 @@ void pagechunk_store_item_meta_async(struct pagechunk_mgr *pmgr,
     uint64_t start_page_in_slab = nb_chunk_pages * desc->id + first_page;
     uint64_t nb_pages = 1;
     uint8_t* buf = desc->dma_buf->dma_base + first_page*KVS_PAGE_SIZE;
-    uint64_t key_prefix = (uint64_t)desc + first_page;
+    uint64_t key_prefix = _make_page_prefix(desc->dma_buf->dma_base,first_page);
 
     iomgr_store_pages_async(imgr,slab->blob,key_prefix,
                             buf,start_page_in_slab,nb_pages,

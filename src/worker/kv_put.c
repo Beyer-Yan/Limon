@@ -19,6 +19,7 @@ process_put_outplace_store_meta_cb(void* ctx, int kverrno){
         SPDK_WARNLOG("Failed to write tombstone, shard:%u,slab:%u,slot:%lu\n",
                       req->shard,slab->slab_size,old_slot_idx);
     }
+    pctx->phase = 5;
     //Just release the old slot
     slab_free_slot(wctx->rmgr,slab,old_slot_idx);
     pagechunk_mem_lower(wctx->pmgr,desc);
@@ -48,6 +49,7 @@ process_put_outplace_load_meta_cb(void* ctx, int kverrno){
         //Now we load the data into the page chunk cache. Just read it out happily.
         struct kv_item *item = pagechunk_get_item(wctx->pmgr, desc,old_slot_idx);
         item->meta.ksize=0;
+        pctx->phase = 4;
         pagechunk_store_item_meta_async(wctx->pmgr,wctx->imgr,desc,old_slot_idx,
                                         process_put_outplace_store_meta_cb,req);
     }
@@ -74,9 +76,22 @@ _process_put_outplace_store_data_cb(void*ctx, int kverrno){
 
     //Update sucess
     req->cb_fn(req->ctx, NULL, -KV_ESUCCESS);
+
+    entry->slot_idx = pctx->new_entry.slot_idx;
+    entry->slab = pctx->new_entry.slab;
+    entry->putting = 0;
+
     pagechunk_mem_lower(wctx->pmgr,pctx->new_desc);  
 
+    //Free old slot.
+    slab_free_slot(wctx->rmgr,pctx->slab,entry->slot_idx);
+    pool_release(wctx->kv_request_internal_pool,req);
+    return;
+
+    //Writing meta may not nessacery since the old slot will be 
+    //reclaimed in recovery.
     //Now update the slot entry and reclaim the old slot
+    /*
     struct slot_entry old_entry = *entry;
 
     //update the slot entry.
@@ -87,11 +102,13 @@ _process_put_outplace_store_data_cb(void*ctx, int kverrno){
     //temporarily record the old entry with new_entry field.
     pctx->new_entry = old_entry;
     
+    pctx->phase = 3;
     //Then write the tombstone to the old slot
     pagechunk_mem_lift(wctx->pmgr,pctx->desc);
     pagechunk_load_item_meta_async(wctx->pmgr,wctx->imgr,
                                    pctx->desc,old_entry.slot_idx,
                                    process_put_outplace_load_meta_cb,req);
+    */
 }
 
 static void
@@ -113,6 +130,7 @@ _process_put_outplace_load_data_cb(void*ctx, int kverrno){
         return;
     }
 
+    pctx->phase = 2;
     //Now I load the item successfully. Next, I will perform writing.
     pagechunk_put_item(wctx->pmgr,pctx->new_desc,pctx->new_entry.slot_idx,req->item);
     pagechunk_store_item_async( wctx->pmgr,
@@ -143,12 +161,11 @@ _process_put_outplace_request_slot_cb(uint64_t slot_idx, void* ctx, int kverrno)
     struct chunk_desc* new_desc = pagechunk_get_desc(slab,slot_idx);
     assert(new_desc!=NULL);
 
-    pctx->new_entry.raw = 0;
-    pctx->new_entry.shard = req->shard;
     pctx->new_entry.slot_idx = slot_idx;
     pctx->new_desc = new_desc;
 
     pagechunk_mem_lift(wctx->pmgr,new_desc);
+    pctx->phase = 1;
     pagechunk_load_item_share_async( wctx->pmgr,
                                    wctx->imgr,
                                    new_desc,
@@ -173,7 +190,12 @@ _process_put_outplace(struct kv_request_internal *req, bool slab_changed){
         pctx->new_slab = &(wctx->shards[req->shard].slab_set[new_slab_idx]);
 
         slab = pctx->new_slab;
-        //SPDK_NOTICELOG("slab changed, ori_slab:%u, new_slab:%u\n",pctx->old_slab->slab_size, pctx->slab->slab_size);
+    }
+    else{
+        //It is just a out-of-place, we alloocate new slot from the same slab.
+        pctx->new_entry.raw = 0;
+        pctx->new_entry.slab = pctx->entry->slab;
+        pctx->new_entry.shard = pctx->entry->shard;
     }
     slab_request_slot_async(wctx->imgr,slab,
                             _process_put_outplace_request_slot_cb,

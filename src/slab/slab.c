@@ -109,7 +109,9 @@ struct resize_ctx{
     int kverrno;
 
     struct spdk_thread *thread;
+
     struct spdk_blob_store *target;
+    struct spdk_io_channel* meta_ch;
 
     //Callback when the blob is resized. The ctx is the resize_ctx self.
     void (*resize_cb)(void*ctx);
@@ -142,6 +144,10 @@ _slab_blob_resize_write_zeroes_cb(void*ctx, int bserrno){
     struct resize_ctx *rctx = ctx;
     struct spdk_blob *blob = rctx->slab->blob;
     struct slab* slab = rctx->slab;
+
+    //release the io channel
+    spdk_bs_free_io_channel(rctx->meta_ch);
+    
     if(bserrno){
         //Resize error;
         SPDK_NOTICELOG("blob resize write zeroes error:%d\n",bserrno);
@@ -177,6 +183,7 @@ _slab_blob_resize_complete(void*ctx, int bserrno){
     uint64_t len = (rctx->new_size - rctx->old_size)*slab->reclaim.nb_pages_per_chunk;
 
     struct spdk_io_channel* ch = spdk_bs_alloc_io_channel(rctx->target);
+    rctx->meta_ch = ch;
     
     spdk_blob_io_write_zeroes(blob,ch,off,len,_slab_blob_resize_write_zeroes_cb,rctx);
 }

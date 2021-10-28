@@ -57,8 +57,8 @@ static struct kvs_bench_opts _g_default_opts = {
 	.nb_workers = 1,
 	.nb_injectors = 2,
 	.queue_size = 16,
-	.caches = 1, /* 5GB */
-	.nb_items = 10000000,
+	.caches = 5, /* 5GB */
+	.nb_items = 8000000,
     .io_cyle_us = 0
 };
 
@@ -181,7 +181,8 @@ _do_start_benchmark(void*ctx){
 		//ycsb_f_uniform
         //ycsb_a_uniform,ycsb_e_uniform
         //ycsb_a_zipfian,
-        ycsb_c_uniform,
+        ycsb_a_uniform
+        //ycsb_c_uniform,
         //ycsb_c_zipfian,
         //ycsb_c_zipfian
 		//ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,

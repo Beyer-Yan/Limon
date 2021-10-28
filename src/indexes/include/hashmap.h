@@ -38,7 +38,7 @@ typedef any_t map_t;
 /*
  * Return an empty hashmap. Returns NULL if empty.
 */
-extern map_t hashmap_new(void);
+extern map_t hashmap_new(uint64_t cap);
 
 /*
  * Iteratively call f with argument (item, data) for

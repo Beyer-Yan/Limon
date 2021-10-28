@@ -57,6 +57,9 @@ struct process_ctx{
     struct slab* new_slab;
     struct chunk_desc* new_desc;
     struct slot_entry new_entry;
+
+    //for debug.
+    int phase;
 };
 
 /**
