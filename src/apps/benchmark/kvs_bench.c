@@ -18,7 +18,7 @@
 #include "ycsb/common.h"
 #include "ycsb/histogram.h"
 
-static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:T:"; 
+static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:T:Z"; 
 
 static struct option _g_app_long_cmdline_options[] = {
 #define DEVNAME_OPT_IDX         'D'
@@ -34,7 +34,9 @@ static struct option _g_app_long_cmdline_options[] = {
 #define ITMES_OPT_IDX           'N'
     {"items",required_argument,NULL,ITMES_OPT_IDX},
 #define IO_OPT_IDX              'T'
-    {"io_cycle_us",required_argument,NULL,IO_OPT_IDX}
+    {"io_cycle_us",required_argument,NULL,IO_OPT_IDX},
+#define POPULATE_OPT_IDX        'P'
+    {"populate_db",optional_argument,NULL,POPULATE_OPT_IDX}
 };
 
 struct kvs_bench_opts{
@@ -49,6 +51,7 @@ struct kvs_bench_opts{
 	uint64_t nb_items;
 
     uint64_t io_cyle_us; 
+    int populate_db;
 };
 
 static struct kvs_bench_opts _g_default_opts = {
@@ -57,9 +60,10 @@ static struct kvs_bench_opts _g_default_opts = {
 	.nb_workers = 1,
 	.nb_injectors = 2,
 	.queue_size = 16,
-	.caches = 5, /* 5GB */
-	.nb_items = 8000000,
-    .io_cyle_us = 0
+	.caches = 1, /* 5GB */
+	.nb_items = 40000000,
+    .io_cyle_us = 0,
+    .populate_db = 0
 };
 
 static void
@@ -76,8 +80,9 @@ _bench_usage(void){
                                           _g_default_opts.caches);
     printf(" -N, --items  <num>           total items in db(default:%lu)\n",
                                           _g_default_opts.nb_items);
-    printf(" -T, --io-cycle <num>         io polling cycle(default:%lu)\n",
+    printf(" -T, --io-cycle_us <num>      io polling cycle(default:%lu)\n",
                                           _g_default_opts.io_cyle_us);
+    printf(" -P, --populate_db            load database (default:run benchmark)\n");
 }
 
 static int
@@ -153,6 +158,10 @@ _bench_parse_arg(int ch, char *arg){
             }
             break;
         }
+    	case 'P':{
+            _g_default_opts.populate_db = 1;
+            break;
+        }
         default:
             return -EINVAL;
             break;
@@ -173,54 +182,59 @@ _do_start_benchmark(void*ctx){
 	printf("Initializing random number generator (Zipf) -- this might take a while for large databases...\n");
     init_zipf_generator(0, w.nb_items_in_db - 1); 
 	printf("Random number generator init completes\n");
-	
-	//Pre-fill the data into the database.
-	repopulate_db(&w);
-	   /* Launch benchs */
-	bench_t workloads[] = {
-		//ycsb_f_uniform
-        //ycsb_a_uniform,ycsb_e_uniform
-        //ycsb_a_zipfian,
-        ycsb_a_uniform
-        //ycsb_c_uniform,
-        //ycsb_c_zipfian,
-        //ycsb_c_zipfian
-		//ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
-        //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
-        //ycsb_d_uniform
-        //ycsb_e_uniform,ycsb_f_uniform,
-        //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
-        //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
-		//ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,ycsb_f_uniform,
-        //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian,ycsb_f_zipfian
-        //ycsb_c_zipfian,
-        //ycsb_f_uniform,
-		//ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
-		//ycsb_e_zipfian, // Scans
-        //ycsb_c_zipfian
-	};
 
-	histogram_init();
+    if(_g_default_opts.populate_db){
+        printf("Populating db with %lu items\n",w.nb_items_in_db);
+        repopulate_db(&w);
+    }
+    else{
+        /* Launch benchs */
+        bench_t workloads[] = {
+            //ycsb_f_uniform
+            //ycsb_a_uniform,ycsb_e_uniform
+            //ycsb_a_zipfian,
+            ycsb_a_uniform
+            //ycsb_c_uniform,
+            //ycsb_c_zipfian,
+            //ycsb_c_zipfian
+            //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
+            //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
+            //ycsb_d_uniform
+            //ycsb_e_uniform,ycsb_f_uniform,
+            //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
+            //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
+            //ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,ycsb_f_uniform,
+            //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian,ycsb_f_zipfian
+            //ycsb_c_zipfian,
+            //ycsb_f_uniform,
+            //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
+            //ycsb_e_zipfian, // Scans
+            //ycsb_c_zipfian
+        };
 
-	for(uint32_t i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
-		//30% extra requests for warm-up
-		if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
-			//requests for YCSB E are longer (scans) so we do less
-			w.nb_requests = 3600000LU; 
-		} else {
-			w.nb_requests = 130000000LU;
-		}
-		histogram_reset();
-        uint64_t start = spdk_get_ticks();
-		run_workload(&w, workloads[i]);
-        uint32_t us = kv_cycles_to_us(spdk_get_ticks()-start);
-        uint64_t qps = (uint64_t)((double)w.nb_requests/((double)us/1000000.0));
-        printf("Workload %s, requests (%lu/s)\n",w.api->name(workloads[i]),qps);
-		histogram_print();
-	}
-	printf("All workloads complete, ctrl+c to stop the program\n");
-    //wait 1 second for left requests.
-    spdk_delay_us(1000000);
+        histogram_init();
+
+        for(uint32_t i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
+            //30% extra requests for warm-up
+            if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
+                //requests for YCSB E are longer (scans) so we do less
+                w.nb_requests = 3600000LU; 
+            } else {
+                w.nb_requests = 130000000LU;
+            }
+            histogram_reset();
+            uint64_t start = spdk_get_ticks();
+            run_workload(&w, workloads[i]);
+            uint32_t us = kv_cycles_to_us(spdk_get_ticks()-start);
+            uint64_t qps = (uint64_t)((double)w.nb_requests/((double)us/1000000.0));
+            printf("Workload %s, requests (%lu/s)\n",w.api->name(workloads[i]),qps);
+            histogram_print();
+        }
+        printf("All workloads complete, ctrl+c to stop the program\n");
+    }
+
+    //wait 5 second for left requests.
+    sleep(5);
     kvs_shutdown();
 	return NULL;
 }

@@ -157,10 +157,16 @@ struct meta_worker_context{
     struct worker_context **wctx_array;
     uint32_t nb_business_workers;
 
+    uint32_t nb_shards;
+    struct slab_shard* shards;
+
     struct spdk_thread *meta_thread;
     struct spdk_io_channel* channel;
     struct spdk_blob_store* target;
     struct spdk_poller* stat_poller;
+
+    struct spdk_poller* populate_poller;
+    struct spdk_ring* populate_ring;
     
     uint32_t core_id;
 };

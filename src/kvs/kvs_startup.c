@@ -128,6 +128,9 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
     meta_opts.wctx_array = wctx;
     meta_opts.core_id  = 0;
     meta_opts.meta_thread = spdk_get_thread();
+    meta_opts.channel = kctx->channel;
+    meta_opts.nb_shards = kvs->nb_shards;
+    meta_opts.shards = kvs->shards;
 
     //Distribute the meta worker in this core
     kctx->kvs->meta_worker = meta_worker_alloc(&meta_opts);
@@ -136,7 +139,6 @@ _kvs_worker_init(struct kvs_start_ctx *kctx){
 
     worker_opts.max_request_queue_size_per_worker = kvs->max_request_queue_size_per_worker;
     //worker_opts.max_io_pending_queue_size_per_worker = kvs->max_io_pending_queue_size_per_worker;
-
 
     worker_opts.reclaim_batch_size = kvs->reclaim_batch_size;
     worker_opts.reclaim_percentage_threshold = kvs->reclaim_percentage_threshold;

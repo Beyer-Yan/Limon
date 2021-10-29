@@ -68,24 +68,28 @@ struct kv_item *create_workload_item(struct workload *w) {
    return item;
 }
 
+static volatile int finished = 0;
+
+/************************************************/
 
 struct rebuild_pdata {
    uint64_t id;
    uint64_t *pos;
    uint64_t start;
    uint64_t end;
+   uint64_t nb_inserted;
+
    struct workload *w;
 };
 
 static void
-_repopulate_item_add_cb(void*ctx, struct kv_item*item, int kverrno){
+_repopulate_item_cb(void*ctx, struct kv_item*item, int kverrno){
    assert(ctx);
    struct kv_item *x = (struct kv_item *)ctx;
    free(x);
 }
 
 void *repopulate_db_worker(void *pdata) {
-   declare_periodic_count;
    struct rebuild_pdata *data = pdata;
 
    pin_me_on(data->id);
@@ -98,45 +102,10 @@ void *repopulate_db_worker(void *pdata) {
    for(uint64_t i = start; i < end; i++) {
       
       struct kv_item *item = api->create_unique_item(pos[i], w->nb_items_in_db);
-      kv_put_async(item,_repopulate_item_add_cb,item);
-      periodic_count(1000, "Repopulating database, w:%lu, (%lu%%)", data->id ,100LU-(end-i)*100LU/(end - start));
+      kv_populate_async(item,_repopulate_item_cb,item);
+      data->nb_inserted++;
    }
-   free(data);
    return NULL;
-}
-
-static volatile int finished = 0;
-static volatile int ok = 0;
-
-static void
-_check_db_complete(void*ctx, struct kv_item* item, int kverrno){
-   struct kv_item *workload_item = ctx;
-   if(kverrno==-KV_EITEM_NOT_EXIST){
-      printf("Couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
-   }
-   if(!kverrno){
-      if(!memcmp(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
-         ok = 1;
-      }
-      else{
-         printf("Wrong workload name, name in db:%s, yours:%s!\n",item->data + 8,workload_item->data);
-      }
-   }
-   free(workload_item);
-   finished = 1;
-}
-
-static void
-_check_db(struct workload *w){
-   struct kv_item *workload_item = create_workload_item(w);
-   finished = 0;
-   ok = 0;
-   kv_get_async(workload_item,_check_db_complete,workload_item);
-   while(!finished);
-   if(!ok){
-      printf("Can not resolve the workload type, please format the kvs\n");
-      exit(-1);
-   }
 }
 
 static void
@@ -144,9 +113,7 @@ _add_db_flag_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *workload_item = ctx;
    if(kverrno){
       printf("Error in put item:%lu, err:%d\n", *(uint64_t*)workload_item->data,kverrno);
-   }
-   else{
-      ok = 1;
+      exit(-1);
    }
    free(workload_item);
    finished = 1;
@@ -156,43 +123,48 @@ static void
 _add_db_flag(struct workload *w){
    struct kv_item *workload_item = create_workload_item(w);
    finished = 0;
-   ok = 0;
    kv_put_async(workload_item,_add_db_flag_complete,workload_item);
    while(!finished);
-   if(!ok){
-      printf("Failed to add workload flag\n");
-      exit(-1);
+}
+
+static void
+_repopulate_sync_data_cb(void*ctx, struct kv_item* item, int kverrno){
+   if(kverrno){
+      printf("Failed to sync population\n");
+      exit(-1);    
    }
+   finished = 1;
+}
+
+static void* compute_populate_stat(void* pdata){
+   struct rebuild_pdata *pdata_arr = pdata;
+   int nb_threads = pdata_arr[0].w->nb_load_injectors;
+   uint64_t total = pdata_arr[0].w->nb_items_in_db;
+
+   uint64_t last = 0;
+   int time = 0;
+
+   while(1){
+      uint64_t requested = 0;
+      for(int i = 0; i < nb_threads; i++) {
+         requested += pdata_arr[i].nb_inserted;
+      }
+      uint64_t diff = requested - last;
+      last = requested;
+      time++;
+      printf("Populating database %3ds %7lu ops/s (%lu%%)\n",time,diff,last*100lu/total);
+      fflush(stdout);
+      sleep(1);
+   }
+
+   return NULL;
 }
 
 void repopulate_db(struct workload *w) {
-   uint64_t nb_items = kvs_get_nb_items();
-   uint64_t nb_inserts = ( nb_items > w->nb_items_in_db)?0:(w->nb_items_in_db - nb_items);
-
-   if(nb_inserts != w->nb_items_in_db) { 
-      // Database at least partially populated
-      // Check that the items correspond to the workload
-      _check_db(w);
-   }
-
-   if(nb_inserts == 0) {
-      return;
-   }
-
-   // Say that this database is for that workload.
-   if(nb_items == 0) {
-      _add_db_flag(w);
-   } else {
-      nb_items--; // do not count the workload_item
-   }
-
-   if(nb_items != 0 && nb_items != w->nb_items_in_db) {
-      //need reshuffling
-      printf("The database contains %lu elements but the benchmark is configured to use %lu. Please delete the DB first.\n", nb_items, w->nb_items_in_db);
-      exit(-1);
-   }
-
+   uint64_t nb_inserts = w->nb_items_in_db;
    uint64_t *pos = NULL;
+
+   _add_db_flag(w);
 
    printf("Initializing big array to insert elements in random order to make the benchmark fair vs other systems)\n");
    pos = malloc(w->nb_items_in_db * sizeof(*pos));
@@ -205,25 +177,88 @@ void repopulate_db(struct workload *w) {
    printf("Shuffle  completes\n");
 
    pthread_t *threads = malloc(w->nb_load_injectors*sizeof(*threads));
+   struct rebuild_pdata *pdata_arr = calloc(w->nb_load_injectors,sizeof(struct rebuild_pdata));
 
    for(int i = 0; i < w->nb_load_injectors; i++) {
-      struct rebuild_pdata *pdata = calloc(1,sizeof(*pdata));
-      pdata->id = w->start_core + i;
-      pdata->start = (w->nb_items_in_db / w->nb_load_injectors)*i;
-      pdata->end = (w->nb_items_in_db / w->nb_load_injectors)*(i+1);
+      pdata_arr[i].id = w->start_core + i;
+      pdata_arr[i].start = (w->nb_items_in_db / w->nb_load_injectors)*i;
+      pdata_arr[i].end = (w->nb_items_in_db / w->nb_load_injectors)*(i+1);
       if(i == w->nb_load_injectors - 1)
-         pdata->end = w->nb_items_in_db;
-      pdata->w = w;
-      pdata->pos = pos;
-      pthread_create(&threads[i], NULL, repopulate_db_worker, pdata);
+         pdata_arr[i].end = w->nb_items_in_db;
+      pdata_arr[i].w = w;
+      pdata_arr[i].pos = pos;
+      pdata_arr[i].nb_inserted = 0;
+      pthread_create(&threads[i], NULL, repopulate_db_worker, &pdata_arr[i]);
    }
+
+   pthread_t stats_thread;
+   pthread_create(&stats_thread, NULL, compute_populate_stat, pdata_arr);
 
    //wait the finishing of db repopulating.
    for(int i = 0; i < w->nb_load_injectors; i++){
       pthread_join(threads[i], NULL);
    }
+
+   pthread_cancel(stats_thread);
+
+   finished = 0;
+
+   kv_populate_async(NULL,_repopulate_sync_data_cb,NULL);
+   while(!finished);
+   printf("Populating database completes\n");
+
    free(threads);
    free(pos);
+   free(pdata_arr);
+}
+
+/**********************************************************************/
+
+static void
+_check_db_complete(void*ctx, struct kv_item* item, int kverrno){
+   struct kv_item *workload_item = ctx;
+   if(kverrno==-KV_EITEM_NOT_EXIST){
+      printf("Couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
+   }
+   if(!kverrno){
+      if(memcmp(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
+         printf("Wrong workload name, name in db:%s, yours:%s! Please format or repopulate the kvs\n",item->data + 8,workload_item->data);
+         exit(-1);
+      }
+   }
+   free(workload_item);
+   finished = 1;
+}
+
+static void
+_check_db(struct workload *w){
+   struct kv_item *workload_item = create_workload_item(w);
+   finished = 0;
+   kv_get_async(workload_item,_check_db_complete,workload_item);
+   while(!finished);
+}
+
+static int _prepare_run_workload(struct workload *w){
+   uint64_t nb_items = kvs_get_nb_items();
+   uint64_t nb_inserts = ( nb_items > w->nb_items_in_db)?0:(w->nb_items_in_db - nb_items);
+
+   if(nb_inserts != w->nb_items_in_db) { 
+      // Database at least partially populated
+      // Check that the items correspond to the workload
+      _check_db(w);
+   }
+
+   if(nb_inserts == 0) {
+      return 0;
+   }
+
+   if(nb_items == 0 || nb_items != w->nb_items_in_db+1) {
+      //need reshuffling
+      printf("The database contains %lu elements but the benchmark is configured to use %lu. Please delete the DB first.\n", nb_items, w->nb_items_in_db);
+      exit(-1);
+   }
+
+   return 0;
 }
 
 /*
@@ -286,6 +321,8 @@ static void* compute_stat(void* pdata){
 }
 
 void run_workload(struct workload *w, bench_t b) {
+   _prepare_run_workload(w);
+
    struct thread_data *pdata = malloc(w->nb_load_injectors*sizeof(*pdata));
 
    w->nb_requests_per_thread = w->nb_requests / w->nb_load_injectors;

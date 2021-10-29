@@ -94,7 +94,12 @@ void worker_get_statistics(struct worker_context* wctx, struct worker_statistics
 struct meta_init_opts{
     uint32_t nb_business_workers;
     uint32_t core_id;
+
+    uint32_t nb_shards;
+    struct slab_shard* shards;
+    
     struct spdk_thread* meta_thread;
+    struct spdk_io_channel* channel;
     struct worker_context **wctx_array;
 };
 struct meta_worker_context* meta_worker_alloc(struct meta_init_opts *opts);

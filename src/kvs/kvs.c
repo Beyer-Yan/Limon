@@ -109,6 +109,7 @@ uint64_t kv_scan(struct kv_item *item, uint64_t maxLen,uint64_t* sid_array){
     return founds;
 }
 
+
 struct slab_statistics* kvs_get_slab_statistcs(void){
     struct slab_statistics* res;
     uint32_t nb_total_slabs = g_kvs->nb_shards*g_kvs->shards[0].nb_slabs;

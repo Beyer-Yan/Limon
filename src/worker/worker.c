@@ -205,7 +205,7 @@ _fill_slab_migrate_req(struct slab_migrate_request *req, struct slab* slab ){
     req->cur_slot = req->start_slot;
     req->last_slot = req->start_slot + slab->reclaim.nb_slots_per_chunk * slab->reclaim.nb_chunks_per_node - 1;
 
-    //The node is not allowed to performing allocating.
+    //The node is not allowed to perform allocation.
     //If it is not in the free_node_tree, the deleting will no nothing.
     //All the free slots in this node will be cleared.
     rbtree_delete(slab->reclaim.free_node_tree,req->node->id,NULL);

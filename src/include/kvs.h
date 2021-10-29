@@ -38,6 +38,9 @@ void kv_get_with_sid_async(uint64_t sid, kv_cb cb_fn, void* ctx);
 // The whole item shall be filled
 void kv_put_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
+//The interface for benchmark
+void kv_populate_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
+
 // The key field of item shall be filled
 void kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 

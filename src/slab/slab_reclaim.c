@@ -33,6 +33,7 @@ struct reclaim_node* slab_reclaim_alloc_one_node(struct slab* slab,uint32_t node
         desc->nb_free_slots  = slab->reclaim.nb_slots_per_chunk;
         desc->slab           = slab;
         desc->nb_pendings    = 0;
+        desc->dma_buf        = NULL;
         desc->bitmap[0].length = slab->reclaim.nb_slots_per_chunk;
         node->desc_array[i]  = desc;
     }
