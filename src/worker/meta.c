@@ -145,6 +145,7 @@ _meta_stat_report(void*ctx){
 struct slab_slide_buffer{
     uint8_t* dma_buf;
     struct slab* slab;
+    uint32_t shard_id;
     uint64_t cur_slot;
 
     int busy;
@@ -338,7 +339,7 @@ static void _buf_sync_cb(void*ctx, int kverrno){
     struct slab_slide_buffer* buf = ctx;
     g_pctx.pending_sync--;
 
-    printf("syncing slab:%u, slots:%lu complete\n",buf->slab->slab_size,buf->cur_slot);
+    printf("syncing shard:%u,slab:%u, slots:%lu complete\n",buf->shard_id,buf->slab->slab_size,buf->cur_slot);
 
     if(!g_pctx.pending_sync){
         g_pctx.sync_state = 3;
@@ -393,7 +394,7 @@ static void _process_db_sync(void){
     if(g_pctx.sync_state==3){
         //sync complete
         g_pctx.sync_req->user_cb(g_pctx.sync_req->user_ctx,NULL,0);
-        printf("requested:%lu, processed:%lu\n",g_pctx.nb_requested,g_pctx.nb_processed);
+        printf("total requested:%lu, processed:%lu\n",g_pctx.nb_requested,g_pctx.nb_processed);
         g_pctx.sync_state=4;
         return 0;
     }
@@ -513,6 +514,7 @@ struct meta_worker_context* meta_worker_alloc(struct meta_init_opts *opts){
         g_pctx.buf[i].slab = slab;
         g_pctx.buf[i].dma_buf = spdk_dma_zmalloc(chunk_size,0x1000,NULL);
         g_pctx.buf[i].busy = 0;
+        g_pctx.buf[i].shard_id = shard_id;
     }
 
     return meta;

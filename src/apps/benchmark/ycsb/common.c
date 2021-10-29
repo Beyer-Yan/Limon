@@ -164,6 +164,7 @@ void repopulate_db(struct workload *w) {
    uint64_t nb_inserts = w->nb_items_in_db;
    uint64_t *pos = NULL;
 
+   printf("Adding identification key for the db\n");
    _add_db_flag(w);
 
    printf("Initializing big array to insert elements in random order to make the benchmark fair vs other systems)\n");
@@ -254,7 +255,7 @@ static int _prepare_run_workload(struct workload *w){
 
    if(nb_items == 0 || nb_items != w->nb_items_in_db+1) {
       //need reshuffling
-      printf("The database contains %lu elements but the benchmark is configured to use %lu. Please delete the DB first.\n", nb_items, w->nb_items_in_db);
+      printf("The database contains %lu elements but the benchmark is configured to use %lu. Please delete and repopulate the DB first.\n", nb_items, w->nb_items_in_db);
       exit(-1);
    }
 

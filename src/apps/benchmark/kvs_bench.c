@@ -18,7 +18,7 @@
 #include "ycsb/common.h"
 #include "ycsb/histogram.h"
 
-static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:T:Z"; 
+static const char *_g_kvs_getopt_string = "D:S:I:Q:C:N:T:P"; 
 
 static struct option _g_app_long_cmdline_options[] = {
 #define DEVNAME_OPT_IDX         'D'
@@ -60,8 +60,8 @@ static struct kvs_bench_opts _g_default_opts = {
 	.nb_workers = 1,
 	.nb_injectors = 2,
 	.queue_size = 16,
-	.caches = 1, /* 5GB */
-	.nb_items = 40000000,
+	.caches = 1, /* GB */
+	.nb_items = 100000000,
     .io_cyle_us = 0,
     .populate_db = 0
 };
@@ -193,8 +193,8 @@ _do_start_benchmark(void*ctx){
             //ycsb_f_uniform
             //ycsb_a_uniform,ycsb_e_uniform
             //ycsb_a_zipfian,
-            ycsb_a_uniform
-            //ycsb_c_uniform,
+            //ycsb_a_uniform
+            ycsb_c_uniform,
             //ycsb_c_zipfian,
             //ycsb_c_zipfian
             //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
