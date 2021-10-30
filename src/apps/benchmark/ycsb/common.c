@@ -52,7 +52,7 @@ struct kv_item* create_item_from_item(struct kv_item *item) {
    return new_item;
 }
 
-struct kv_item *create_workload_item(struct workload *w) {
+static struct kv_item *create_workload_item(struct workload *w) {
    const uint64_t key = (uint64_t)-10;
    const char *name = w->api->api_name(); // YCSB or PRODUCTION?
    uint32_t key_size = 8;
@@ -67,8 +67,6 @@ struct kv_item *create_workload_item(struct workload *w) {
 
    return item;
 }
-
-static volatile int g_finished = 0;
 
 /************************************************/
 
@@ -89,7 +87,7 @@ _repopulate_item_cb(void*ctx, struct kv_item*item, int kverrno){
    free(x);
 }
 
-void *repopulate_db_worker(void *pdata) {
+static void *_repopulate_db_worker(void *pdata) {
    struct rebuild_pdata *data = pdata;
 
    pin_me_on(data->id);
@@ -110,33 +108,25 @@ void *repopulate_db_worker(void *pdata) {
 
 static void
 _add_db_flag_complete(void*ctx, struct kv_item* item, int kverrno){
-   struct kv_item *workload_item = ctx;
+   volatile int* finished = ctx;
    if(kverrno){
-      printf("Error in put item:%lu, err:%d\n", *(uint64_t*)workload_item->data,kverrno);
+      printf("Error in add db flag, err:%d\n",kverrno);
       exit(-1);
    }
-   free(workload_item);
-   g_finished = 1;
-}
-
-static void
-_add_db_flag(struct workload *w){
-   struct kv_item *workload_item = create_workload_item(w);
-   g_finished = 0;
-   kv_put_async(workload_item,_add_db_flag_complete,workload_item);
-   while(!g_finished);
+   *finished = 1;
 }
 
 static void
 _repopulate_sync_data_cb(void*ctx, struct kv_item* item, int kverrno){
+   volatile int* finished = ctx;
    if(kverrno){
       printf("Failed to sync population\n");
       exit(-1);    
    }
-   g_finished = 1;
+   *finished = 1;
 }
 
-static void* compute_populate_stat(void* pdata){
+static void* _compute_populate_stat(void* pdata){
    struct rebuild_pdata *pdata_arr = pdata;
    int nb_threads = pdata_arr[0].w->nb_load_injectors;
    uint64_t total = pdata_arr[0].w->nb_items_in_db;
@@ -163,9 +153,14 @@ static void* compute_populate_stat(void* pdata){
 void repopulate_db(struct workload *w) {
    uint64_t nb_inserts = w->nb_items_in_db;
    uint64_t *pos = NULL;
+   volatile int finished = 0;
 
    printf("Adding identification key for the db\n");
-   _add_db_flag(w);
+
+   struct kv_item *workload_item = create_workload_item(w);
+   kv_put_async(workload_item,_add_db_flag_complete,(void*)&finished);
+   while(!finished);
+   free(workload_item);
 
    printf("Initializing big array to insert elements in random order to make the benchmark fair vs other systems)\n");
    pos = malloc(w->nb_items_in_db * sizeof(*pos));
@@ -189,11 +184,11 @@ void repopulate_db(struct workload *w) {
       pdata_arr[i].w = w;
       pdata_arr[i].pos = pos;
       pdata_arr[i].nb_inserted = 0;
-      pthread_create(&threads[i], NULL, repopulate_db_worker, &pdata_arr[i]);
+      pthread_create(&threads[i], NULL, _repopulate_db_worker, &pdata_arr[i]);
    }
 
    pthread_t stats_thread;
-   pthread_create(&stats_thread, NULL, compute_populate_stat, pdata_arr);
+   pthread_create(&stats_thread, NULL, _compute_populate_stat, pdata_arr);
 
    //wait the finishing of db repopulating.
    for(int i = 0; i < w->nb_load_injectors; i++){
@@ -203,10 +198,10 @@ void repopulate_db(struct workload *w) {
    pthread_cancel(stats_thread);
    pthread_join(stats_thread, NULL);
 
-   g_finished = 0;
+   finished = 0;
 
-   kv_populate_async(NULL,_repopulate_sync_data_cb,NULL);
-   while(!g_finished);
+   kv_populate_async(NULL,_repopulate_sync_data_cb,(void*)&finished);
+   while(!finished);
    printf("Populating database completes\n");
 
    free(threads);
@@ -221,6 +216,7 @@ _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *workload_item = ctx;
    if(kverrno==-KV_EITEM_NOT_EXIST){
       printf("Couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
+      exit(-1);
    }
    if(!kverrno){
       if(memcmp(workload_item->data + 8, item->data + 8, workload_item->meta.vsize)){
@@ -228,32 +224,28 @@ _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
          exit(-1);
       }
    }
-   free(workload_item);
-   g_finished = 1;
-}
-
-static void
-_check_db(struct workload *w){
-   struct kv_item *workload_item = create_workload_item(w);
-   g_finished = 0;
-   kv_get_async(workload_item,_check_db_complete,workload_item);
-   while(!g_finished);
+   workload_item->meta.ksize = 0;
 }
 
 static int _prepare_run_workload(struct workload *w){
    uint64_t nb_items = kvs_get_nb_items();
    uint64_t nb_inserts = ( nb_items > w->nb_items_in_db)?0:(w->nb_items_in_db - nb_items);
+   volatile int finished = 0;
 
    if(nb_inserts != w->nb_items_in_db) { 
       // Database at least partially populated
       // Check that the items correspond to the workload
-      _check_db(w);
+      struct kv_item *workload_item = create_workload_item(w);
+      kv_get_async(workload_item,_check_db_complete,workload_item);
+      while(!workload_item->meta.ksize);
+
+      free(workload_item);
    }
 
    //Tell the worker the db has been populated
-   g_finished = 0;
-   kv_populate_async(NULL,_repopulate_sync_data_cb,NULL);
-   while(!g_finished);
+   finished = 0;
+   kv_populate_async(NULL,_repopulate_sync_data_cb,(void*)&finished);
+   while(!finished);
 
    if(nb_inserts == 0) {
       return 0;
@@ -290,7 +282,7 @@ struct workload_api *get_api(bench_t b) {
 }
 
 static pthread_barrier_t barrier;
-void* do_workload_thread(void *pdata) {
+static void* _do_workload_thread(void *pdata) {
    struct thread_data *data = pdata;
 
    init_seed();
@@ -302,7 +294,7 @@ void* do_workload_thread(void *pdata) {
    return NULL;
 }
 
-static void* compute_stat(void* pdata){
+static void* _compute_stat(void* pdata){
    struct thread_data *thread_data = pdata;
    const char* w_name = thread_data[0].workload->api->name(thread_data[0].benchmark);
    int nb_threads = thread_data[0].workload->nb_load_injectors;
@@ -349,11 +341,11 @@ void run_workload(struct workload *w, bench_t b) {
       pdata[i].nb_requests = w->nb_requests_per_thread;
       pdata[i].nb_injected = 0;
 
-      pthread_create(&threads[i], NULL, do_workload_thread, &pdata[i]);
+      pthread_create(&threads[i], NULL, _do_workload_thread, &pdata[i]);
    }
 
    pthread_t stats_thread;
-   pthread_create(&stats_thread, NULL, compute_stat, pdata);
+   pthread_create(&stats_thread, NULL, _compute_stat, pdata);
    
    for(int i = 0; i < w->nb_load_injectors; i++){
       pthread_join(threads[i], NULL);

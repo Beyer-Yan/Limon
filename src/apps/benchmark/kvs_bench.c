@@ -194,8 +194,8 @@ _do_start_benchmark(void*ctx){
             //ycsb_a_uniform,ycsb_e_uniform
             //ycsb_a_zipfian,
             //ycsb_a_uniform
-            //ycsb_c_uniform,
-            ycsb_e_uniform
+            ycsb_c_uniform,
+            //ycsb_e_uniform
             //ycsb_c_zipfian,
             //ycsb_c_zipfian
             //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
@@ -234,8 +234,8 @@ _do_start_benchmark(void*ctx){
         printf("All workloads complete, ctrl+c to stop the program\n");
     }
 
-    //wait 5 second for left requests.
-    sleep(5);
+    //wait 2 second for left requests.
+    sleep(2);
     kvs_shutdown();
 	return NULL;
 }
@@ -251,7 +251,7 @@ _kvs_bench_start(void*ctx,int kverrno){
 	//Create a thread to prevent blobcking the master core.
 	pthread_t *thread = malloc(sizeof(pthread_t));
 	assert(thread!=NULL);
-	pthread_create(thread,NULL,_do_start_benchmark,thread);
+	pthread_create(thread,NULL,_do_start_benchmark,NULL);
     //pthread_join(thread,NULL);
 }
 
