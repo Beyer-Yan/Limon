@@ -340,10 +340,19 @@ static void _buf_sync_cb(void*ctx, int kverrno){
     g_pctx.pending_sync--;
 
     printf("syncing shard:%u,slab:%u, slots:%lu complete\n",buf->shard_id,buf->slab->slab_size,buf->cur_slot);
+}
 
-    if(!g_pctx.pending_sync){
-        g_pctx.sync_state = 3;
-    }
+static void _reclaim_populate_context(){
+    assert(g_pctx.sync_state==4);
+
+    printf("Reclaiming populatition context, total requested:%lu, processed:%lu\n",g_pctx.nb_requested,g_pctx.nb_processed);
+
+    for(uint32_t i=0;i<g_pctx.nb_bufs;i++){
+        assert(!g_pctx.buf[i].busy);
+        spdk_dma_free(g_pctx.buf[i].dma_buf);
+    }  
+    free(g_pctx.buf);
+    free(g_pctx.sync_req);
 }
 
 static void _process_db_sync(void){
@@ -385,8 +394,8 @@ static void _process_db_sync(void){
         return 0;
     }
 
-
-    if(g_pctx.sync_state == 2){
+    if(g_pctx.sync_state == 2 && !g_pctx.pending_sync){
+        g_pctx.sync_state = 3;
         //Wait the completion of db sync
         return 0;
     }
@@ -394,8 +403,8 @@ static void _process_db_sync(void){
     if(g_pctx.sync_state==3){
         //sync complete
         g_pctx.sync_req->user_cb(g_pctx.sync_req->user_ctx,NULL,0);
-        printf("total requested:%lu, processed:%lu\n",g_pctx.nb_requested,g_pctx.nb_processed);
         g_pctx.sync_state=4;
+        _reclaim_populate_context();
         return 0;
     }
 }
@@ -531,8 +540,14 @@ void meta_worker_start(struct meta_worker_context* meta){
 void meta_worker_destroy(struct meta_worker_context* meta){
     assert(meta);
     assert(meta->meta_thread);
+
+    spdk_poller_unregister(meta->populate_poller);
+    spdk_poller_unregister(meta->stat_poller);
+    spdk_bs_free_io_channel(meta->channel);
+
     spdk_thread_exit(meta->meta_thread);
     spdk_thread_destroy(meta->meta_thread);
+    spdk_ring_free(meta->populate_ring);
 
     free(meta);
 }

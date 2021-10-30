@@ -68,7 +68,7 @@ struct kv_item *create_workload_item(struct workload *w) {
    return item;
 }
 
-static volatile int finished = 0;
+static volatile int g_finished = 0;
 
 /************************************************/
 
@@ -116,15 +116,15 @@ _add_db_flag_complete(void*ctx, struct kv_item* item, int kverrno){
       exit(-1);
    }
    free(workload_item);
-   finished = 1;
+   g_finished = 1;
 }
 
 static void
 _add_db_flag(struct workload *w){
    struct kv_item *workload_item = create_workload_item(w);
-   finished = 0;
+   g_finished = 0;
    kv_put_async(workload_item,_add_db_flag_complete,workload_item);
-   while(!finished);
+   while(!g_finished);
 }
 
 static void
@@ -133,7 +133,7 @@ _repopulate_sync_data_cb(void*ctx, struct kv_item* item, int kverrno){
       printf("Failed to sync population\n");
       exit(-1);    
    }
-   finished = 1;
+   g_finished = 1;
 }
 
 static void* compute_populate_stat(void* pdata){
@@ -201,11 +201,12 @@ void repopulate_db(struct workload *w) {
    }
 
    pthread_cancel(stats_thread);
+   pthread_join(stats_thread, NULL);
 
-   finished = 0;
+   g_finished = 0;
 
    kv_populate_async(NULL,_repopulate_sync_data_cb,NULL);
-   while(!finished);
+   while(!g_finished);
    printf("Populating database completes\n");
 
    free(threads);
@@ -228,15 +229,15 @@ _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
       }
    }
    free(workload_item);
-   finished = 1;
+   g_finished = 1;
 }
 
 static void
 _check_db(struct workload *w){
    struct kv_item *workload_item = create_workload_item(w);
-   finished = 0;
+   g_finished = 0;
    kv_get_async(workload_item,_check_db_complete,workload_item);
-   while(!finished);
+   while(!g_finished);
 }
 
 static int _prepare_run_workload(struct workload *w){
@@ -248,6 +249,11 @@ static int _prepare_run_workload(struct workload *w){
       // Check that the items correspond to the workload
       _check_db(w);
    }
+
+   //Tell the worker the db has been populated
+   g_finished = 0;
+   kv_populate_async(NULL,_repopulate_sync_data_cb,NULL);
+   while(!g_finished);
 
    if(nb_inserts == 0) {
       return 0;
@@ -354,6 +360,7 @@ void run_workload(struct workload *w, bench_t b) {
    }
 
    pthread_cancel(stats_thread);
+   pthread_join(stats_thread, NULL);
       
    free(threads);
    free(pdata);

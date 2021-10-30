@@ -21,6 +21,8 @@ _kvs_shutdown_bs_unload_complete(void*ctx ,int bserrno){
     }
     free(g_kvs);
     g_kvs = NULL;
+
+    meta_worker_destroy(g_kvs->meta_worker);
     spdk_app_stop(0);
 }
 
@@ -47,8 +49,7 @@ _kvs_shutdown_super_blob_close_complete(void*ctx, int bserrno){
         }
     }
 
-    //All reclaim  node have been released.
-    spdk_put_io_channel(g_kvs->meta_channel);
+    //All reclaim node have been released.
     spdk_bs_unload(g_kvs->bs_target,_kvs_shutdown_bs_unload_complete,NULL);
 }
 
@@ -105,5 +106,4 @@ kvs_shutdown(void){
     _kvs_shutdown_worker();
 
     _kvs_start_close_all_blobs();
-    meta_worker_destroy(g_kvs->meta_worker);
 }

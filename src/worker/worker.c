@@ -561,41 +561,33 @@ bool worker_is_ready(struct worker_context* wctx){
 }
 
 static void
-_do_worker_destroy_check_pollers(void*ctx){
-    struct worker_context* wctx = ctx;
-    if(spdk_thread_has_active_pollers(wctx->thread)){
-        SPDK_ERRLOG("Error in bdev poller unregister\n");
-    }
-    else{
-        spdk_thread_exit(wctx->thread);
-        //spdk_thread_destroy(wctx->thread);
-
-        //Free all the memory
-        spdk_ring_free(wctx->req_ring);
-        pool_destroy(wctx->kv_request_internal_pool);
-        conflict_destroy(wctx->add_conflicts);
-        mtable_destroy(wctx->mtable);
-
-        _pmgr_destroy(wctx->pmgr);
-        _rmgr_destroy(wctx->rmgr);
-        _imgr_destroy(wctx->imgr);
-
-        //Release the worker context memory.
-        SPDK_NOTICELOG("Worker has been destroyed,w:%d\n",wctx->core_id);
-        free(wctx);
-    }
-}
-
-static void
 _do_worker_destroy(void*ctx){
     struct worker_context* wctx = ctx;
+
+    spdk_bs_free_io_channel(wctx->imgr->channel);
+    
     //Release all the poller.
     spdk_poller_unregister(&wctx->request_poller);
     spdk_poller_unregister(&wctx->io_poller);
     spdk_poller_unregister(&wctx->slab_evaluation_poller);
 
-    spdk_put_io_channel(wctx->imgr->channel);
-    spdk_thread_send_msg(wctx->thread,_do_worker_destroy_check_pollers,wctx);
+    //Free all the memory
+    spdk_ring_free(wctx->req_ring);
+    pool_destroy(wctx->kv_request_internal_pool);
+    conflict_destroy(wctx->add_conflicts);
+    mtable_destroy(wctx->mtable);
+
+    _pmgr_destroy(wctx->pmgr);
+    _rmgr_destroy(wctx->rmgr);
+    _imgr_destroy(wctx->imgr);
+
+    spdk_thread_exit(wctx->thread);
+    spdk_thread_destroy(wctx->thread);
+
+    //Release the worker context memory.
+    free(wctx);
+
+    SPDK_NOTICELOG("Worker has been destroyed,w:%d\n",wctx->core_id);
 }
 
 void worker_destroy(struct worker_context* wctx){
