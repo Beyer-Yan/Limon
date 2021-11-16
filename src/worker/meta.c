@@ -353,6 +353,7 @@ static void _reclaim_populate_context(){
     }  
     free(g_pctx.buf);
     free(g_pctx.sync_req);
+    spdk_poller_unregister(g_pctx.meta->populate_poller);
 }
 
 static void _process_db_sync(void){
@@ -519,7 +520,7 @@ struct meta_worker_context* meta_worker_alloc(struct meta_init_opts *opts){
         uint32_t slab_id = i%nb_slabs_per_shard;
 
         struct slab* slab = &opts->shards[shard_id].slab_set[slab_id];
-        g_pctx.buf[i].cur_slot = 0;
+        g_pctx.buf[i].cur_slot = 0; // slot 0 is reserved
         g_pctx.buf[i].slab = slab;
         g_pctx.buf[i].dma_buf = spdk_dma_zmalloc(chunk_size,0x1000,NULL);
         g_pctx.buf[i].busy = 0;
@@ -541,7 +542,7 @@ void meta_worker_destroy(struct meta_worker_context* meta){
     assert(meta);
     assert(meta->meta_thread);
 
-    spdk_poller_unregister(meta->populate_poller);
+    //spdk_poller_unregister(meta->populate_poller);
     spdk_poller_unregister(meta->stat_poller);
     spdk_bs_free_io_channel(meta->channel);
 

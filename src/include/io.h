@@ -82,6 +82,11 @@ struct iomgr{
 
     struct object_cache_pool *cache_io_pool;
     struct object_cache_pool *page_io_pool;
+
+    //for stats;
+    uint64_t page_reads[100];
+    uint64_t page_writes[100];
+
 };
 
 static inline uint64_t 

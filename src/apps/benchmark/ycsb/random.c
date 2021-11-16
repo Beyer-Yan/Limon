@@ -142,27 +142,7 @@ long bogus_rand(void) {
    return rand_r(&seed) % 1000;
 }
 
-/* production workload randomness */
-long production_random1(void) {
-   long rand_key = rand_r(&seed);
-   long prob = rand_r(&seed) % 10000;
-   if (prob <13) {
-      rand_key = 0 + rand_key % 144000000;
-   } else if (prob < 8130) {
-      rand_key = 144000000 + rand_key % (314400000-144000000);
-   } else if (prob < 9444) {
-      rand_key = 314400000 + rand_key % (450000000-314400000);
-   } else if (prob < 9742) {
-      rand_key = 450000000 + rand_key % (480000000-450000000);
-   } else if (prob < 9920) {
-      rand_key = 480000000 + rand_key % (490000000-480000000);
-   } else {
-      rand_key = 490000000 + rand_key % (500000000-490000000);
-   }
-   return rand_key;
-}
-
-long production_random2(void) {
+long udb_random(void) {
    long rand_key = rand_r(&seed);
    long prob = rand_r(&seed) % 10000;
    if (prob < 103487) {
@@ -189,12 +169,6 @@ const char *get_function_name(random_gen_t f) {
       return "Zipf";
    if(f == uniform_next)
       return "Uniform";
-   if(f == bogus_rand)
-      return "Cached";
-   if(f == production_random1)
-      return "Production1";
-   if(f == production_random2)
-      return "Production2";
    return "Unknown random";
 }
 

@@ -52,7 +52,7 @@ static struct kvs_create_opts _g_default_opts = {
     .nb_init_nodes_per_slab = 16,
     .force_format = false,
     .dump_only = false,
-    .devname = "Nvme0n1"
+    .devname = "Nvme2n1"
 };
 
 struct kvs_format_ctx{

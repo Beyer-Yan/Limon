@@ -35,7 +35,7 @@ static uint64_t htonll(uint64_t val){
 struct kv_item *create_unique_item(uint64_t item_size, uint64_t uid) {
    struct kv_item *item = malloc(item_size + sizeof(struct item_meta));
    item->meta.ksize = 8;
-   item->meta.vsize = item_size - sizeof(struct item_meta) - 8;
+   item->meta.vsize = item_size - 8;
 
    //make keys bytes sequence comparable.
    *(uint64_t*)(item->data) = htonll(uid);
@@ -54,7 +54,7 @@ struct kv_item* create_item_from_item(struct kv_item *item) {
 
 static struct kv_item *create_workload_item(struct workload *w) {
    const uint64_t key = (uint64_t)-10;
-   const char *name = w->api->api_name(); // YCSB or PRODUCTION?
+   const char *name = w->api->api_name();
    uint32_t key_size = 8;
    uint32_t value_size = strlen(name) + 1;
 
@@ -158,7 +158,7 @@ void repopulate_db(struct workload *w) {
    printf("Adding identification key for the db\n");
 
    struct kv_item *workload_item = create_workload_item(w);
-   kv_put_async(workload_item,_add_db_flag_complete,(void*)&finished);
+   kv_populate_async(workload_item,_add_db_flag_complete,&finished);
    while(!finished);
    free(workload_item);
 
@@ -215,7 +215,7 @@ static void
 _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *workload_item = ctx;
    if(kverrno==-KV_EITEM_NOT_EXIST){
-      printf("Couldn't determine if items in the DB correspond to the benchmark --- please wipe DB before benching!\n");
+      printf("Couldn't determine if workload corresponds to the benchmark --- please wipe DB before benching!\n");
       exit(-1);
    }
    if(!kverrno){
@@ -275,8 +275,11 @@ struct thread_data {
 struct workload_api *get_api(bench_t b) {
    if(YCSB.handles(b))
       return &YCSB;
-   if(PRODUCTION.handles(b))
-      return &PRODUCTION;
+   if(UDB.handles(b))
+      return &UDB;
+   if(ETC.handles(b))
+      return &ETC;
+
    printf("Unknown workload for benchmark!\n");
    exit(-1);
 }

@@ -99,10 +99,35 @@ _kvs_shutdown_worker(void){
     }
 }
 
+static void print_io_stats(){
+    uint64_t page_reads[100] = {0};
+    uint64_t page_writes[100] = {0};
+
+    for(int i=0;i<100;i++){
+        for(int j=0;j<g_kvs->nb_workers;j++){
+            page_reads[i] +=g_kvs->workers[j]->imgr->page_reads[i];
+            page_writes[i] +=g_kvs->workers[j]->imgr->page_writes[i];
+        }
+    }
+
+    printf("page reads distribution-------\n");
+    for(int i=0;i<10;i++){
+        printf("page %i -> %lu\n",i,page_reads[i]);
+    }
+    printf("\n");
+
+    printf("page writes distribution-------\n");
+    for(int i=0;i<10;i++){
+        printf("page %i -> %lu\n",i,page_writes[i]);
+    }
+    printf("\n");
+}
+
 void
 kvs_shutdown(void){
     //Close all the slab blob, and unload the blobstore.
     SPDK_NOTICELOG("Shutdowning kvs:%s\n",g_kvs->kvs_name);
+    print_io_stats();
     _kvs_shutdown_worker();
 
     _kvs_start_close_all_blobs();

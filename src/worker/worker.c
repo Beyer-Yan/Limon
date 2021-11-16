@@ -129,6 +129,7 @@ _worker_poll_business(struct worker_context *wctx){
         for(;i<process_size;i++){
             req_internal = pool_get(wctx->kv_request_internal_pool);
             assert(req_internal!=NULL);
+            memset(req_internal,0,sizeof(*req_internal));
 
             req_internal->shard = req_array[i]->shard;
             req_internal->item = req_array[i]->item;
@@ -310,7 +311,7 @@ static struct pagechunk_mgr*
 _alloc_pmgr_context(struct worker_init_opts* opts){
     uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;  
 
-    struct pagechunk_mgr* pmgr = malloc(sizeof(*pmgr));
+    struct pagechunk_mgr* pmgr = calloc(1,sizeof(*pmgr));
     assert(pmgr);
 
     TAILQ_INIT(&pmgr->pages_head);
@@ -364,7 +365,7 @@ static struct reclaim_mgr*
 _alloc_rmgr_context(struct worker_init_opts* opts){
     uint32_t nb_max_slab_reclaim = opts->nb_reclaim_shards*opts->shard[0].nb_slabs;
 
-    struct reclaim_mgr* rmgr = malloc(sizeof(struct reclaim_mgr));
+    struct reclaim_mgr* rmgr = calloc(1,sizeof(struct reclaim_mgr));
     assert(rmgr);
 
     rmgr->migrating_batch = opts->reclaim_batch_size;
@@ -388,7 +389,7 @@ static struct iomgr*
 _alloc_imgr_context(struct worker_init_opts* opts){
     uint64_t nb_max_reqs = opts->max_request_queue_size_per_worker;
 
-    struct iomgr* imgr = malloc(sizeof(struct iomgr));
+    struct iomgr* imgr = calloc(1,sizeof(struct iomgr));
     assert(imgr);
 
     imgr->meta_thread = opts->meta_thread;
@@ -424,7 +425,7 @@ _alloc_imgr_context(struct worker_init_opts* opts){
 struct worker_context* 
 worker_alloc(struct worker_init_opts* opts)
 {
-    struct worker_context *wctx = malloc(sizeof(*wctx));
+    struct worker_context *wctx = calloc(1,sizeof(*wctx));
     assert(wctx!=NULL);
 
     uint32_t nb_max_reqs = opts->max_request_queue_size_per_worker;

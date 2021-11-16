@@ -7,8 +7,20 @@
 #include "kvs.h"
 #include "histogram.h"
 
+static long udb_next(void) {
+   long rand_key = 0;;
+   long prob = uniform_next() % 100;
+   if (prob < 95) {
+      rand_key = 0 + zipf_next() % 182400000;
+   } else {
+      rand_key = 182400000 +  rand_key% (192000000-182400000);
+   }
+   return rand_key;
+}
+
+
 // Create a new item for the database
-static struct kv_item *create_unique_item_prod(uint64_t uid, uint64_t max_uid) {
+static struct kv_item *create_unique_item_udb(uint64_t uid, uint64_t max_uid) {
    uint64_t item_size;
    if(uid*100LU/max_uid < 1) // 1%
       item_size = 100;
@@ -32,7 +44,7 @@ _update_stat(struct kv_item* item){
 }
 
 static void
-_prod_get_complete(void*ctx, struct kv_item* item, int kverrno){
+_udb_get_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *ori_item = ctx;
    if(kverrno){
       printf("Get error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
@@ -42,7 +54,7 @@ _prod_get_complete(void*ctx, struct kv_item* item, int kverrno){
 }
 
 static void
-_prod_put_complete(void*ctx, struct kv_item* item, int kverrno){
+_udb_put_complete(void*ctx, struct kv_item* item, int kverrno){
    struct kv_item *ori_item = ctx;
    if(kverrno){
       printf("Put error, item key:%lu, err:%d\n",*(uint64_t*)ori_item->data, kverrno);
@@ -52,75 +64,64 @@ _prod_put_complete(void*ctx, struct kv_item* item, int kverrno){
 }
 
 static void
-_prod_scan_get_complete(void*ctx, struct kv_item* item, int kverrno){
+_udb_scan_get_complete(void*ctx, struct kv_item* item, int kverrno){
    uint64_t sid = (uint64_t)ctx;
    if(kverrno){
       printf("Scan get error %d for sid:%lu\n",kverrno,sid);
    }
 }
 
-static void launch_prod(struct workload *w, bench_t b,uint64_t* processed, int id) {
-   declare_periodic_count;
-   random_gen_t rand_next = (b==prod1)?(production_random1):(production_random2);
+static void launch_udb(struct workload *w, bench_t b,uint64_t* processed, int id) {
    uint64_t nb_requests = w->nb_requests_per_thread;
 
    for(uint64_t i = 0; i < nb_requests; i++) {
-      struct kv_item* item = create_unique_item_prod(rand_next(), w->nb_items_in_db);
+      struct kv_item* item = create_unique_item_udb(udb_next(), w->nb_items_in_db);
 
       // 58% write 40% read 2% scan
       long random = uniform_next() % 100;
       if(random < 58) {
-         kv_put_async(item,_prod_put_complete,item);
+         kv_put_async(item,_udb_put_complete,item);
       } else if(random < 98) {
-         kv_get_async(item,_prod_get_complete,item);
+         kv_get_async(item,_udb_get_complete,item);
       } else {
-
-         struct kv_item* item = create_unique_item_prod(rand_next(),w->nb_items_in_db);
          uint32_t scan_length = uniform_next()%99+1;
          uint64_t sid_array[scan_length];
          uint64_t found = kv_scan(item,scan_length,sid_array);
          
          if(found){
             for(uint64_t i=0;i<found;i++){
-               kv_get_with_sid_async(sid_array[i],_prod_scan_get_complete,NULL);
+               kv_get_with_sid_async(sid_array[i],_udb_scan_get_complete,NULL);
             }
          }
          free(item);
       }
-      periodic_count(1000, "Production Load Injector:%02d, (%lu%%)", id ,i*100UL/nb_requests);
+      *processed = i;
    }
 }
 
 /* Pretty printing */
-static const char *name_prod(bench_t w) {
-   switch(w) {
-      case prod1:
-         return "Production 1";
-      case ycsb_b_uniform:
-         return "Production 2";
-      default:
-         return "??";
+static const char *name_udb(bench_t w) {
+   if(w==udb){
+      return "UDB workload";
    }
+   return "??";
 }
 
-static int handles_prod(bench_t w) {
-   switch(w) {
-      case prod1:
-      case prod2:
-         return 1;
-      default:
-         return 0;
+static int handles_udb(bench_t w) {
+   if(w==udb){
+      return 1;
    }
+   return 0;
 }
 
-static const char* api_name_prod(void) {
-   return "PRODUCTION";
+static const char* api_name_udb(void) {
+   return "UDB";
 }
 
-struct workload_api PRODUCTION = {
-   .handles = handles_prod,
-   .launch = launch_prod,
-   .name = name_prod,
-   .api_name = api_name_prod,
-   .create_unique_item = create_unique_item_prod,
+struct workload_api UDB = {
+   .handles = handles_udb,
+   .launch = launch_udb,
+   .name = name_udb,
+   .api_name = api_name_udb,
+   .create_unique_item = create_unique_item_udb,
 };

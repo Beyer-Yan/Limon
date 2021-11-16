@@ -77,6 +77,9 @@ _process_put_outplace_store_data_cb(void*ctx, int kverrno){
     //Update sucess
     req->cb_fn(req->ctx, NULL, -KV_ESUCCESS);
 
+    uint64_t old_slot = entry->slot_idx;
+    uint64_t old_slab = pctx->slab;
+
     entry->slot_idx = pctx->new_entry.slot_idx;
     entry->slab = pctx->new_entry.slab;
     entry->putting = 0;
@@ -84,7 +87,7 @@ _process_put_outplace_store_data_cb(void*ctx, int kverrno){
     pagechunk_mem_lower(wctx->pmgr,pctx->new_desc);  
 
     //Free old slot.
-    slab_free_slot(wctx->rmgr,pctx->slab,entry->slot_idx);
+    slab_free_slot(wctx->rmgr,old_slab,old_slot);
     pool_release(wctx->kv_request_internal_pool,req);
     return;
 
@@ -192,7 +195,7 @@ _process_put_outplace(struct kv_request_internal *req, bool slab_changed){
         slab = pctx->new_slab;
     }
     else{
-        //It is just a out-of-place, we alloocate new slot from the same slab.
+        //It is just an out-of-place, we allocate new slot from the same slab.
         pctx->new_entry.raw = 0;
         pctx->new_entry.slab = pctx->entry->slab;
         pctx->new_entry.shard = pctx->entry->shard;

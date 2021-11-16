@@ -8,7 +8,7 @@
 #include "histogram.h"
 
 static struct kv_item* _create_unique_item_ycsb(uint64_t uid) {
-   size_t item_size = 1024;
+   size_t item_size = 1000;
    return create_unique_item(item_size, uid);
 }
 

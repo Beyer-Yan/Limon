@@ -18,8 +18,8 @@ typedef enum available_bench {
    ycsb_d_zipfian,
    ycsb_e_zipfian,
    ycsb_f_zipfian,
-   prod1,
-   prod2,
+   udb,
+   etc,
 } bench_t;
 
 struct workload {
@@ -51,7 +51,8 @@ struct workload_api {
    struct kv_item* (*create_unique_item)(uint64_t uid, uint64_t max_uid); 
 };
 extern struct workload_api YCSB;
-extern struct workload_api PRODUCTION;
+extern struct workload_api UDB;
+extern struct workload_api ETC;
 
 
 void repopulate_db(struct workload *w);

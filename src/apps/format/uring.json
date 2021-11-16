@@ -6,8 +6,8 @@
           {
             "method": "bdev_uring_create",
             "params": {
-                "name": "Nvme0n1",
-                "filename": "/dev/loop19"
+                "name": "Nvme2",
+                "filename": "/dev/nvme2n1"
             }
           }
         ]

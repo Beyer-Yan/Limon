@@ -55,8 +55,8 @@ struct kvs_bench_opts{
 };
 
 static struct kvs_bench_opts _g_default_opts = {
-	.devname = "Nvme0n1",
-	.bench_name = "kvs_ycsb",
+	.devname = "Nvme2n1",
+	.bench_name = "Limon",
 	.nb_workers = 1,
 	.nb_injectors = 2,
 	.queue_size = 16,
@@ -173,7 +173,7 @@ static void*
 _do_start_benchmark(void*ctx){
 
 	struct workload w = {
-		.api = &YCSB,
+		.api = &ETC,
 		.nb_items_in_db = _g_default_opts.nb_items,
 		.nb_load_injectors = _g_default_opts.nb_injectors,
 		.start_core = 20,
@@ -190,11 +190,12 @@ _do_start_benchmark(void*ctx){
     else{
         /* Launch benchs */
         bench_t workloads[] = {
+            etc
             //ycsb_f_uniform
             //ycsb_a_uniform,ycsb_e_uniform
             //ycsb_a_zipfian,
             //ycsb_a_uniform
-            ycsb_c_uniform,
+            //ycsb_c_uniform,
             //ycsb_e_uniform
             //ycsb_c_zipfian,
             //ycsb_c_zipfian
@@ -221,7 +222,7 @@ _do_start_benchmark(void*ctx){
                 //requests for YCSB E are longer (scans) so we do less
                 w.nb_requests = 3600000LU; 
             } else {
-                w.nb_requests = 130000000LU;
+                w.nb_requests = 53000000LU;
             }
             histogram_reset();
             uint64_t start = spdk_get_ticks();

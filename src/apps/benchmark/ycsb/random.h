@@ -22,11 +22,5 @@ long bogus_rand(void);
 // get the latest one according "write(1)" or "read(0)"
 long latest_next(int write);
 
-// production workload simulator
-long production_random1(void); 
-
-// production workload simulator
-long production_random2(void); 
-
 const char *get_function_name(random_gen_t f);
 #endif

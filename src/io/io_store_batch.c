@@ -8,9 +8,14 @@
 #include "spdk/thread.h"
 #include "spdk/log.h"
 
-static inline void _write_pages(struct spdk_blob *blob,uint64_t io_unit_size, struct spdk_io_channel *channel,
+static inline void _write_pages(struct iomgr* imgr, struct spdk_blob* blob,
 		       void *payload, uint64_t offset, uint64_t length,
 		       spdk_blob_op_complete cb_fn, void *cb_arg){
+
+    uint64_t io_unit_size = imgr->io_unit_size;
+    struct spdk_io_channel *channel = imgr->channel;
+
+    imgr->page_writes[length]++;
 
     uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
     uint64_t io_unit_offset = offset*io_unit_per_page;
@@ -52,7 +57,7 @@ static void
 _store_pages_phase2(struct page_io *pio){
     pio->imgr->nb_pending_io++;
     //SPDK_NOTICELOG("\tStoring pages2, buf:%p, off:%lu,nb_pages:%lu\n",pio->buf,pio->start_page,pio->len);
-    _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
+    _write_pages(pio->imgr,pio->blob,
                  pio->buf,pio->start_page,pio->len,
                  _store_pages_complete_cb,pio);
 }
@@ -94,7 +99,10 @@ iomgr_store_pages_async(struct iomgr* imgr,
     cio->buf = buf;
     cio->nb_pages = nb_pages;
     cio->cnt=0;
-    cio->nb_segments = nb_pages>1 ? 2 : 1;
+    //SSDs often have 4096 byte blocks, but claim to have 512 byte blocks for compatibility
+    //@wanring Ensure the page size is 512
+    assert(KVS_PAGE_SIZE==512);
+    cio->nb_segments = nb_pages>8 ? 2 : 1;
     cio->blob = blob;
     cio->key = _make_cache_key(key_prefix,nb_pages);
 
@@ -138,7 +146,7 @@ int iomgr_io_write_poll(struct iomgr* imgr){
         pio1->io_link = NULL;
         pio1->buf = cio->buf;
         pio1->start_page = cio->start_page;
-        pio1->len = cio->nb_segments==1 ? 1 : cio->nb_pages - 1;
+        pio1->len = cio->nb_segments==1 ? cio->nb_pages : cio->nb_pages - 1;
         pio1->blob = cio->blob;
 
         if(cio->nb_segments==2){
@@ -167,7 +175,7 @@ int iomgr_io_write_poll(struct iomgr* imgr){
         events++;
         imgr->nb_pending_io++;
         //SPDK_NOTICELOG("\tStoring pages1, buf:%p, off:%lu,nb_pages:%lu\n",pio->buf,pio->start_page,pio->len);
-        _write_pages(pio->blob,pio->imgr->io_unit_size,pio->imgr->channel,
+        _write_pages(pio->imgr,pio->blob,
                      pio->buf,pio->start_page,pio->len,
                      _store_pages_complete_cb,pio);
     }

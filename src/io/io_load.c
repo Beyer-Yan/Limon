@@ -7,9 +7,14 @@
 #include "spdk/thread.h"
 #include "spdk/log.h"
 
-static inline void _read_pages(struct spdk_blob *blob, uint64_t io_unit_size, struct spdk_io_channel *channel,
+static inline void _read_pages(struct iomgr* imgr, struct spdk_blob* blob,
 		       void *payload, uint64_t offset, uint64_t length,
 		       spdk_blob_op_complete cb_fn, void *cb_arg){
+    
+    uint64_t io_unit_size = imgr->io_unit_size;
+    struct spdk_io_channel *channel = imgr->channel;
+
+    imgr->page_reads[length]++;
 
     uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
     uint64_t io_unit_offset = offset*io_unit_per_page;
@@ -138,7 +143,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             //I need load page 2 to n-1
             cio->nb_segments++;
             imgr->nb_pending_io++;
-            _read_pages(blob,imgr->io_unit_size,imgr->channel,
+            _read_pages(imgr,blob,
                         buf+KVS_PAGE_SIZE,start_page+1,nb_pages-2,
                         _default_cache_io_complete_cb,cio);
         }
@@ -154,7 +159,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->read_hash.page_hash,page_n_key,pio_n);
 
         imgr->nb_pending_io++;
-        _read_pages(blob,imgr->io_unit_size,imgr->channel,
+        _read_pages(imgr,blob,
                     buf,start_page,nb_pages,
                     _default_page_io_complete_cb,pio_1);
     }
@@ -175,7 +180,7 @@ _load_pages_multipages(struct iomgr* imgr,struct spdk_blob* blob,
             _pio = pio_1;
         }
         imgr->nb_pending_io++;
-        _read_pages(blob,imgr->io_unit_size,imgr->channel,
+        _read_pages(imgr,blob,
                     buf,start_page,nb_pages-1,
                     _default_page_io_complete_cb,_pio);
     }
@@ -206,7 +211,7 @@ _load_pages_one_page(struct iomgr* imgr,struct spdk_blob* blob,
         hashmap_put(imgr->read_hash.page_hash,pio->key,pio);
         //Now issue a blob IO command for pio_1_pages;
         imgr->nb_pending_io++;
-        _read_pages(blob,imgr->io_unit_size,imgr->channel,
+        _read_pages(imgr,blob,
                     buf,start_page,1,
                     _default_page_io_complete_cb,pio);
     }
