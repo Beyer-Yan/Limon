@@ -48,7 +48,17 @@ bool slab_reclaim_evaluate_slab(struct slab* slab){
 
     //for simulation
     if(slab->reclaim.nb_reclaim_nodes>10){
-        return true;
+        uint32_t cnt = slab->flag >> 16;
+        uint32_t flag = slab->flag&1;
+        if(cnt++<10){
+            if(cnt==10){
+                printf("Slab migrating complets:slab:%u\n",slab->slab_size);
+                fflush(stdout);
+            }
+            slab->flag = (cnt<<16)|flag;
+            return true;
+        }
+       
     }
     return false;
 }

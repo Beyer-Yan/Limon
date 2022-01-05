@@ -84,8 +84,8 @@ struct iomgr{
     struct object_cache_pool *page_io_pool;
 
     //for stats;
-    uint64_t page_reads[100];
-    uint64_t page_writes[100];
+    uint64_t page_reads[300];
+    uint64_t page_writes[300];
 
 };
 

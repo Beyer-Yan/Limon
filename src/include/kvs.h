@@ -44,6 +44,10 @@ void kv_populate_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 // The key field of item shall be filled
 void kv_delete_async(struct kv_item *item, kv_cb cb_fn, void* ctx);
 
+void kv_reset_io_stats(void);
+
+void kv_print_io_stats(void);
+
 /**
  * @brief  Scan from the global index sychronuously
  * 

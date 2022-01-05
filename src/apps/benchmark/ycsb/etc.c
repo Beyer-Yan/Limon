@@ -9,29 +9,30 @@
 
 static long etc_next(struct workload *w) {
    long rand_key = 0;;
-   long prob = uniform_next() % 100;
+   long prob = uniform_next();
    uint64_t div = w->nb_items_in_db*95/100;
-   if (prob < 95) {
-      //rand_key = 0 + zipf_next() % 182400000;
+   if ((prob%100) < 95) {
       rand_key = 0 + zipf_next() % div;
    } else {
-      //rand_key = 182400000 +  rand_key% (192000000-182400000);
-      rand_key = div +  rand_key% (w->nb_items_in_db-div);
+      rand_key = div + (prob%(w->nb_items_in_db-div));
    }
    return rand_key;
 }
 
 // Create a new item for the database
-static struct kv_item *create_unique_item_etc(uint64_t uid, uint64_t max_uid) {
-   uint64_t value_size = uniform_next();
+static struct kv_item* create_unique_item_etc(uint64_t uid, uint64_t max_uid) {
+   uint64_t rand_v = uniform_next();
+   uint64_t zipf_v = zipf_next();
+   uint64_t value_size = 0;
    if(uid*100LU/max_uid < 40){ // 5% [1,13]
-      value_size = value_size%13;
+      value_size = 13 - zipf_v%13;
    }
    else if(uid*100LU/max_uid < 95){ //40+55, [14,300]
-      value_size = value_size%(300-14) + 14;
+      uint64_t tmp = (300-14);
+      value_size = tmp - zipf_v%tmp + 14;
    }
    else if(uid*100LU/max_uid <= 100){
-      value_size = value_size%(4000-300) + 300;
+      value_size = rand_v%(4000-300) + 300;
    } else{
       //error 
       perror("incorrect parameters for value size generation");
@@ -42,7 +43,7 @@ static struct kv_item *create_unique_item_etc(uint64_t uid, uint64_t max_uid) {
          value_size = 1;
    }
 
-   uint64_t item_size = value_size + 8;
+   uint64_t item_size = value_size + 8 + sizeof(struct item_meta);
 
    return create_unique_item(item_size, uid);
 }

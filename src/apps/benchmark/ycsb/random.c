@@ -123,7 +123,7 @@ long uniform_next(void) {
 
 //atomic operation may not neccesary
 //static atomic_long _g_counter = 1;
-static volatile long _g_counter = 1;
+static volatile long _g_counter = 10000000;
 
 long latest_next(int write) {
    if(write){

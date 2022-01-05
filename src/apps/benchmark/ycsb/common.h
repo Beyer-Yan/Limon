@@ -56,6 +56,7 @@ extern struct workload_api ETC;
 
 
 void repopulate_db(struct workload *w);
+int prepare_workload(struct workload *w);
 void run_workload(struct workload *w, bench_t bench);
 
 struct kv_item *create_unique_item(uint64_t item_size, uint64_t uid);

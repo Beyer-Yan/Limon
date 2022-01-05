@@ -202,10 +202,11 @@ _page_load_complete_cb_fn(void* ctx, int kverrno){
 
     if(kverrno){
         //error happens
-        SPDK_ERRLOG("Error in loading,slab:%u,desc:%u,page:%u,err:%d\n",
+        SPDK_ERRLOG("Error in loading,slab:%u,desc:%u,page_off:%u,len:%u,err:%d\n",
                     desc->slab->slab_size,
                     desc->id,
                     page_offset,
+                    nb_pages,
                     kverrno);
         assert(0 && "just crash");
     }
@@ -368,6 +369,8 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
         uint16_t nb_pages;
     }scatter_array[2];
 
+    memset(scatter_array,0,sizeof(scatter_array));
+
     for(int i=0;i<2;i++){
         uint32_t page_off = (i==0? first_page : last_page);
         if(page_off==UINT32_MAX){
@@ -429,6 +432,8 @@ pagechunk_load_item_share_async(struct pagechunk_mgr *pmgr,
         uint64_t start_page_in_slab = nb_chunk_pages * desc->id + page_off;
         uint8_t* buf = desc->dma_buf->dma_base + page_off*KVS_PAGE_SIZE;
         uint64_t key_prefix = _make_page_prefix(desc->dma_buf->dma_base,page_off);
+
+        //SPDK_NOTICELOG("Loading shared pages, desc:%u, dma:%p, slab:%lu, slot:%lu, off:%lu,nb_pages:%lu\n",desc->id,buf,slab->slab_size,slot_idx,page_off,1);
 
         iomgr_load_pages_async(imgr,slab->blob,key_prefix,
                                 buf,start_page_in_slab,1,

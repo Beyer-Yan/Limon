@@ -181,6 +181,7 @@ struct populate_ctx{
 
     uint64_t nb_requested;
     uint64_t nb_processed;
+    uint64_t acutual_size;
 };
 
 struct populate_ctx g_pctx;
@@ -200,10 +201,11 @@ static void _fill_item(struct slab_slide_buffer* buf,struct populate_req* req){
     buf->cur_slot++;
 
     req->user_cb(req->user_ctx,NULL,0);
-    free(req);
-
+    
     g_pctx.nb_pendings--;
     g_pctx.nb_processed++;
+    g_pctx.acutual_size += item_packed_size(req->item);
+    free(req);
 }
 
 static void _sync_cb(void*ctx, int kverrno){
@@ -345,7 +347,7 @@ static void _buf_sync_cb(void*ctx, int kverrno){
 static void _reclaim_populate_context(){
     assert(g_pctx.sync_state==4);
 
-    printf("Reclaiming populatition context, total requested:%lu, processed:%lu\n",g_pctx.nb_requested,g_pctx.nb_processed);
+    printf("Reclaiming populatition context, total requested:%lu, processed:%lu, total size:%lu\n",g_pctx.nb_requested,g_pctx.nb_processed,g_pctx.acutual_size);
 
     for(uint32_t i=0;i<g_pctx.nb_bufs;i++){
         assert(!g_pctx.buf[i].busy);
@@ -514,6 +516,7 @@ struct meta_worker_context* meta_worker_alloc(struct meta_init_opts *opts){
 
     g_pctx.nb_requested = 0;
     g_pctx.nb_processed = 0;
+    g_pctx.acutual_size = 0;
 
     for(uint32_t i=0;i<g_pctx.nb_bufs;i++){
         uint32_t shard_id = i/nb_slabs_per_shard;
@@ -523,6 +526,10 @@ struct meta_worker_context* meta_worker_alloc(struct meta_init_opts *opts){
         g_pctx.buf[i].cur_slot = 0; // slot 0 is reserved
         g_pctx.buf[i].slab = slab;
         g_pctx.buf[i].dma_buf = spdk_dma_zmalloc(chunk_size,0x1000,NULL);
+        if(!g_pctx.buf[i].dma_buf){
+            SPDK_ERRLOG("Allocating dma buf failed. buf:%d, size:%uMB\n",i,chunk_size/1024/1024);
+            exit(-1);
+        }
         g_pctx.buf[i].busy = 0;
         g_pctx.buf[i].shard_id = shard_id;
     }

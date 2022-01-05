@@ -58,10 +58,10 @@ static struct kvs_bench_opts _g_default_opts = {
 	.devname = "Nvme2n1",
 	.bench_name = "Limon",
 	.nb_workers = 1,
-	.nb_injectors = 2,
+	.nb_injectors = 4,
 	.queue_size = 16,
 	.caches = 1, /* GB */
-	.nb_items = 10000000,
+	.nb_items = 50000000,
     .io_cyle_us = 0,
     .populate_db = 0
 };
@@ -173,7 +173,7 @@ static void*
 _do_start_benchmark(void*ctx){
 
 	struct workload w = {
-		.api = &ETC,
+		.api = &YCSB,
 		.nb_items_in_db = _g_default_opts.nb_items,
 		.nb_load_injectors = _g_default_opts.nb_injectors,
 		.start_core = 20,
@@ -190,49 +190,40 @@ _do_start_benchmark(void*ctx){
     else{
         /* Launch benchs */
         bench_t workloads[] = {
-            etc
-            //ycsb_f_uniform
-            //ycsb_a_uniform,ycsb_e_uniform
-            //ycsb_a_zipfian,
+            //etc
+            ycsb_c_uniform,
             //ycsb_a_uniform
-            //ycsb_c_uniform,
-            //ycsb_e_uniform
-            //ycsb_c_zipfian,
-            //ycsb_c_zipfian
-            //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
-            //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
-            //ycsb_d_uniform
-            //ycsb_e_uniform,ycsb_f_uniform,
-            //ycsb_a_uniform,ycsb_c_uniform,ycsb_e_uniform,
-            //ycsb_a_zipfian,ycsb_c_zipfian,ycsb_e_zipfian,
-            //ycsb_a_uniform, ycsb_b_uniform, ycsb_c_uniform,ycsb_d_uniform,ycsb_e_uniform,ycsb_f_uniform,
-            //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_e_zipfian,ycsb_f_zipfian
-            //ycsb_c_zipfian,
-            //ycsb_f_uniform,
             //ycsb_a_zipfian, ycsb_b_zipfian, ycsb_c_zipfian,ycsb_d_zipfian,ycsb_f_zipfian,
             //ycsb_e_zipfian, // Scans
             //ycsb_c_zipfian
         };
 
         histogram_init();
+        prepare_workload(&w);
 
         for(uint32_t i=0; i<sizeof(workloads)/sizeof(workloads[0]);i++){
             //30% extra requests for warm-up
             if(workloads[i] == ycsb_e_uniform || workloads[i] == ycsb_e_zipfian) {
                 //requests for YCSB E are longer (scans) so we do less
-                w.nb_requests = 3600000LU; 
+                w.nb_requests = 2600000LU; 
             } else {
-                w.nb_requests = 53000000LU;
+                w.nb_requests = 260000000LU;
             }
             histogram_reset();
+            kv_reset_io_stats();
             uint64_t start = spdk_get_ticks();
+
             run_workload(&w, workloads[i]);
+
             uint32_t us = kv_cycles_to_us(spdk_get_ticks()-start);
             uint64_t qps = (uint64_t)((double)w.nb_requests/((double)us/1000000.0));
             printf("Workload %s, requests (%lu/s)\n",w.api->name(workloads[i]),qps);
+
+            kv_print_io_stats();
             histogram_print();
         }
         printf("All workloads complete, ctrl+c to stop the program\n");
+        fflush(stdout);
     }
 
     //wait 2 second for left requests.
@@ -266,7 +257,7 @@ _kvs_opts_init(struct kvs_start_opts *opts){
 
     opts->max_request_queue_size_per_worker = _g_default_opts.queue_size;
     opts->nb_works = _g_default_opts.nb_workers;
-    opts->reclaim_batch_size = 4;
+    opts->reclaim_batch_size = 64;
     opts->reclaim_percentage_threshold = 80;
     opts->io_cycle = _g_default_opts.io_cyle_us;
     opts->startup_fn = _kvs_bench_start;

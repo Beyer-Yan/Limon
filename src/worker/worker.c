@@ -8,7 +8,7 @@
 #include "spdk/log.h"
 
 //10s
-#define DEFAULT_RECLAIM_POLLING_PERIOD_US 10000000
+#define DEFAULT_RECLAIM_POLLING_PERIOD_US 5000000
 
 #define CONFLICTS_CAPACITY 1024
 
@@ -220,7 +220,7 @@ _worker_slab_evaluation_poll(void* ctx){
     uint32_t i=0,j=0;
 
     int events = 0;
-    return 0;
+    //return 0;
 
     for(;i < wctx->nb_reclaim_shards;i++){
         struct slab_shard *shard = &wctx->shards[wctx->reclaim_shards_start_id + i];
@@ -232,8 +232,12 @@ _worker_slab_evaluation_poll(void* ctx){
                     assert(slab_migrate_req!=NULL);
 
                     _fill_slab_migrate_req(slab_migrate_req,slab);
+                    slab_migrate_req->shard_id = wctx->reclaim_shards_start_id + i;
+                    slab_migrate_req->slab_idx = j;
                     slab_migrate_req->wctx = wctx;
                     slab->flag |= SLAB_FLAG_RECLAIMING;
+                    //SPDK_NOTICELOG("Push slab. shard:%u,slab:%u\n",slab_migrate_req->shard_id,j);
+
                     TAILQ_INSERT_TAIL(&wctx->rmgr->slab_migrate_head,slab_migrate_req,link);
 
                     events++;

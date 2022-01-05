@@ -2,6 +2,8 @@
 #include "spdk/env.h"
 #include "mtable.h"
 
+#include "../worker/worker_internal.h"
+
 static inline uint32_t
 _hash_item_to_shard(struct kv_item *item){
     uint64_t prefix = *(uint64_t*)item->data;
@@ -177,4 +179,36 @@ uint64_t kvs_get_nb_items(void){
     }
     free(ss);
     return nb_items;
+}
+
+void kv_reset_io_stats(void){
+    for(int i=0;i<g_kvs->nb_workers;i++){
+        uint64_t size = sizeof(g_kvs->workers[i]->imgr->page_reads);
+        memset(g_kvs->workers[i]->imgr->page_reads,0,size);
+        memset(g_kvs->workers[i]->imgr->page_writes,0,size);
+    }
+}
+
+void kv_print_io_stats(void){
+    uint64_t page_reads[100] = {0};
+    uint64_t page_writes[100] = {0};
+
+    for(int i=0;i<100;i++){
+        for(int j=0;j<g_kvs->nb_workers;j++){
+            page_reads[i] +=g_kvs->workers[j]->imgr->page_reads[i];
+            page_writes[i] +=g_kvs->workers[j]->imgr->page_writes[i];
+        }
+    }
+
+    printf("page reads distribution-------\n");
+    for(int i=0;i<10;i++){
+        printf("page %i -> %lu\n",i,page_reads[i]);
+    }
+    printf("\n");
+
+    printf("page writes distribution-------\n");
+    for(int i=0;i<10;i++){
+        printf("page %i -> %lu\n",i,page_writes[i]);
+    }
+    printf("\n");
 }

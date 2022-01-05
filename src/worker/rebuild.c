@@ -223,7 +223,7 @@ _rebuild_one_node_async(struct rebuild_ctx* rctx){
 static void
 _rebuild_exit(struct rebuild_ctx* rctx,int kverrno){
     if(rctx->recovery_node_buffer){
-        spdk_free(rctx->recovery_node_buffer);
+        spdk_dma_free(rctx->recovery_node_buffer);
     }
     if(rctx->hash_tsmp){
         hashmap_free(rctx->hash_tsmp);
@@ -289,8 +289,14 @@ _rebuild_one_slab(struct rebuild_ctx* rctx){
     uint32_t nb_pages = slab->reclaim.nb_chunks_per_node * 
                         slab->reclaim.nb_pages_per_chunk;
     if(nb_pages > rctx->nb_buffer_pages){
-        rctx->recovery_node_buffer = spdk_realloc(rctx->recovery_node_buffer,KVS_PAGE_SIZE*nb_pages,0x1000);
+        uint64_t size = KVS_PAGE_SIZE*nb_pages;
+        rctx->recovery_node_buffer = spdk_dma_realloc(rctx->recovery_node_buffer,size,0x1000,NULL);
         rctx->nb_buffer_pages = nb_pages;
+
+        if(rctx->recovery_node_buffer==NULL){
+            SPDK_ERRLOG("Allocating buffer failed, size:%lu MB\n", size/1024/1024);
+            exit(-1);            
+        }
     }
     _rebuild_one_node_async(rctx);
 }
@@ -337,9 +343,13 @@ void worker_perform_rebuild_async(struct worker_context *wctx, void(*complete_cb
                             rctx->cur->slab->reclaim.nb_pages_per_chunk;
 
     uint32_t socket_id = spdk_env_get_socket_id(spdk_env_get_current_core());
-    rctx->recovery_node_buffer = spdk_malloc(rctx->nb_buffer_pages*KVS_PAGE_SIZE,0x1000,NULL,socket_id,SPDK_MALLOC_DMA);
+    uint64_t size = rctx->nb_buffer_pages*KVS_PAGE_SIZE;
+    rctx->recovery_node_buffer = spdk_dma_zmalloc(size,0x1000,NULL);
     
-    assert(rctx->recovery_node_buffer!=NULL);
+    if(rctx->recovery_node_buffer==NULL){
+        SPDK_ERRLOG("Allocating buffer failed, size:%lu MB\n", size/1024/1024);
+        exit(-1);
+    }
     assert(rctx->hash_tsmp);
     
     _rebuild_one_slab(rctx);

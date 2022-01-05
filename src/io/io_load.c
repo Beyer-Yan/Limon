@@ -18,9 +18,9 @@ static inline void _read_pages(struct iomgr* imgr, struct spdk_blob* blob,
 
     uint64_t io_unit_per_page = KVS_PAGE_SIZE/io_unit_size;
     uint64_t io_unit_offset = offset*io_unit_per_page;
-    uint64_t io_uint_length = length*io_unit_per_page;
-    //SPDK_NOTICELOG("\tLoading pages, buf:%p, off:%lu,nb_pages:%lu\n",payload,io_unit_offset,io_uint_length);
-    spdk_blob_io_read(blob,channel,payload,io_unit_offset,io_uint_length,cb_fn,cb_arg);
+    uint64_t io_unit_length = length*io_unit_per_page;
+    //SPDK_NOTICELOG("\tLoading pages, buf:%p, off:%lu,nb_pages:%lu\n",payload,io_unit_offset,io_unit_length);
+    spdk_blob_io_read(blob,channel,payload,io_unit_offset,io_unit_length,cb_fn,cb_arg);
 }
 
 static void

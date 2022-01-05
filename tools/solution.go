@@ -9,11 +9,10 @@ import "fmt"
 
 var gOpt = 10000
 
-var B = 0.25
+var B = 0.8
 var PS = 512
 var CS = 1024*1024
 var MS = 24
-var s0 = 256
 
 var g_Gs = 0
 
@@ -140,16 +139,56 @@ func findSolution(node *searchNode) {
 	}
 }
 
+func calc_intra_page(node* searchNode) {
+	pathLen := len(node.path)
+
+	s0 := node.path[0]
+	end := int(math.Floor(float64(PS)*B*(1+B)))
+	for{
+		if(end%4==0){
+			break;
+		}
+		end = end - 1
+	}
+
+	if(end>PS){
+		end = PS
+	}
+
+	for{
+		s0 = int(math.Floor(float64(s0)*(1+B)))
+		if(s0>end){
+			break
+		}
+
+		for{
+			if(s0%4==0){
+				break
+			}
+			s0 = s0-1
+		}
+		//Get a valid slot size
+		newPath := make([]int,pathLen+1)
+		copy(newPath,node.path)
+		node.path = newPath
+		node.path[pathLen] = s0
+		pathLen++
+	}
+}
+
 func main() {
 	
 	g_Gs = calc_Gs()
-	fmt.Println("Gs: ",g_Gs)
 	initNode := &searchNode{
 		path : make([]int, 1),
 	}
-	initNode.path[0] = s0
+	initNode.path[0] = 64
+	calc_intra_page(initNode)
+	
+	fmt.Println("Gm: ",initNode.path[len(initNode.path)-1])
+	fmt.Println("Gs: ",g_Gs)
 
 	findSolution(initNode)
-
+	
 	fmt.Println("searching completes")
 }

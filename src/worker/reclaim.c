@@ -140,6 +140,13 @@ _process_one_pending_migrate_load_data_cb(void* ctx, int kverrno){
         return;
     }
 
+    //for debug
+    mig->io_cb_fn(mig->ctx, -KV_ESUCCESS);
+    pagechunk_mem_lower(wctx->pmgr,desc);
+    pool_release(wctx->rmgr->pending_migrate_pool,mig);
+    return;
+
+
     if(!slab_is_slot_occupied(mig->slab,mig->slot_idx)){
         //In the case where I lookup the item and it is in delete or outplace write state. 
         //In the next cycle, I process it again, and it is processed by puting. So
@@ -198,15 +205,16 @@ worker_reclaim_process_pending_item_migrate(struct worker_context *wctx){
     uint32_t p_reqs = wctx->rmgr->pending_migrate_pool->count
                       - wctx->rmgr->pending_migrate_pool->nb_frees;
 
-    uint32_t available_slots = migrate_batch - wctx->rmgr->nb_pending_slots;
-    uint32_t nb = p_reqs > available_slots ? available_slots : p_reqs;
+    uint32_t nb_pendings = wctx->rmgr->nb_pending_slots;
+    //uint32_t nb = p_reqs > available_slots ? available_slots : p_reqs;
 
-    if(!nb){
+    if(nb_pendings || !p_reqs){
         //no thing to do
         return 0;
     }
 
-    wctx->rmgr->nb_pending_slots += nb;
+    uint32_t nb = p_reqs > migrate_batch ? migrate_batch : p_reqs;
+    wctx->rmgr->nb_pending_slots = nb;
     //SPDK_NOTICELOG("pending %u\n migration slots\n", nb);
 
     struct pending_item_migrate *mig, *tmp = NULL;
@@ -242,6 +250,8 @@ slab_release_complete(void*ctx,int kverrno){
         assert(0);
     }
 
+    //SPDK_NOTICELOG("Migrating slab completes. shard:%u, slab:%u, node:%u\n",req->shard_id,req->slab_idx,req->node->id);
+
     struct slab *slab = req->slab;
     struct reclaim_node* node = req->node;
     uint32_t nb_chunks = req->slab->reclaim.nb_chunks_per_node;
@@ -253,7 +263,7 @@ slab_release_complete(void*ctx,int kverrno){
         assert(!desc->nb_pendings);
         assert(!desc->dma_buf);
 
-        bitmap_clear_bit_all(node->desc_array[i]->bitmap);
+        //bitmap_clear_bit_all(node->desc_array[i]->bitmap);
     }
 
     //now clear all slots for this node
@@ -270,20 +280,19 @@ slab_release_complete(void*ctx,int kverrno){
     //slab->reclaim.nb_total_slots -= nb_slots_per_node;
 
     //for defragmentation simulation.
-    //slab->flag &=~ SLAB_FLAG_RECLAIMING;
+    slab->flag &=~ SLAB_FLAG_RECLAIMING;
     //slab_reclaim_free_node(&slab->reclaim,node);
 
     //Now I finish the request, just release it.
     TAILQ_REMOVE(&wctx->rmgr->slab_migrate_head,req,link);
     pool_release(wctx->rmgr->migrate_slab_pool,req);
 
-    SPDK_NOTICELOG("Migrating for slab:%u, node:%u, processed:%lu, valid slots:%lu\n",req->slab->slab_size, node->id,req->nb_processed,req->nb_valid_slots);
+    //SPDK_NOTICELOG("Migrating for slab:%u, node:%u, processed:%lu, valid slots:%lu\n",req->slab->slab_size, node->id,req->nb_processed,req->nb_valid_slots);
 }
 
 int 
 worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     int events = 0;
-    uint32_t a_mig = wctx->rmgr->pending_migrate_pool->nb_frees;
     struct slab_migrate_request *req = TAILQ_FIRST(&wctx->rmgr->slab_migrate_head);
     if(!req){
         //No pending slab migrating shall be processed.
@@ -307,6 +316,7 @@ worker_reclaim_process_pending_slab_migrate(struct worker_context *wctx){
     else if( req->cur_slot<=req->last_slot ){
         //The slab migrating has not been finished. So, I should process the next batch.
         uint32_t cnt = req->last_slot - req->cur_slot + 1;
+        uint32_t a_mig = wctx->rmgr->pending_migrate_pool->nb_frees;
         cnt = cnt < a_mig ? cnt : a_mig;
 
         while(cnt && req->cur_slot<=req->last_slot){

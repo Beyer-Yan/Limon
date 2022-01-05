@@ -8,6 +8,7 @@
 #include "histogram.h"
 
 static struct kv_item* _create_unique_item_ycsb(uint64_t uid) {
+   //1000 kv + 24 metadata
    size_t item_size = 1000;
    return create_unique_item(item_size, uid);
 }
@@ -113,30 +114,49 @@ _ycsb_scan_get_complete(void*ctx, struct kv_item* item, int kverrno){
 }
 
 // YCSB E
+// static void 
+// _launch_ycsb_e(int test, int nb_requests, int zipfian,uint64_t* processed, int id) {
+//    random_gen_t rand_next = zipfian?zipf_next:uniform_next;
+
+//    for(int i = 0; i < nb_requests; i++) {
+//       if(random_get_put(test)) { 
+//          // In this test we update with a given probability
+//          struct kv_item* item = _create_unique_item_ycsb(rand_next());
+//          kv_put_async(item,_ycsb_put_complete,item);
+//       } 
+//       else {  
+//          //scan
+//          struct kv_item* item = _create_unique_item_ycsb(rand_next());
+//          uint32_t scan_length = uniform_next()%99+1;
+//          uint64_t sid_array[scan_length];
+//          uint64_t found = kv_scan(item,scan_length,sid_array);
+//          if(found){
+//             for(uint64_t i=0;i<found;i++){
+//                kv_get_with_sid_async(sid_array[i],_ycsb_scan_get_complete,sid_array[i]);
+//             }
+//          }
+//          free(item);
+
+//       }
+//       *processed = i;
+//    }
+// }
+
+//scan sensitivity test
 static void 
 _launch_ycsb_e(int test, int nb_requests, int zipfian,uint64_t* processed, int id) {
-   random_gen_t rand_next = zipfian?zipf_next:uniform_next;
 
    for(int i = 0; i < nb_requests; i++) {
-      if(random_get_put(test)) { 
-         // In this test we update with a given probability
-         struct kv_item* item = _create_unique_item_ycsb(rand_next());
-         kv_put_async(item,_ycsb_put_complete,item);
-      } 
-      else {  
-         //scan
-         struct kv_item* item = _create_unique_item_ycsb(rand_next());
-         uint32_t scan_length = uniform_next()%99+1;
-         uint64_t sid_array[scan_length];
-         uint64_t found = kv_scan(item,scan_length,sid_array);
-         if(found){
-            for(uint64_t i=0;i<found;i++){
-               kv_get_with_sid_async(sid_array[i],_ycsb_scan_get_complete,sid_array[i]);
-            }
+      struct kv_item* item = _create_unique_item_ycsb(uniform_next());
+      uint32_t scan_length = 32;
+      uint64_t sid_array[scan_length];
+      uint64_t found = kv_scan(item,scan_length,sid_array);
+      if(found){
+         for(uint64_t i=0;i<found;i++){
+            kv_get_with_sid_async(sid_array[i],_ycsb_scan_get_complete,sid_array[i]);
          }
-         free(item);
-
       }
+      free(item);
       *processed = i;
    }
 }
@@ -144,7 +164,7 @@ _launch_ycsb_e(int test, int nb_requests, int zipfian,uint64_t* processed, int i
 // YCSB F
 static void
 _launch_ycsb_f(int test, int nb_requests, int zipfian, uint64_t* processed,int id) {
-   //the same as YCSB A
+   //the same as YCSB B
 }
 
 /* Generic interface */

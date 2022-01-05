@@ -227,7 +227,7 @@ _check_db_complete(void*ctx, struct kv_item* item, int kverrno){
    workload_item->meta.ksize = 0;
 }
 
-static int _prepare_run_workload(struct workload *w){
+int prepare_workload(struct workload *w){
    uint64_t nb_items = kvs_get_nb_items();
    uint64_t nb_inserts = ( nb_items > w->nb_items_in_db)?0:(w->nb_items_in_db - nb_items);
    volatile int finished = 0;
@@ -323,8 +323,6 @@ static void* _compute_stat(void* pdata){
 }
 
 void run_workload(struct workload *w, bench_t b) {
-   _prepare_run_workload(w);
-
    struct thread_data *pdata = malloc(w->nb_load_injectors*sizeof(*pdata));
 
    w->nb_requests_per_thread = w->nb_requests / w->nb_load_injectors;
