@@ -1,0 +1,16 @@
+{
+    "subsystems": [
+      {
+        "subsystem": "bdev",
+        "config": [
+          {
+            "method": "bdev_uring_create",
+            "params": {
+                "name": "Nvme2",
+                "filename": "/dev/nvme2n1"
+            }
+          }
+        ]
+      }
+    ]
+  }
