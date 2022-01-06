@@ -57,7 +57,7 @@ struct kvs_bench_opts{
 static struct kvs_bench_opts _g_default_opts = {
 	.devname = "Nvme2n1",
 	.bench_name = "Limon",
-	.nb_workers = 1,
+	.nb_workers = 4,
 	.nb_injectors = 4,
 	.queue_size = 16,
 	.caches = 1, /* GB */
@@ -76,7 +76,7 @@ _bench_usage(void){
                                           _g_default_opts.nb_injectors);
     printf(" -Q, --queue-size <num>       queue size(default:%u)\n",
 										  _g_default_opts.queue_size);
-    printf(" -C, --caches <numGB>         number of cache chunks(deprecated)\n",
+    printf(" -C, --caches <numGB>         number of cache chunks(deprecated)\n");
     //                                      _g_default_opts.caches);
     printf(" -N, --items  <num>           total items in db(default:%lu)\n",
                                           _g_default_opts.nb_items);
