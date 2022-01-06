@@ -18,7 +18,7 @@ git clone https://github.com/Beyer-Yan/Limon
 make
 ```
 
-The `make` command will build limon into the static library named liblimon.a, which locates in spdk/build/lib. Nextly, build the application.
+The `make` command will build limon into the static library named libspdk_limon.a, which locates in spdk/build/lib. Nextly, build the application.
 
 ```shell
 cd Limon/apps/format
