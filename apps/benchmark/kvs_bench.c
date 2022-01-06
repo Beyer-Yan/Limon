@@ -76,8 +76,8 @@ _bench_usage(void){
                                           _g_default_opts.nb_injectors);
     printf(" -Q, --queue-size <num>       queue size(default:%u)\n",
 										  _g_default_opts.queue_size);
-    printf(" -C, --caches <numGB>         number of cache chunks(default:%uGB)\n",
-                                          _g_default_opts.caches);
+    printf(" -C, --caches <numGB>         number of cache chunks(deprecated)\n",
+    //                                      _g_default_opts.caches);
     printf(" -N, --items  <num>           total items in db(default:%lu)\n",
                                           _g_default_opts.nb_items);
     printf(" -T, --io-cycle_us <num>      io polling cycle(default:%lu)\n",
