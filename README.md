@@ -9,22 +9,28 @@ Limon is a high-performance persistent key-value engine built to exploit the per
 
 # Install
 
-Limon is written in C (C11) and relies on SPDK runtime. Install SPDK from https://github.com/spdk/spdk and follow the internal installation manual (tested in v21.10).
+Limon is written in C (C11) and relies on SPDK runtime. Install SPDK from https://github.com/spdk/spdk and follow the internal installation manual (tested in v21.07).
 
 Clone Limon into the same parent directory with SPDK.
 
-> git clone https://github.com/Beyer-Yan/Limon
-> make
+```shell
+git clone https://github.com/Beyer-Yan/Limon
+make
+```
 
 The `make` command will build limon into the static library named liblimon.a, which locates in spdk/build/lib. Nextly, build the application.
 
-> cd Limon/apps/format
-> make
+```shell
+cd Limon/apps/format
+make
+```
 
 This will generate the `mkfs.limon` command, which is responsible for formatting the low-level block device.
 
-> cd Limon/apps/benchmark
-> make
+```shell
+cd Limon/apps/benchmark
+make
+```
 
 This will build the benchmark tool, i.e., YCSB and ETC, and generate the `kvs_bench` command.
 
@@ -34,7 +40,9 @@ Ensure the low-level block device has been formatted by `mkfs.limon`. Limon is f
 
 Note that spdk requires huge-page memory, 
 
-> echo 1024 > xxxx/nr_huagepages
+```shell
+echo 1024 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+```
 
 This will allocate 2GB huge pages.
 
@@ -42,7 +50,7 @@ This will allocate 2GB huge pages.
 
 Edit the json file needed by spdk bdev module. For example, if you choose the user-space driver of spdk, the json should be specified with the following format.
 
-```
+```json
 {  
     "subsystems": [  
       {  
@@ -65,7 +73,7 @@ The `name` the `traddr` are configured according to your platform.
 
 If you use the kernel bdev with the io_uring access interface, then specify the json file with the following format.
 
-```
+```json
 {
     "subsystems": [
       {
@@ -87,53 +95,68 @@ The `name` and the `filename` are configured according to your platform. Note th
 
 Nextly, run the `mkfs.limon` with your parameter to format the bdev.
 
+```
+./mkfs.limon --help
+ ...
+ -K, --max-key-length <num>   the max key length of the current kvs(default:256) 
+ -S, --shards <num>           the number of shards(default:4)
+ -C, --chunks-per-node <num>  the chunks per reclaim node(default:4)
+ -f, --force-format           format the kvs forcely
+ -D, --devname <namestr>      the devname(default:Nvme2n1)
+ -N, --init-nodes  <num>      the init nodes for each slab(default:16)
+ -E, --dump                   Dump the existing kvs format
+```
+
 For example,
-> mkfs.limon -c nvme.json -S 32 -C 4 -N 1 -D Nvme2n1 -f
+
+```shell
+mkfs.limon -c nvme.json -S 32 -C 4 -N 1 -D Nvme2n1 -f
+```
 
 It formats the block device named Nvme2n1 with 32 partitions, 4MB reclaim node size, 1 default reclaim node for each sized class. The command with -E dumps the current storage layout.
 
-> mkfs.limon -c nvme.json -D Nvme2n1 -E
+```shell
+mkfs.limon -c nvme.json -D Nvme2n1 -E
+```
 
 ## Run the Benchmark
 
 After the block device is formatted, run `kvs_bench` with `-P` to generate test database.
 
+```shell
+./kvs_bench --help
+ ...
+ -D, --devname <namestr>      block devname(default:Nvme2n1)
+ -S, --workers <num>          number of workers(default:1)
+ -I, --injectors <num>        number of injector(default:4)
+ -Q, --queue-size <num>       queue size(default:16)
+ -C, --caches <numGB>         number of cache chunks(deprecated)
+ -N, --items  <num>           total items in db(default:50000000)
+ -T, --io-cycle_us <num>      io polling cycle(default:0)
+ -P, --populate_db            load database (default:run benchmark)
+```
+
 For example,
-> cd Limon/apps/benchmark
-> ./kvs_bench -c nvme.json -I 2 -P
+
+```shell
+cd Limon/apps/benchmark
+./kvs_bench -c nvme.json -I 2 -P
+```
 
 Then run `kvs_bench` without `-P` to start the benchmark.
 
-> cd Limon/apps/benchmark
-> ./kvs_bench -c nvme.json -S 4 -I 2.
+```shell
+cd Limon/apps/benchmark
+./kvs_bench -c nvme.json -S 4 -I 2
+```
 
 The above command starts the benchmark with 4 workers and 2 clients.
 
 ## Run with Device Aggregation
 
-The spdk bdev module originally supports the RAID0 device aggregation. If your test platform is equipped with multiple block devices, these devices can be aggregated as a RAID0 bdev. Specify the json file as follows
+The spdk bdev module originally supports the RAID0 device aggregation. If your test platform is equipped with multiple block devices, these devices can be aggregated as a RAID0 bdev. Seen RAID at https://spdk.io/doc/jsonrpc.html.
 
-```
-{  
-    "subsystems": [  
-      {  
-        "subsystem": "bdev",  
-        "config": [  
-          {  
-            "method": "bdev_nvme_attach_controller",  
-            "params": {  
-                "trtype": "PCIe",  
-                "name": "Nvme2",  
-                "traddr": "0000:86:00.0"
-            }  
-          }  
-        ]  
-      }
-    ]  
-  }
-```
-
-Then run `mkfs` and `kvs_bench` with the device named `RAIDdev` to enable the device aggregation.
+Then run `mkfs` and `kvs_bench` with the RAID0 block device to enable the device aggregation.
 
 # Define Your Benchmark
 
@@ -190,4 +213,4 @@ void mem_index_scan(struct mem_index *mem_index,struct kv_item *item, int maxLen
 
 # Notes
 
-All experiments are performed in ubuntu xxx with linux kernel version xxx, spdk xxx and gcc xxx.
+All experiments passed through in ubuntu 20.04 with linux kernel version 5.11.0, spdk 21.07 and gcc 9.3.0.

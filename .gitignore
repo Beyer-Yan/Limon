@@ -4,5 +4,5 @@
 *.o
 *.tmp
 *.txt
-src/apps/benchmark/kvs_bench
-src/apps/format/mkfs.kvs
+apps/benchmark/kvs_bench
+apps/format/mkfs.limon
