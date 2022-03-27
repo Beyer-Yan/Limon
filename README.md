@@ -1,6 +1,6 @@
 # Limon: A Persistent Key-Value Engine for Fast NVMe Storage
 
-Limon is a high-performance persistent key-value engine built to exploit the performance potentials of the fast NVMe storage. Limon considers four practical design requirements that existing KV engines have not fully satisfied: functionality, compactness, scalability and stability. Limon proposes four novel designs:
+Limon is a high-performance persistent key-value engine built to exploit the performance potentials of the fast NVMe storage. Limon considers four practical design requirements that existing KV engines have not fully satisfied: functionality, compactness, scalability and stability. Limon proposes three novel designs:
 
 - the semi-shared architecture with globally shared in-memory index and partitioned on-disk data.
 - the efficient user-space record layout without logging and frequent garbage collections to manage storage space.
