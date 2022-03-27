@@ -3,9 +3,8 @@
 Limon is a high-performance persistent key-value engine built to exploit the performance potentials of the fast NVMe storage. Limon considers four practical design requirements that existing KV engines have not fully satisfied: functionality, compactness, scalability and stability. Limon proposes four novel designs:
 
 - the semi-shared architecture with globally shared in-memory index and partitioned on-disk data.
-- the efficient user-space Salloc to manage storage space with light-weight defragmentation.
-- the mapping table to decouple index and KV pairs to reduce synchronization overhead for shared index. 
-- the Dasio over SPDK to deliver efficient per-core asynchronous I/O processing.
+- the efficient user-space record layout without logging and frequent garbage collections to manage storage space.
+- the optimized I/O processing with SPDK to deliver efficient per-core asynchronous I/O processing.
 
 # Install
 
